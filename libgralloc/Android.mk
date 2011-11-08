@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# Use this flag until pmem/ashmem is implemented in the new gralloc
 ifeq ($(TARGET_USES_ION),true)
 LOCAL_PATH := $(call my-dir)
 
@@ -19,52 +21,52 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
-LOCAL_SHARED_LIBRARIES := liblog libcutils libGLESv1_CM libutils
+LOCAL_SHARED_LIBRARIES := liblog libcutils libGLESv1_CM libutils libmemalloc
 
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
-LOCAL_SRC_FILES := 	\
-	allocator.cpp 	\
-	framebuffer.cpp \
-	gpu.cpp			\
-	gralloc.cpp		\
-	mapper.cpp		\
-	pmemalloc.cpp
-	
+LOCAL_SRC_FILES :=  framebuffer.cpp \
+                    gpu.cpp         \
+                    gralloc.cpp     \
+                    mapper.cpp      \
+                    pmemalloc.cpp   \
+                    pmem_bestfit_alloc.cpp
+
 LOCAL_MODULE := gralloc.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS:= -DLOG_TAG=\"$(TARGET_BOARD_PLATFORM).gralloc\" -DHOST -DDEBUG_CALC_FPS
+LOCAL_CFLAGS:= -DLOG_TAG=\"$(TARGET_BOARD_PLATFORM).gralloc\" -DHOST -DDEBUG_CALC_FPS -DUSE_ION
 
 ifeq ($(call is-board-platform,msm7627_surf msm7627_6x),true)
-LOCAL_CFLAGS += -DTARGET_MSM7x27
+    LOCAL_CFLAGS += -DTARGET_MSM7x27
 endif
 
 ifeq ($(TARGET_HAVE_HDMI_OUT),true)
-LOCAL_CFLAGS += -DHDMI_DUAL_DISPLAY
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/../liboverlay
-LOCAL_SHARED_LIBRARIES += liboverlay
+    LOCAL_CFLAGS += -DHDMI_DUAL_DISPLAY
+    LOCAL_C_INCLUDES += hardware/msm7k/liboverlay
+    LOCAL_SHARED_LIBRARIES += liboverlay
 endif
 
 ifeq ($(TARGET_USES_SF_BYPASS),true)
-LOCAL_CFLAGS += -DSF_BYPASS
+    LOCAL_CFLAGS += -DSF_BYPASS
 endif
 
 ifeq ($(TARGET_GRALLOC_USES_ASHMEM),true)
-LOCAL_CFLAGS += -DUSE_ASHMEM
+    LOCAL_CFLAGS += -DUSE_ASHMEM
 endif
 include $(BUILD_SHARED_LIBRARY)
 
-
-# Build a host library for testing
-ifeq ($(HOST_OS),linux)
+#MemAlloc Library
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES :=		\
-    gpu.cpp				\
-	pmemalloc.cpp
-
-LOCAL_MODULE_TAGS := tests
-LOCAL_MODULE := libgralloc_qsd8k_host
-LOCAL_CFLAGS:= -DLOG_TAG=\"gralloc-qsd8k\"
-include $(BUILD_HOST_STATIC_LIBRARY)
-endif
-endif
+LOCAL_PRELINK_MODULE := false
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+LOCAL_SHARED_LIBRARIES := liblog libcutils libutils
+LOCAL_SRC_FILES :=  ionalloc.cpp \
+                    ashmemalloc.cpp \
+                    alloc_controller.cpp
+LOCAL_CFLAGS:= -DLOG_TAG=\"memalloc\" -DLOG_NDDEBUG=0 -DUSE_ION
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE := libmemalloc
+include $(BUILD_SHARED_LIBRARY)
+endif #TARGET_USES_ION

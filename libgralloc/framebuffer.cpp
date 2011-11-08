@@ -161,7 +161,6 @@ static int fb_setUpdateRect(struct framebuffer_device_t* dev,
 {
     if (((w|h) <= 0) || ((l|t)<0))
         return -EINVAL;
-        
     fb_context_t* ctx = (fb_context_t*)dev;
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
@@ -378,7 +377,7 @@ static void *hdmi_ui_loop(void *ptr)
             else if (m->enableHDMIOutput && !m->videoOverlay &&
                         !(m->isOrigResStarted)) {
                 if (!pTemp->isChannelUP()) {
-                   int alignedW = ALIGN(m->info.xres, 32); 
+                   int alignedW = ALIGN(m->info.xres, 32);
                    if (pTemp->startChannel(alignedW, m->info.yres,
                                  m->fbFormat, 1, false, true, 0, VG0_PIPE, true)) {
                         pTemp->setFd(m->framebuffer->fd);
@@ -849,14 +848,14 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     } else {
         void* fb_vaddr;
         void* buffer_vaddr;
-        
-        m->base.lock(&m->base, m->framebuffer, 
-                GRALLOC_USAGE_SW_WRITE_RARELY, 
+
+        m->base.lock(&m->base, m->framebuffer,
+                GRALLOC_USAGE_SW_WRITE_RARELY,
                 0, 0, m->info.xres, m->info.yres,
                 &fb_vaddr);
 
-        m->base.lock(&m->base, buffer, 
-                GRALLOC_USAGE_SW_READ_RARELY, 
+        m->base.lock(&m->base, buffer,
+                GRALLOC_USAGE_SW_READ_RARELY,
                 0, 0, m->info.xres, m->info.yres,
                 &buffer_vaddr);
 
@@ -868,8 +867,8 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
                 m->info.xoffset, m->info.yoffset,
                 m->info.width, m->info.height);
 
-        m->base.unlock(&m->base, buffer); 
-        m->base.unlock(&m->base, m->framebuffer); 
+        m->base.unlock(&m->base, buffer);
+        m->base.unlock(&m->base, m->framebuffer);
     }
 
     LOGD_IF(FB_DEBUG, "Framebuffer state: [0] = %c [1] = %c [2] = %c",
@@ -914,7 +913,6 @@ int mapFrameBufferLocked(struct private_module_t* module)
     if (module->framebuffer) {
         return 0;
     }
-        
     char const * const device_template[] = {
             "/dev/graphics/fb%u",
             "/dev/fb%u",
@@ -956,42 +954,42 @@ int mapFrameBufferLocked(struct private_module_t* module)
     */
 
     if(info.bits_per_pixel == 32) {
-	/*
-	* Explicitly request RGBA_8888
-	*/
-	info.bits_per_pixel = 32;
-	info.red.offset     = 24;
-	info.red.length     = 8;
-	info.green.offset   = 16;
-	info.green.length   = 8;
-	info.blue.offset    = 8;
-	info.blue.length    = 8;
-	info.transp.offset  = 0;
-	info.transp.length  = 8;
+        /*
+        * Explicitly request RGBA_8888
+        */
+        info.bits_per_pixel = 32;
+        info.red.offset     = 24;
+        info.red.length     = 8;
+        info.green.offset   = 16;
+        info.green.length   = 8;
+        info.blue.offset    = 8;
+        info.blue.length    = 8;
+        info.transp.offset  = 0;
+        info.transp.length  = 8;
 
-	/* Note: the GL driver does not have a r=8 g=8 b=8 a=0 config, so if we do
-	* not use the MDP for composition (i.e. hw composition == 0), ask for
-	* RGBA instead of RGBX. */
-	if (property_get("debug.sf.hw", property, NULL) > 0 && atoi(property) == 0)
-		module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
-	else if(property_get("debug.composition.type", property, NULL) > 0 && (strncmp(property, "mdp", 3) == 0))
-		module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
-	else
-		module->fbFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+        /* Note: the GL driver does not have a r=8 g=8 b=8 a=0 config, so if we do
+        * not use the MDP for composition (i.e. hw composition == 0), ask for
+        * RGBA instead of RGBX. */
+        if (property_get("debug.sf.hw", property, NULL) > 0 && atoi(property) == 0)
+            module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
+        else if(property_get("debug.composition.type", property, NULL) > 0 && (strncmp(property, "mdp", 3) == 0))
+            module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
+        else
+            module->fbFormat = HAL_PIXEL_FORMAT_RGBA_8888;
     } else {
-	/*
-	* Explicitly request 5/6/5
-	*/
-	info.bits_per_pixel = 16;
-	info.red.offset     = 11;
-	info.red.length     = 5;
-	info.green.offset   = 5;
-	info.green.length   = 6;
-	info.blue.offset    = 0;
-	info.blue.length    = 5;
-	info.transp.offset  = 0;
-	info.transp.length  = 0;
-	module->fbFormat = HAL_PIXEL_FORMAT_RGB_565;
+        /*
+        * Explicitly request 5/6/5
+        */
+        info.bits_per_pixel = 16;
+        info.red.offset     = 11;
+        info.red.length     = 5;
+        info.green.offset   = 5;
+        info.green.length   = 6;
+        info.blue.offset    = 0;
+        info.blue.length    = 5;
+        info.transp.offset  = 0;
+        info.transp.length  = 0;
+        module->fbFormat = HAL_PIXEL_FORMAT_RGB_565;
     }
     /*
      * Request NUM_BUFFERS screens (at lest 2 for page flipping)
@@ -1125,7 +1123,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
         pthread_cond_init(&(module->avail[i].cond), NULL);
         module->avail[i].is_avail = true;
         module->avail[i].state = AVL;
-    }    
+    }
 
     /* create display update thread */
     pthread_t thread1;
@@ -1310,7 +1308,7 @@ msm_copy_buffer(buffer_handle_t handle, int fd,
     blit.req.dst.width = width;
     blit.req.dst.height = height;
     blit.req.dst.offset = 0;
-    blit.req.dst.memory_id = fd; 
+    blit.req.dst.memory_id = fd;
     blit.req.dst.format = format;
 
     blit.req.src_rect.x = blit.req.dst_rect.x = x;

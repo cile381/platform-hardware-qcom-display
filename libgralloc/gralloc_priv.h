@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,12 +44,27 @@ enum { BYPASS_OV_CHANNEL_OPEN,
 #endif
 
 enum {
-    /* gralloc usage bit indicating the type
+    /* gralloc usage bits indicating the type
      * of allocation that should be used */
-    GRALLOC_USAGE_PRIVATE_ADSP_HEAP = GRALLOC_USAGE_PRIVATE_0,
-    GRALLOC_USAGE_PRIVATE_EBI_HEAP = GRALLOC_USAGE_PRIVATE_1,
-    GRALLOC_USAGE_PRIVATE_SMI_HEAP = GRALLOC_USAGE_PRIVATE_2,
-    GRALLOC_USAGE_PRIVATE_SYSTEM_HEAP = GRALLOC_USAGE_PRIVATE_3,
+    GRALLOC_USAGE_PRIVATE_ADSP_HEAP   = GRALLOC_USAGE_PRIVATE_0,
+    GRALLOC_USAGE_PRIVATE_EBI_HEAP    = GRALLOC_USAGE_PRIVATE_1,
+    GRALLOC_USAGE_PRIVATE_SYSTEM_HEAP = GRALLOC_USAGE_PRIVATE_2,
+    GRALLOC_USAGE_PRIVATE_SMI_HEAP    = GRALLOC_USAGE_PRIVATE_3,
+    /* Set this for allocating uncached memory (using O_DSYNC)
+     * cannot be used with the system heap */
+    GRALLOC_USAGE_PRIVATE_UNCACHED = 0x00010000,
+    /* This flag needs to be set when using a system heap
+     * from ION. If not set, the system heap is assumed
+     * to be coming from ashmem
+     */
+    GRALLOC_USAGE_PRIVATE_ION = 0x00020000,
+};
+
+enum {
+    GPU_COMPOSITION,
+    C2D_COMPOSITION,
+    MDP_COMPOSITION,
+    CPU_COMPOSITION,
 };
 
 /* numbers of max buffers for page flipping */
@@ -62,6 +77,8 @@ enum {
 #define INTERLACE_MASK 0x80
 /*****************************************************************************/
 #ifdef __cplusplus
+
+//XXX: Remove framebuffer specific classes and defines to a different header
 template <class T>
 struct Node
 {
@@ -267,7 +284,7 @@ struct private_module_t {
     float fps;
     int swapInterval;
 #ifdef __cplusplus
-    Queue<struct qbuf_t> disp; // non-empty when buffer is ready for display    
+    Queue<struct qbuf_t> disp; // non-empty when buffer is ready for display
 #endif
     int currentIdx;
     struct avail_t avail[NUM_FRAMEBUFFERS_MAX];
@@ -322,7 +339,6 @@ struct private_handle_t : public native_handle {
 struct private_handle_t {
     native_handle_t nativeHandle;
 #endif
-    
     enum {
         PRIV_FLAGS_FRAMEBUFFER    = 0x00000001,
         PRIV_FLAGS_USES_PMEM      = 0x00000002,
@@ -380,7 +396,7 @@ struct private_handle_t {
         const private_handle_t* hnd = (const private_handle_t*)h;
         if (!h || h->version != sizeof(native_handle) ||
                 h->numInts != sNumInts || h->numFds != sNumFds ||
-                hnd->magic != sMagic) 
+                hnd->magic != sMagic)
         {
             LOGE("invalid gralloc handle (at %p)", h);
             return -EINVAL;
