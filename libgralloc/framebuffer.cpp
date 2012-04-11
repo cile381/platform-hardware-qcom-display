@@ -292,6 +292,12 @@ static void *hdmi_ui_loop(void *ptr)
 
                    if (m->trueMirrorSupport)
                        flags &= ~WAIT_FOR_VSYNC;
+                   // External display connected during secure video playback
+                   // Open secure UI session
+                   // NOTE: when external display is already connected and then secure
+                   // playback is started, we dont have to do anything
+                   if(m->secureVideoOverlay)
+                       flags |= SECURE_OVERLAY_SESSION;
                    // start the overlay Channel for mirroring
                    // m->enableHDMIOutput corresponds to the fbnum
                    if (pTemp->startChannel(info, m->enableHDMIOutput,
@@ -389,27 +395,6 @@ static int fb_enableHDMIOutput(struct framebuffer_device_t* dev, int externaltyp
     return 0;
 }
 
-
-static int fb_setActionSafeWidthRatio(struct framebuffer_device_t* dev, float asWidthRatio)
-{
-    private_module_t* m = reinterpret_cast<private_module_t*>(
-            dev->common.module);
-    pthread_mutex_lock(&m->overlayLock);
-    m->actionsafeWidthRatio = asWidthRatio;
-    pthread_mutex_unlock(&m->overlayLock);
-    return 0;
-}
-
-static int fb_setActionSafeHeightRatio(struct framebuffer_device_t* dev, float asHeightRatio)
-{
-    private_module_t* m = reinterpret_cast<private_module_t*>(
-                    dev->common.module);
-    pthread_mutex_lock(&m->overlayLock);
-    m->actionsafeHeightRatio = asHeightRatio;
-    pthread_mutex_unlock(&m->overlayLock);
-    return 0;
-}
-
 static int fb_orientationChanged(struct framebuffer_device_t* dev, int orientation)
 {
     private_module_t* m = reinterpret_cast<private_module_t*>(
@@ -420,6 +405,33 @@ static int fb_orientationChanged(struct framebuffer_device_t* dev, int orientati
     return 0;
 }
 #endif
+
+/* fb_perform - used to add custom event and handle them in fb HAL
+ * Used for external display related functions as of now
+*/
+static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
+{
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+            dev->common.module);
+    switch(event) {
+#if defined(HDMI_DUAL_DISPLAY)
+        case EVENT_EXTERNAL_DISPLAY:
+            fb_enableHDMIOutput(dev, value);
+            break;
+        case EVENT_VIDEO_OVERLAY:
+            fb_videoOverlayStarted(dev, value);
+            break;
+        case EVENT_ORIENTATION_CHANGE:
+            fb_orientationChanged(dev, value);
+            break;
+#endif
+        default:
+            LOGE("In %s: UNKNOWN Event = %d!!!", __FUNCTION__, event);
+            break;
+    }
+    return 0;
+ }
+
 
 //Wait until framebuffer content is displayed.
 ////This is called in the context of threadLoop.
@@ -890,11 +902,7 @@ int fb_device_open(hw_module_t const* module, const char* name,
         dev->device.waitForBufferPost = fb_waitForBufferPost;
         dev->device.resetBufferPostStatus = fb_resetBufferPostStatus;
 #if defined(HDMI_DUAL_DISPLAY)
-        dev->device.orientationChanged = fb_orientationChanged;
-        dev->device.videoOverlayStarted = fb_videoOverlayStarted;
-        dev->device.enableHDMIOutput = fb_enableHDMIOutput;
-        dev->device.setActionSafeWidthRatio = fb_setActionSafeWidthRatio;
-        dev->device.setActionSafeHeightRatio = fb_setActionSafeHeightRatio;
+        dev->device.perform = fb_perform;
 #endif
 
         private_module_t* m = (private_module_t*)module;
