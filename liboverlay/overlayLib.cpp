@@ -1831,8 +1831,12 @@ bool OverlayDataChannel::mapRotatorMemory(int num_buffers, bool uiChannel, int r
         if((requestType == NEW_REQUEST) && !uiChannel)
             allocFlags |= GRALLOC_USAGE_PRIVATE_SMI_HEAP;
     }
-
-    int err = mAlloc->allocate(data, allocFlags, 0);
+    //XXX: getInstance(false) implies that it should only
+    // use the kernel allocator. Change it to something
+    // more descriptive later.
+    android::sp<gralloc::IAllocController> allocController =
+                                 gralloc::IAllocController::getInstance(false);
+    int err = allocController->allocate(data, allocFlags, 0);
     if(err) {
         reportError("Cant allocate rotatory memory");
         close(mFD);
@@ -1889,8 +1893,7 @@ bool OverlayDataChannel::closeDataChannel() {
         return true;
 
     if (!mNoRot && mRotFD > 0) {
-        sp<IMemAlloc> memalloc = mAlloc->getAllocator(mBufferType);
-        memalloc->free_buffer(mPmemAddr, mPmemOffset * mNumBuffers, 0, mPmemFD);
+        freeRotatorMemory(mPmemAddr, mPmemOffset, mPmemFD);
         close(mPmemFD);
         mPmemFD = -1;
         close(mRotFD);
@@ -1906,6 +1909,23 @@ bool OverlayDataChannel::closeDataChannel() {
     mCurrentItem = 0;
 
     return true;
+}
+
+bool OverlayDataChannel::freeRotatorMemory(void* pmemAddr, uint32_t
+                                                   pmemOffset, int pmemFD) {
+    bool ret = true;
+    if(pmemFD != -1 && pmemAddr != MAP_FAILED) {
+        //XXX: getInstance(false) implies that it should only
+        // use the kernel allocator. Change it to something
+        // more descriptive later.
+        android::sp<gralloc::IAllocController> allocController =
+                gralloc::IAllocController::getInstance(false);
+        sp<IMemAlloc> memalloc = allocController->getAllocator(mBufferType);
+        memalloc->free_buffer(pmemAddr, pmemOffset * mNumBuffers, 0, pmemFD);
+    }
+    else
+        ret = false;
+    return ret;
 }
 
 bool OverlayDataChannel::setFd(int fd) {
@@ -1934,6 +1954,8 @@ bool OverlayDataChannel::queueBuffer(uint32_t offset) {
             result = mapRotatorMemory(mNumBuffers, 0, UPDATE_REQUEST);
             if (!result) {
                 LOGE("queueBuffer: mapRotatorMemory failed");
+                // free the oldPmemAddr if any
+                freeRotatorMemory(oldPmemAddr, oldPmemOffset, oldPmemFD);
                 return false;
             }
             mUpdateDataChannel = false;
@@ -1943,11 +1965,7 @@ bool OverlayDataChannel::queueBuffer(uint32_t offset) {
     result = queue(offset);
 
     // Unmap the old PMEM memory after the queueBuffer has returned
-    if (oldPmemFD != -1 && oldPmemAddr != MAP_FAILED) {
-        sp<IMemAlloc> memalloc = mAlloc->getAllocator(mBufferType);
-        memalloc->free_buffer(oldPmemAddr, oldPmemOffset * mNumBuffers, 0, oldPmemFD);
-        oldPmemFD = -1;
-    }
+    freeRotatorMemory(oldPmemAddr, oldPmemOffset, oldPmemFD);
     return result;
 }
 
