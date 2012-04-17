@@ -404,6 +404,54 @@ static int fb_orientationChanged(struct framebuffer_device_t* dev, int orientati
     pthread_mutex_unlock(&m->overlayLock);
     return 0;
 }
+
+static int handle_open_secure_start(private_module_t* m) {
+    pthread_mutex_lock(&m->overlayLock);
+    m->hdmiMirroringState = HDMI_NO_MIRRORING;
+    m->secureVideoOverlay = true;
+    closeHDMIChannel(m);
+    pthread_mutex_unlock(&m->overlayLock);
+    return 0;
+}
+
+static int handle_open_secure_end(private_module_t* m) {
+    pthread_mutex_lock(&m->overlayLock);
+    if (m->enableHDMIOutput) {
+        if (m->trueMirrorSupport) {
+            m->hdmiMirroringState = HDMI_UI_MIRRORING;
+        } else if(!m->videoOverlay) {
+            m->hdmiMirroringState = HDMI_UI_MIRRORING;
+        }
+        m->hdmiStateChanged = true;
+        pthread_cond_signal(&(m->overlayPost));
+    }
+    pthread_mutex_unlock(&m->overlayLock);
+    return 0;
+}
+
+static int handle_close_secure_start(private_module_t* m) {
+    pthread_mutex_lock(&m->overlayLock);
+    m->hdmiMirroringState = HDMI_NO_MIRRORING;
+    m->secureVideoOverlay = false;
+    closeHDMIChannel(m);
+    pthread_mutex_unlock(&m->overlayLock);
+    return 0;
+}
+
+static int handle_close_secure_end(private_module_t* m) {
+    pthread_mutex_lock(&m->overlayLock);
+    if (m->enableHDMIOutput) {
+        if (m->trueMirrorSupport) {
+            m->hdmiMirroringState = HDMI_UI_MIRRORING;
+        } else if(!m->videoOverlay) {
+            m->hdmiMirroringState = HDMI_UI_MIRRORING;
+        }
+        m->hdmiStateChanged = true;
+        pthread_cond_signal(&(m->overlayPost));
+    }
+    pthread_mutex_unlock(&m->overlayLock);
+    return 0;
+}
 #endif
 
 /* fb_perform - used to add custom event and handle them in fb HAL
@@ -423,6 +471,18 @@ static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
             break;
         case EVENT_ORIENTATION_CHANGE:
             fb_orientationChanged(dev, value);
+            break;
+        case EVENT_OPEN_SECURE_START:
+            handle_open_secure_start(m);
+            break;
+        case EVENT_OPEN_SECURE_END:
+            handle_open_secure_end(m);
+            break;
+        case EVENT_CLOSE_SECURE_START:
+            handle_close_secure_start(m);
+            break;
+        case EVENT_CLOSE_SECURE_END:
+            handle_close_secure_end(m);
             break;
 #endif
         default:
