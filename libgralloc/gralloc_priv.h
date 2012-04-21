@@ -304,6 +304,9 @@ struct private_module_t {
     hdmi_mirroring_state hdmiMirroringState;
     pthread_mutex_t overlayLock;
     pthread_cond_t overlayPost;
+    pthread_mutex_t bufferPostLock;
+    pthread_cond_t bufferPostCond;
+    bool bufferPostDone;
 #endif
 };
 
