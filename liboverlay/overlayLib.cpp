@@ -440,6 +440,7 @@ bool Overlay::startChannel(const overlay_buffer_info& info, int fbnum,
                                                        format3D, zorder, flags);
     if (!mChannelUP) {
         LOGE("startChannel for fb%d failed", fbnum);
+        mState = -1;
         return mChannelUP;
     }
     objOvCtrlChannel[channel].setSize(info.size);
