@@ -43,6 +43,7 @@
 #include <utils/RefBase.h>
 #include <alloc_controller.h>
 #include <memalloc.h>
+#include <qcom_ui.h>
 
 #ifdef USES_POST_PROCESSING
 #include "lib-postproc.h"
@@ -60,6 +61,7 @@
 #define FRAMEBUFFER_0 0
 #define FRAMEBUFFER_1 1
 #define FRAMEBUFFER_2 2
+
 #define NUM_SHARPNESS_VALS 256
 #define SHARPNESS_RANGE 1.0f
 #define HUE_RANGE 180
