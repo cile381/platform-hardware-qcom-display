@@ -95,11 +95,9 @@ enum {
 enum {
     HWC_LAYER_NOT_UPDATING      = 0x00000002,
     HWC_LAYER_ASYNCHRONOUS      = 0x00000004,
-    HWC_USE_ORIGINAL_RESOLUTION = 0x10000000,
-    HWC_DO_NOT_USE_OVERLAY      = 0x20000000,
-    HWC_COMP_BYPASS             = 0x40000000,
-    HWC_USE_EXT_ONLY            = 0x80000000, //Layer displayed on external only
-    HWC_USE_EXT_BLOCK           = 0x01000000, //Layer displayed on external only
+    HWC_COMP_BYPASS             = 0x10000000,
+    HWC_USE_EXT_ONLY            = 0x20000000, //Layer displayed on external only
+    HWC_USE_EXT_BLOCK           = 0x40000000, //Layer displayed on external only
     HWC_BYPASS_RESERVE_0        = 0x00000010,
     HWC_BYPASS_RESERVE_1        = 0x00000020,
 };

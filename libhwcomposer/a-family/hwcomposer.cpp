@@ -753,16 +753,10 @@ static int prepareOverlay(hwc_context_t *ctx,
             }
         }
 #endif
-        if (layer->flags & HWC_USE_ORIGINAL_RESOLUTION) {
-            framebuffer_device_t* fbDev = hwcModule->fbDevice;
-            ret = ovLibObject->setPosition(0, 0,
-                                           fbDev->width, fbDev->height);
-        } else {
-            hwc_rect_t displayFrame = layer->displayFrame;
-            ret = ovLibObject->setPosition(displayFrame.left, displayFrame.top,
-                                    (displayFrame.right - displayFrame.left),
-                                    (displayFrame.bottom - displayFrame.top));
-        }
+        hwc_rect_t displayFrame = layer->displayFrame;
+        ret = ovLibObject->setPosition(displayFrame.left, displayFrame.top,
+                            (displayFrame.right - displayFrame.left),
+                            (displayFrame.bottom - displayFrame.top));
         if (!ret) {
             LOGE("prepareOverlay setPosition failed");
             return -1;
@@ -770,7 +764,7 @@ static int prepareOverlay(hwc_context_t *ctx,
     }
     return 0;
 }
-#endif // USE_OVERLAY
+#endif //USE_OVERLAY
 
 void unlockPreviousOverlayBuffer(hwc_context_t* ctx)
 {
@@ -1025,8 +1019,7 @@ static void statCount(hwc_context_t *ctx, hwc_layer_list_t* list) {
             private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
             if (hnd) {
                 if(hnd->bufferType == BUFFER_TYPE_VIDEO) {
-                    if(!(list->hwLayers[i].flags & HWC_DO_NOT_USE_OVERLAY))
-                        yuvBufCount++;
+                    yuvBufCount++;
                 } else if (list->hwLayers[i].flags & HWC_LAYER_NOT_UPDATING)
                         layersNotUpdatingCount++;
                 s3dLayerFormat = s3dLayerFormat ? s3dLayerFormat : FORMAT_3D_INPUT(hnd->format);
@@ -1179,10 +1172,6 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
 #endif
             } else if (isS3DCompositionNeeded) {
                 markUILayerForS3DComposition(list->hwLayers[i], ctx->s3dLayerFormat);
-            } else if (list->hwLayers[i].flags & HWC_USE_ORIGINAL_RESOLUTION) {
-                list->hwLayers[i].compositionType = HWC_USE_OVERLAY;
-                list->hwLayers[i].hints |= HWC_HINT_CLEAR_FB;
-                layerType |= HWC_ORIG_RESOLUTION;
             } else if (hnd && hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY) {
                 //handle later after other layers are handled
             } else if (hnd && (hwcModule->compositionType &

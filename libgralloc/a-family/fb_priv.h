@@ -113,7 +113,6 @@ private:
 enum hdmi_mirroring_state {
     HDMI_NO_MIRRORING,
     HDMI_UI_MIRRORING,
-    HDMI_ORIGINAL_RESOLUTION_MIRRORING
 };
 #endif
 

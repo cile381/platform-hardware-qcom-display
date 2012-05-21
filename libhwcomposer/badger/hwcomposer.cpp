@@ -957,21 +957,12 @@ static int prepareOverlay(hwc_context_t *ctx,
         }
 #endif
         ovutils::Dim dim;
-        if (layer->flags & HWC_USE_ORIGINAL_RESOLUTION) {
-            framebuffer_device_t* fbDev = hwcModule->fbDevice;
-            dim.x = 0;
-            dim.y = 0;
-            dim.w = fbDev->width;
-            dim.h = fbDev->height;
-            dim.o = orientation;
-        } else {
-            hwc_rect_t displayFrame = layer->displayFrame;
-            dim.x = displayFrame.left;
-            dim.y = displayFrame.top;
-            dim.w = (displayFrame.right - displayFrame.left);
-            dim.h = (displayFrame.bottom - displayFrame.top);
-            dim.o = orientation;
-        }
+        hwc_rect_t displayFrame = layer->displayFrame;
+        dim.x = displayFrame.left;
+        dim.y = displayFrame.top;
+        dim.w = (displayFrame.right - displayFrame.left);
+        dim.h = (displayFrame.bottom - displayFrame.top);
+        dim.o = orientation;
 
         ret = ov.setPosition(dim, dest);
         if (!ret) {
@@ -1216,10 +1207,10 @@ static void statCount(hwc_context_t *ctx, hwc_layer_list_t* list) {
             private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
             if (hnd) {
                 if(hnd->bufferType == BUFFER_TYPE_VIDEO) {
-                    if(!(list->hwLayers[i].flags & HWC_DO_NOT_USE_OVERLAY))
-                        yuvBufCount++;
+                    yuvBufCount++;
                 } else if (list->hwLayers[i].flags & HWC_LAYER_NOT_UPDATING)
-                        layersNotUpdatingCount++;
+                    layersNotUpdatingCount++;
+
                 s3dLayerFormat = s3dLayerFormat ? s3dLayerFormat :
                         ovutils::format3DInput(hnd->format);
             }
@@ -1404,10 +1395,6 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 }
             } else if (isS3DCompositionNeeded) {
                 markUILayerForS3DComposition(list->hwLayers[i], ctx->s3dLayerFormat);
-            } else if (list->hwLayers[i].flags & HWC_USE_ORIGINAL_RESOLUTION) {
-                list->hwLayers[i].compositionType = HWC_USE_OVERLAY;
-                list->hwLayers[i].hints |= HWC_HINT_CLEAR_FB;
-                layerType |= HWC_ORIG_RESOLUTION;
             } else if (hnd && (hwcModule->compositionType &
                     (COMPOSITION_TYPE_C2D|COMPOSITION_TYPE_MDP))) {
                 list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
