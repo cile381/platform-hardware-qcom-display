@@ -129,6 +129,15 @@ enum {
     EVENT_CLOSE_SECURE_END,     // End of secure session teardown config
     EVENT_RESET_POSTBUFFER,     // Reset post framebuffer mutex
     EVENT_WAIT_POSTBUFFER,      // Wait until post framebuffer returns
+    EVENT_GET_VAR_PIPE,         // Read variable pipe
+    EVENT_SET_VAR_PIPE_MODE,    // Set variable pipe mode
+    EVENT_GET_VAR_PIPE_MODE,    // Query variable pipe mode
+};
+
+enum {
+    VAR_PIPE_FB_ATTACH,
+    VAR_PIPE_FB_DETACH,
+    VAR_PIPE_CLOSE,
 };
 
 // Video information sent to framebuffer HAl

@@ -96,6 +96,9 @@ static void
 msm_copy_buffer(buffer_handle_t handle, int fd,
                 int width, int height, int format,
                 int x, int y, int w, int h);
+static int setup_borderfill_pipe(struct private_module_t* module, struct fb_var_screeninfo info);
+
+static int setup_postbuffer_pipe(struct private_module_t* module);
 
 static int fb_setSwapInterval(struct framebuffer_device_t* dev,
             int interval)
@@ -128,6 +131,28 @@ static int fb_setUpdateRect(struct framebuffer_device_t* dev,
     m->info.reserved[1] = (uint16_t)l | ((uint32_t)t << 16);
     m->info.reserved[2] = (uint16_t)(l+w) | ((uint32_t)(t+h) << 16);
     return 0;
+}
+
+static void post_framebuffer(const private_module_t* m,
+                           private_handle_t const* fb_hnd, int offset) {
+#ifdef USE_OVERLAY_TO_POST
+        overlay_buffer_info ov_info;
+        ov_info.width = fb_hnd->width;
+        ov_info.height = fb_hnd->height;
+        ov_info.format = fb_hnd->format;
+        ov_info.size = fb_hnd->size;
+
+        OverlayUI* pOV = m->pOvUI;
+        pOV->setSource(ov_info, 0);
+
+        if(pOV->queueBuffer(fb_hnd, offset) != overlay::NO_ERROR) {
+                LOGE("FATAL: Post framebuffer failed.");
+        }
+#else
+        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
+            LOGE("ERROR FBIOPUT_VSCREENINFO failed; frame not displayed");
+        }
+#endif
 }
 
 static void *disp_loop(void *ptr)
@@ -164,9 +189,8 @@ static void *disp_loop(void *ptr)
         pthread_cond_signal(&(m->overlayPost));
         pthread_mutex_unlock(&m->overlayLock);
 #endif
-        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
-            LOGE("ERROR FBIOPUT_VSCREENINFO failed; frame not displayed");
-        }
+
+        post_framebuffer(m, hnd, offset);
 
         //Signal so that we can close channels if we need to
         pthread_mutex_lock(&m->bufferPostLock);
@@ -492,29 +516,96 @@ static int fb_resetBufferPostStatus(struct framebuffer_device_t* dev)
     return 0;
 }
 
+#ifdef USE_OVERLAY_TO_POST
+static int fb_getVariablePipe(struct framebuffer_device_t* dev, void** ov) {
+    private_module_t* m = reinterpret_cast<private_module_t*>(dev->common.module);
+    if(m->pOvUI == NULL) {
+        LOGE("%s: invalid object!!",__FUNCTION__);
+        return -1;
+    }
+    *ov = (void*)m->pOvUI;
+    return 0;
+}
+
+static int fb_setVariablePipeMode(struct framebuffer_device_t* dev, int switch_mode) {
+    private_module_t* m = reinterpret_cast<private_module_t*>(dev->common.module);
+    LOGV("%s: (cur:%d in:%d)", __FUNCTION__, m->fbAttached, switch_mode);
+
+    pthread_mutex_lock(&m->variablePipeLock);
+
+    int status = 0;
+
+    if(m->fbAttached  == switch_mode) {
+        LOGV("%s: NO-OP: VAR pipe is already in requested mode", __FUNCTION__);
+        status = -1;
+        pthread_mutex_unlock(&m->variablePipeLock);
+        return status;
+    }
+
+    switch(switch_mode) {
+         case VAR_PIPE_FB_ATTACH:
+            if(setup_postbuffer_pipe(m) < 0) {
+                LOGE("%s: setup_postbuffer_pipe failed",__FUNCTION__);
+                status = -1;
+                break;
+            }
+            m->fbAttached = VAR_PIPE_FB_ATTACH;
+            break;
+         case VAR_PIPE_FB_DETACH:
+            if(m->fbAttached == VAR_PIPE_CLOSE) {
+                if(setup_postbuffer_pipe(m) < 0) {
+                    LOGE("%s: setup_postbuffer_pipe failed", __FUNCTION__);
+                    status = -1;
+                    break;
+                }
+            }
+            m->fbAttached = VAR_PIPE_FB_DETACH;
+            break;
+         case VAR_PIPE_CLOSE:
+            if(m->pOvUI) {
+               if(m->pOvUI->closeChannel() != overlay::NO_ERROR) {
+                  LOGE("%s: closing variable pipe failed!!",__FUNCTION__);
+                  status = -1;
+                  break;
+               }
+               m->fbAttached = VAR_PIPE_CLOSE;
+            }
+            break;
+         default:
+            LOGE("%s: Invalid switch mode",__FUNCTION__);
+            status = -1;
+            break;
+    };
+    pthread_mutex_unlock(&m->variablePipeLock);
+    return status;
+}
+#endif
+
 /* fb_perform - used to add custom event and handle them in fb HAL
  * Used for external display related functions as of now
 */
-static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
+static int fb_perform(struct framebuffer_device_t* dev, int event, void *value)
 {
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
+    int status = 0;
+
     switch(event) {
 #if defined(HDMI_DUAL_DISPLAY)
         case EVENT_EXTERNAL_DISPLAY:
-            fb_enableHDMIOutput(dev, value);
+            fb_enableHDMIOutput(dev, *(int*)value);
             break;
         case EVENT_VIDEO_OVERLAY:
-            fb_videoOverlayStarted(dev, value);
+            fb_videoOverlayStarted(dev, *(int*)value);
             break;
         case EVENT_ORIENTATION_CHANGE:
-            fb_orientationChanged(dev, value);
+            fb_orientationChanged(dev, *(int*)value);
             break;
         case EVENT_OVERLAY_STATE_CHANGE:
-            if (value == OVERLAY_STATE_CHANGE_START) {
+            if (*(int*)value == OVERLAY_STATE_CHANGE_START) {
                 // When state change starts, get a lock on overlay
                 pthread_mutex_lock(&m->overlayLock);
-            } else if (value == OVERLAY_STATE_CHANGE_END) {
+            } else if (*(int*)value == OVERLAY_STATE_CHANGE_END) {
                 // When state change is complete, unlock overlay
                 pthread_mutex_unlock(&m->overlayLock);
             }
@@ -538,11 +629,22 @@ static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
         case EVENT_WAIT_POSTBUFFER:
             fb_waitForBufferPost(dev);
             break;
+#ifdef USE_OVERLAY_TO_POST
+        case EVENT_SET_VAR_PIPE_MODE:
+            status = fb_setVariablePipeMode(dev, *(int*)value);
+            break;
+        case EVENT_GET_VAR_PIPE_MODE:
+             *(int*)value = m->fbAttached;
+             break;
+        case EVENT_GET_VAR_PIPE:
+             status = fb_getVariablePipe(dev,(void**)value);
+             break;
+#endif
         default:
-            LOGE("In %s: UNKNOWN Event = %d!!!", __FUNCTION__, event);
+            LOGV("%s: UNKNOWN Event = %d!!!", __FUNCTION__, event);
             break;
     }
-    return 0;
+    return status;
  }
 
 static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
@@ -558,6 +660,15 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>(buffer);
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
+#ifdef USE_OVERLAY_TO_POST
+    if(m->fbAttached != VAR_PIPE_FB_ATTACH ) {
+        if(fb_setVariablePipeMode(dev, VAR_PIPE_FB_ATTACH) < 0) {
+            LOGE("fb_post: Attaching var pipe failed.");
+            return -EINVAL;
+        }
+    }
+#endif
+
 
     if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
 
@@ -953,8 +1064,102 @@ int mapFrameBufferLocked(struct private_module_t* module)
     pthread_cond_init(&(module->bufferPostCond), NULL);
     module->bufferPostDone = false;
 
+#ifdef USE_OVERLAY_TO_POST
+    if(module->pOvUI == NULL && module->pBorderFill == NULL) {
+        module->pOvUI = new OverlayUI();
+        module->pBorderFill = new OverlayUI();
+
+        if(setup_borderfill_pipe(module, info) < 0) {
+            LOGE("FATAL: setup_borderfill_pipe failed.");
+            return -1;
+        }
+
+        if(setup_postbuffer_pipe(module) < 0) {
+            LOGE("FATAL: setup_postbuffer_pipe failed.");
+            //Release borderFill pipe and
+            //clean up both the pipes
+            module->pBorderFill->closeChannel();
+            delete module->pBorderFill;
+            module->pBorderFill = NULL;
+            delete module->pOvUI;
+            module->pOvUI = NULL;
+            return -1;
+        }
+        module->fbAttached = VAR_PIPE_FB_ATTACH;
+    }
+    pthread_mutex_init(&(module->variablePipeLock), NULL);
+#endif
+   return 0;
+}
+
+#ifdef USE_OVERLAY_TO_POST
+static int setup_borderfill_pipe(struct private_module_t* module, struct fb_var_screeninfo info) {
+
+    OverlayUI* pipe = module->pBorderFill;
+
+    //Call SET with MDP_RGB_BORDERFILL format to notify
+    //MDP that Border Fill will be its base pipe.
+    //All the other parameters are dummy.
+
+    overlay_buffer_info ov_info;
+    ov_info.width = info.xres;
+    ov_info.height = info.yres;
+    ov_info.format = MDP_RGB_BORDERFILL;
+    ov_info.size = NULL;
+
+    pipe->setSource(ov_info, 0 /* default orientation */);
+
+    pipe->setDisplayParams( 0,     // FB Num - 0
+                            true,  // WAIT for VSYNC - N/A
+                            false, // isFG - N/A
+                            0,     // zorder - N/A
+                            false);// isVG - N/A
+
+    pipe->setPosition(0,0,info.xres, info.yres);
+
+    if(pipe->commit() !=  overlay::NO_ERROR) {
+       LOGE("setup_borderfill_pipe: failed in commit");
+       return -1;
+    }
+    if(pipe->queueBuffer(NULL) != overlay::NO_ERROR) {
+       LOGE("setup_borderfill_pipe: failed in queue");
+       return -1;
+    }
     return 0;
 }
+
+static int setup_postbuffer_pipe(struct private_module_t* module) {
+
+    private_handle_t const* fb_hnd = reinterpret_cast<private_handle_t const*>
+        (module->framebuffer);
+
+    OverlayUI* pipe = module->pOvUI;
+
+    overlay_buffer_info ov_info;
+    ov_info.width = fb_hnd->width;
+    ov_info.height = fb_hnd->height;
+    ov_info.format = fb_hnd->format;
+    ov_info.size = fb_hnd->size;
+
+    pipe->setSource(ov_info, 0 /* default orientation */);
+
+    pipe->setDisplayParams( 0,     //FB Num - 0
+                            true,  //Always WAIT for VSYNC
+                            false, //isFG - N/A
+                            0,     //zorder 0
+                            false, //NOT VG pipe
+                            true); //FB Memory
+
+    pipe->setCrop(0,0, fb_hnd->width, fb_hnd->height);
+    pipe->setPosition(0,0, fb_hnd->width, fb_hnd->height);
+
+    if(pipe->commit() != overlay::NO_ERROR) {
+       LOGE("setup_postbuffer_pipe: failed in commit");
+       return -1;
+    }
+    return 0;
+}
+#endif
 
 static int mapFrameBuffer(struct private_module_t* module)
 {

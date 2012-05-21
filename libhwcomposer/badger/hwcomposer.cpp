@@ -282,9 +282,11 @@ static void setOverlayState(hwc_context_t* ctx, ovutils::eOverlayState state)
     }
 
     // Using perform ensures a lock on overlay is obtained before changing state
-    fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, OVERLAY_STATE_CHANGE_START);
+    int ov_state = OVERLAY_STATE_CHANGE_START;
+    fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, (void*)&ov_state);
     ovMgr->setState(state);
-    fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, OVERLAY_STATE_CHANGE_END);
+    ov_state = OVERLAY_STATE_CHANGE_END;
+    fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, (void*)&ov_state);
 }
 
 #ifdef COMPOSITION_BYPASS
@@ -811,7 +813,7 @@ static int setVideoOverlayStatusInGralloc(hwc_context_t* ctx, const int value) {
     }
 
     // Inform the gralloc about the video overlay
-    fbDev->perform(fbDev, EVENT_VIDEO_OVERLAY, value);
+    fbDev->perform(fbDev, EVENT_VIDEO_OVERLAY, (void*)&value);
 #endif
     return 0;
 }

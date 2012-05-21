@@ -198,7 +198,13 @@ int ZOrderManager::getZ(int fbnum){
             for (int i = 0;i < NUM_CHANNELS; i++) {
                 if(mFB0Pipes[i] == false) {
                     mFB0Pipes[i]= true;
+#ifdef BYPASS_USES_ZORDER_0
+                    //With 4 layer bypass, RGB0 gets the lowest zorder.
+                    //So z-order manager can start assigning from z-order 1
+                    zorder = i+1;
+#else
                     zorder = i;
+#endif
                     break;
                 }
             }
@@ -229,7 +235,11 @@ void ZOrderManager::decZ(int fbnum, int zorder){
        case FRAMEBUFFER_0:
            LOG_ASSERT(!mFB0Pipes[zorder],"channel with ZOrder does not exist");
            LOGE("decZ: freeing the pipe with zorder = %d for fbdev = %d", zorder, fbnum);
+#ifdef BYPASS_USES_ZORDER_0
+           mFB0Pipes[zorder-1] = false;
+#else
            mFB0Pipes[zorder] = false;
+#endif
            break;
        case FRAMEBUFFER_1:
        case FRAMEBUFFER_2:

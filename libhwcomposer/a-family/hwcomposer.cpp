@@ -698,7 +698,7 @@ static int setVideoOverlayStatusInGralloc(hwc_context_t* ctx, const int value) {
     }
 
     // Inform the gralloc about the video overlay
-    fbDev->perform(fbDev, EVENT_VIDEO_OVERLAY, value);
+    fbDev->perform(fbDev, EVENT_VIDEO_OVERLAY, (void*)&value);
 #endif
     return 0;
 }
@@ -916,7 +916,7 @@ static void handleHDMIStateChange(hwc_composer_device_t *dev, int externaltype) 
     if(ExtDispOnly::isModeOn() == false) {
         framebuffer_device_t *fbDev = hwcModule->fbDevice;
         if (fbDev) {
-            fbDev->perform(fbDev, EVENT_EXTERNAL_DISPLAY, externaltype);
+            fbDev->perform(fbDev, EVENT_EXTERNAL_DISPLAY, (void*)&externaltype);
         }
         hwc_context_t* ctx = (hwc_context_t*)(dev);
         if(ctx && ctx->mOverlayLibObject) {
