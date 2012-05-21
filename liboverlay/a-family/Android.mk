@@ -36,7 +36,6 @@ LOCAL_CFLAGS:= -DLOG_TAG=\"OverlayLib\"
 ifeq ($(TARGET_USE_HDMI_AS_PRIMARY),true)
 LOCAL_CFLAGS += -DHDMI_AS_PRIMARY
 endif
-
 ifeq ($(call is-chipset-prefix-in-board-platform,msm7627),true)
 LOCAL_CFLAGS += -DDISPLAY_MDP_REV_4_OR_LESS
 else ifeq ($(call is-chipset-prefix-in-board-platform,msm7630),true)
