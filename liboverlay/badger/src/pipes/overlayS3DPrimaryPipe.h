@@ -30,6 +30,8 @@
 #ifndef OVERLAY_S3D_PRIMARY_PIPE_H
 #define OVERLAY_S3D_PRIMARY_PIPE_H
 
+#include "overlayGenPipe.h"
+
 namespace overlay2 {
 
 /**
@@ -37,10 +39,10 @@ namespace overlay2 {
  * Whenever needed to have a pass through - we do it.
  * If there is a special need for special/diff behavior
  * do it here
- * FB = 0,1
+ * PANEL is always PRIMARY for this pipe.
  * CHAN = 0,1 it's either Channel 1 or channel 2 needed for
  * 3D crop and position */
-template <int FB, int CHAN>
+template <int CHAN>
 class S3DPrimaryPipe : utils::NoCopy {
 public:
    /* Please look at overlayGenPipe.h for info */
@@ -65,9 +67,7 @@ public:
 private:
    /* needed for 3D related IOCTL */
    MdpCtrl3D mCtrl3D;
-   typedef ovutils::CtrlData<Ctrl, Data> ctrlData_t;
-   typedef overlay2::GenericPipe<ctrlData_t, FB> s3dpipe_t;
-   s3dpipe_t mS3d;
+   overlay2::GenericPipe<utils::FB0> mS3d;
    // Cache the 3D format
    uint32_t mS3Dfmt;
 };

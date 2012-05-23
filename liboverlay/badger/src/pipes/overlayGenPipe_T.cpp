@@ -29,16 +29,16 @@
 
 namespace overlay2 {
 
-template <class CTRL_DATA, int FB>
-GenericPipe<CTRL_DATA, FB>::GenericPipe() : mRot(0), mFlags(CLOSED) {}
+template <int FB>
+GenericPipe<FB>::GenericPipe() : mRot(0), mFlags(CLOSED) {}
 
-template <class CTRL_DATA, int FB>
-GenericPipe<CTRL_DATA, FB>::~GenericPipe() {
+template <int FB>
+GenericPipe<FB>::~GenericPipe() {
    close();
 }
 
-template <class CTRL_DATA, int FB>
-bool GenericPipe<CTRL_DATA, FB>::open(RotatorBase* rot)
+template <int FB>
+bool GenericPipe<FB>::open(RotatorBase* rot)
 {
    OVASSERT(rot, "rot is null");
    // open ctrl and data
@@ -61,8 +61,8 @@ bool GenericPipe<CTRL_DATA, FB>::open(RotatorBase* rot)
    return true;
 }
 
-template <class CTRL_DATA, int FB>
-bool GenericPipe<CTRL_DATA, FB>::close() {
+template <int FB>
+bool GenericPipe<FB>::close() {
    if(isClosed()) return true;
    bool ret = true;
    if(!mCtrlData.ctrl.close()) {
@@ -77,14 +77,14 @@ bool GenericPipe<CTRL_DATA, FB>::close() {
    return ret;
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::commit(){
+template <int FB>
+inline bool GenericPipe<FB>::commit(){
    OVASSERT(isOpen(), "State is closed, cannot commit");
    return mCtrlData.ctrl.commit();
 }
 
-template <class CTRL_DATA, int FB>
-inline void GenericPipe<CTRL_DATA, FB>::setMemoryId(int id) {
+template <int FB>
+inline void GenericPipe<FB>::setMemoryId(int id) {
    OVASSERT(isOpen(), "State is closed, cannot setMemoryId");
    if(utils::RECONFIG_ON == mArgs.reconf) {
       id = mArgs.play.fd;
@@ -93,24 +93,24 @@ inline void GenericPipe<CTRL_DATA, FB>::setMemoryId(int id) {
    mCtrlData.data.setMemoryId(id);
 }
 
-template <class CTRL_DATA, int FB>
-inline void GenericPipe<CTRL_DATA, FB>::setId(int id) {
+template <int FB>
+inline void GenericPipe<FB>::setId(int id) {
    mCtrlData.data.setId(id); }
 
-template <class CTRL_DATA, int FB>
-inline int GenericPipe<CTRL_DATA, FB>::getCtrlFd() const {
+template <int FB>
+inline int GenericPipe<FB>::getCtrlFd() const {
    return mCtrlData.ctrl.getFd();
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::setCrop(
+template <int FB>
+inline bool GenericPipe<FB>::setCrop(
    const overlay2::utils::Dim& d) {
    OVASSERT(isOpen(), "State is closed, cannot setCrop");
    return mCtrlData.ctrl.setCrop(d);
 }
 
-template <class CTRL_DATA, int FB>
-bool GenericPipe<CTRL_DATA, FB>::start(const utils::PipeArgs& args)
+template <int FB>
+bool GenericPipe<FB>::start(const utils::PipeArgs& args)
 {
    /* open before your start control rotator */
    uint32_t sz = args.whf.size; //utils::getSizeByMdp(args.whf);
@@ -143,14 +143,14 @@ bool GenericPipe<CTRL_DATA, FB>::start(const utils::PipeArgs& args)
    return true;
 }
 
-template <class CTRL_DATA, int FB>
-inline const utils::PipeArgs& GenericPipe<CTRL_DATA, FB>::getArgs() const
+template <int FB>
+inline const utils::PipeArgs& GenericPipe<FB>::getArgs() const
 {
    return mArgs;
 }
 
-template <class CTRL_DATA, int FB>
-bool GenericPipe<CTRL_DATA, FB>::startRotator() {
+template <int FB>
+bool GenericPipe<FB>::startRotator() {
    // kick off rotator
    if(!mRot->start()) {
       LOGE("GenericPipe failed to start rotator");
@@ -159,8 +159,8 @@ bool GenericPipe<CTRL_DATA, FB>::startRotator() {
    return true;
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::queueBuffer(uint32_t offset) {
+template <int FB>
+inline bool GenericPipe<FB>::queueBuffer(uint32_t offset) {
    OVASSERT(isOpen(), "State is closed, cannot queueBuffer");
    // when dealing with reconfig - we need to make sure data
    // channel is setup with the proper offset/fd as the src
@@ -174,29 +174,29 @@ inline bool GenericPipe<CTRL_DATA, FB>::queueBuffer(uint32_t offset) {
    return mCtrlData.data.queueBuffer(offset);
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::dequeueBuffer(void*&) {
+template <int FB>
+inline bool GenericPipe<FB>::dequeueBuffer(void*&) {
    OVASSERT(isOpen(), "State is closed, cannot dequeueBuffer");
    // can also set error to NOTSUPPORTED in the future
    return false;
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::waitForVsync() {
+template <int FB>
+inline bool GenericPipe<FB>::waitForVsync() {
    OVASSERT(isOpen(), "State is closed, cannot waitForVsync");
 
    return mCtrlData.data.waitForVsync();
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::setPosition(const utils::Dim& dim)
+template <int FB>
+inline bool GenericPipe<FB>::setPosition(const utils::Dim& dim)
 {
    OVASSERT(isOpen(), "State is closed, cannot setPosition");
    return mCtrlData.ctrl.setPosition(dim);
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::setParameter(
+template <int FB>
+inline bool GenericPipe<FB>::setParameter(
    const utils::Params& param)
 {
    OVASSERT(isOpen(), "State is closed, cannot setParameter");
@@ -213,8 +213,8 @@ inline bool GenericPipe<CTRL_DATA, FB>::setParameter(
    return startRotator();
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::setSource(
+template <int FB>
+inline bool GenericPipe<FB>::setSource(
    const utils::PipeArgs& args)
 {
    // cache the recent args.
@@ -233,39 +233,39 @@ inline bool GenericPipe<CTRL_DATA, FB>::setSource(
    return mCtrlData.ctrl.setSource(args);
 }
 
-template <class CTRL_DATA, int FB>
-inline utils::Dim GenericPipe<CTRL_DATA, FB>::getAspectRatio(
+template <int FB>
+inline utils::Dim GenericPipe<FB>::getAspectRatio(
    const utils::Whf& whf) const
 {
    return mCtrlData.ctrl.getAspectRatio(whf);
 }
 
-template <class CTRL_DATA, int FB>
-inline utils::Dim GenericPipe<CTRL_DATA, FB>::getAspectRatio(
+template <int FB>
+inline utils::Dim GenericPipe<FB>::getAspectRatio(
    const utils::Dim& dim) const
 {
    return mCtrlData.ctrl.getAspectRatio(dim);
 }
 
-template <class CTRL_DATA, int FB>
-inline utils::ScreenInfo GenericPipe<CTRL_DATA, FB>::getScreenInfo() const
+template <int FB>
+inline utils::ScreenInfo GenericPipe<FB>::getScreenInfo() const
 {
    return mCtrlData.ctrl.getScreenInfo();
 }
 
-template <class CTRL_DATA, int FB>
-inline utils::Dim GenericPipe<CTRL_DATA, FB>::getCrop() const
+template <int FB>
+inline utils::Dim GenericPipe<FB>::getCrop() const
 {
    return mCtrlData.ctrl.getCrop();
 }
 
-template <class CTRL_DATA, int FB>
-inline utils::eOverlayPipeType GenericPipe<CTRL_DATA, FB>::getOvPipeType() const {
+template <int FB>
+inline utils::eOverlayPipeType GenericPipe<FB>::getOvPipeType() const {
    return utils::OV_PIPE_TYPE_GENERIC;
 }
 
-template <class CTRL_DATA, int FB>
-void GenericPipe<CTRL_DATA, FB>::dump() const
+template <int FB>
+void GenericPipe<FB>::dump() const
 {
    LOGE("== Dump Generic pipe start ==");
    LOGE("flags=0x%x", mFlags);
@@ -276,18 +276,18 @@ void GenericPipe<CTRL_DATA, FB>::dump() const
    LOGE("== Dump Generic pipe end ==");
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::isClosed() const  {
+template <int FB>
+inline bool GenericPipe<FB>::isClosed() const  {
    return utils::getBit(mFlags, CLOSED);
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::isOpen() const  {
+template <int FB>
+inline bool GenericPipe<FB>::isOpen() const  {
    return !isClosed();
 }
 
-template <class CTRL_DATA, int FB>
-inline bool GenericPipe<CTRL_DATA, FB>::setClosed() {
+template <int FB>
+inline bool GenericPipe<FB>::setClosed() {
    return utils::setBit(mFlags, CLOSED);
 }
 

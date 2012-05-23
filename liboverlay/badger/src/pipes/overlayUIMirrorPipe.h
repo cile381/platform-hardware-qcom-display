@@ -64,9 +64,7 @@ public:
    utils::eOverlayPipeType getOvPipeType() const;
    void dump() const;
 private:
-   typedef ovutils::CtrlData<Ctrl, Data> ctrlData_t;
-   typedef overlay2::GenericPipe<ctrlData_t, ovutils::FB1> uipipe_t;
-   uipipe_t mUI;
+   overlay2::GenericPipe<ovutils::FB1> mUI;
 };
 
 } // overlay2

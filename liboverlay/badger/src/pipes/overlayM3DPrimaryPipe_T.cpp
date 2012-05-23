@@ -30,12 +30,12 @@
 #include "overlayUtils.h"
 
 namespace overlay2 {
-   template <int FB, int CHAN>
-   inline M3DPrimaryPipe<FB, CHAN>::M3DPrimaryPipe() : mM3Dfmt(0) {}
-   template <int FB, int CHAN>
-   inline M3DPrimaryPipe<FB, CHAN>::~M3DPrimaryPipe() { close(); }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::open(RotatorBase* rot) {
+   template <int CHAN>
+   inline M3DPrimaryPipe<CHAN>::M3DPrimaryPipe() : mM3Dfmt(0) {}
+   template <int CHAN>
+   inline M3DPrimaryPipe<CHAN>::~M3DPrimaryPipe() { close(); }
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::open(RotatorBase* rot) {
       LOGE_IF(DEBUG_OVERLAY, "M3DPrimaryPipe open");
       if(!mM3d.open(rot)) {
          LOGE("3Dpipe failed to open");
@@ -43,27 +43,27 @@ namespace overlay2 {
       }
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::close() {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::close() {
       return mM3d.close();
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::commit() { return mM3d.commit(); }
-   template <int FB, int CHAN>
-   inline void M3DPrimaryPipe<FB, CHAN>::setId(int id) { mM3d.setId(id); }
-   template <int FB, int CHAN>
-   inline void M3DPrimaryPipe<FB, CHAN>::setMemoryId(int id) { mM3d.setMemoryId(id); }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::queueBuffer(uint32_t offset) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::commit() { return mM3d.commit(); }
+   template <int CHAN>
+   inline void M3DPrimaryPipe<CHAN>::setId(int id) { mM3d.setId(id); }
+   template <int CHAN>
+   inline void M3DPrimaryPipe<CHAN>::setMemoryId(int id) { mM3d.setMemoryId(id); }
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::queueBuffer(uint32_t offset) {
       return mM3d.queueBuffer(offset); }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::dequeueBuffer(void*& buf) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::dequeueBuffer(void*& buf) {
       return mM3d.dequeueBuffer(buf); }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::waitForVsync() {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::waitForVsync() {
       return mM3d.waitForVsync(); }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::setCrop(const utils::Dim& d) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::setCrop(const utils::Dim& d) {
       utils::Dim _dim;
       if(!utils::getCropS3D<CHAN>(d, _dim, mM3Dfmt)){
          LOGE("M3DPrimaryPipe setCrop failed to getCropS3D");
@@ -71,24 +71,24 @@ namespace overlay2 {
       }
       return mM3d.setCrop(_dim);
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::start(const utils::PipeArgs& args) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::start(const utils::PipeArgs& args) {
       if(!mM3d.start(args)) {
          LOGE("M3DPrimaryPipe start failed");
          return false;
       }
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::setPosition(const utils::Dim& d) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d) {
       return mM3d.setPosition(d);
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::setParameter(const utils::Params& param) {
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::setParameter(const utils::Params& param) {
       return mM3d.setParameter(param);
    }
-   template <int FB, int CHAN>
-   inline bool M3DPrimaryPipe<FB, CHAN>::setSource(const utils::PipeArgs& args)
+   template <int CHAN>
+   inline bool M3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)
    {
       // extract 3D fmt
       mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format)) |
@@ -101,16 +101,16 @@ namespace overlay2 {
       }
       return mM3d.setSource(args);
    }
-   template <int FB, int CHAN>
-   inline const utils::PipeArgs& M3DPrimaryPipe<FB, CHAN>::getArgs() const {
+   template <int CHAN>
+   inline const utils::PipeArgs& M3DPrimaryPipe<CHAN>::getArgs() const {
       return mM3d.getArgs();
    }
-   template <int FB, int CHAN>
-   inline utils::eOverlayPipeType M3DPrimaryPipe<FB, CHAN>::getOvPipeType() const {
+   template <int CHAN>
+   inline utils::eOverlayPipeType M3DPrimaryPipe<CHAN>::getOvPipeType() const {
       return utils::OV_PIPE_TYPE_M3D_PRIMARY;
    }
-   template <int FB, int CHAN>
-   inline void M3DPrimaryPipe<FB, CHAN>::dump() const {
+   template <int CHAN>
+   inline void M3DPrimaryPipe<CHAN>::dump() const {
       LOGE("M3DPrimaryPipe Pipe fmt=%d", mM3Dfmt);
       mM3d.dump();
    }

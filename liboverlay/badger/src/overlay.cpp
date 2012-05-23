@@ -32,7 +32,6 @@
 #include "overlay.h"
 
 // MDP related FIXME move to state
-#include "overlayGenPipe.h"
 #include "overlayMdp.h"
 #include "overlayCtrl.h"
 #include "overlayData.h"

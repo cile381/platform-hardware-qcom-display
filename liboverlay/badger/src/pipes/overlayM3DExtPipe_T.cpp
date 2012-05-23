@@ -30,12 +30,12 @@
 #include "overlayUtils.h"
 
 namespace overlay2 {
-   template <int FB, int CHAN>
-   inline M3DExtPipe<FB, CHAN>::M3DExtPipe() : mM3Dfmt(0) {}
-   template <int FB, int CHAN>
-   inline M3DExtPipe<FB, CHAN>::~M3DExtPipe() { close(); }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::open(RotatorBase* rot) {
+   template <int CHAN>
+   inline M3DExtPipe<CHAN>::M3DExtPipe() : mM3Dfmt(0) {}
+   template <int CHAN>
+   inline M3DExtPipe<CHAN>::~M3DExtPipe() { close(); }
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::open(RotatorBase* rot) {
       LOGE_IF(DEBUG_OVERLAY, "M3DExtPipe open");
       if(!mM3d.open(rot)) {
          LOGE("3Dpipe failed to open");
@@ -43,27 +43,27 @@ namespace overlay2 {
       }
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::close() {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::close() {
       return mM3d.close();
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::commit() { return mM3d.commit(); }
-   template <int FB, int CHAN>
-   inline void M3DExtPipe<FB, CHAN>::setId(int id) { mM3d.setId(id); }
-   template <int FB, int CHAN>
-   inline void M3DExtPipe<FB, CHAN>::setMemoryId(int id) { mM3d.setMemoryId(id); }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::queueBuffer(uint32_t offset) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::commit() { return mM3d.commit(); }
+   template <int CHAN>
+   inline void M3DExtPipe<CHAN>::setId(int id) { mM3d.setId(id); }
+   template <int CHAN>
+   inline void M3DExtPipe<CHAN>::setMemoryId(int id) { mM3d.setMemoryId(id); }
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::queueBuffer(uint32_t offset) {
       return mM3d.queueBuffer(offset); }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::dequeueBuffer(void*& buf) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::dequeueBuffer(void*& buf) {
       return mM3d.dequeueBuffer(buf); }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::waitForVsync() {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::waitForVsync() {
       return mM3d.waitForVsync(); }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::setCrop(const utils::Dim& d) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::setCrop(const utils::Dim& d) {
       utils::Dim _dim;
       if(!utils::getCropS3D<CHAN>(d, _dim, mM3Dfmt)){
          LOGE("M3DExtPipe setCrop failed to getCropS3D");
@@ -71,16 +71,16 @@ namespace overlay2 {
       }
       return mM3d.setCrop(_dim);
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::start(const utils::PipeArgs& args) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::start(const utils::PipeArgs& args) {
       if(!mM3d.start(args)) {
          LOGE("M3DExtPipe start failed");
          return false;
       }
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::setPosition(const utils::Dim& d) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::setPosition(const utils::Dim& d) {
       utils::Dim _dim;
       // original setPositionHandleState has getPosisitonS3D(...,true)
       // which means format is HAL_3D_OUT_SBS_MASK
@@ -95,12 +95,12 @@ namespace overlay2 {
       }
       return mM3d.setPosition(_dim);
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::setParameter(const utils::Params& param) {
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::setParameter(const utils::Params& param) {
       return mM3d.setParameter(param);
    }
-   template <int FB, int CHAN>
-   inline bool M3DExtPipe<FB, CHAN>::setSource(const utils::PipeArgs& args)
+   template <int CHAN>
+   inline bool M3DExtPipe<CHAN>::setSource(const utils::PipeArgs& args)
    {
       // extract 3D fmt
       mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format)) |
@@ -113,16 +113,16 @@ namespace overlay2 {
       }
       return mM3d.setSource(args);
    }
-   template <int FB, int CHAN>
-   inline const utils::PipeArgs& M3DExtPipe<FB, CHAN>::getArgs() const {
+   template <int CHAN>
+   inline const utils::PipeArgs& M3DExtPipe<CHAN>::getArgs() const {
       return mM3d.getArgs();
    }
-   template <int FB, int CHAN>
-   inline utils::eOverlayPipeType M3DExtPipe<FB, CHAN>::getOvPipeType() const {
+   template <int CHAN>
+   inline utils::eOverlayPipeType M3DExtPipe<CHAN>::getOvPipeType() const {
       return utils::OV_PIPE_TYPE_M3D_EXTERNAL;
    }
-   template <int FB, int CHAN>
-   inline void M3DExtPipe<FB, CHAN>::dump() const {
+   template <int CHAN>
+   inline void M3DExtPipe<CHAN>::dump() const {
       LOGE("M3DExtPipe Pipe fmt=%d", mM3Dfmt);
       mM3d.dump();
    }

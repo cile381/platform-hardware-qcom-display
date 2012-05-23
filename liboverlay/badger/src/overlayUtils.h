@@ -326,13 +326,6 @@ namespace utils {
       OV_MDP_SECURE_OVERLAY_SESSION = MDP_SECURE_OVERLAY_SESSION
    };
 
-   /* simple tuple to hold both ctrl/data */
-   template <class CTRL, class DATA>
-   struct CtrlData {
-      CTRL ctrl;
-      DATA data;
-   };
-
    enum eOverlayPipeType {
       OV_PIPE_TYPE_NULL,
       OV_PIPE_TYPE_BYPASS,
