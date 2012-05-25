@@ -30,6 +30,7 @@
 #include <cutils/log.h>
 #include <cutils/memory.h>
 #include <qcom_ui.h>
+#include <utils/comptype.h>
 #include <gralloc_priv.h>
 #include <alloc_controller.h>
 #include <memalloc.h>
@@ -44,9 +45,6 @@ using gralloc::IMemAlloc;
 using gralloc::IonController;
 using gralloc::alloc_data;
 using android::sp;
-
-static int sCompositionType = -1;
-
 namespace {
 
     static android::sp<gralloc::IAllocController> sAlloc = 0;
@@ -355,37 +353,6 @@ bool isUpdatingFB(HWCCompositionType compositionType)
 }
 
 /*
- * Get the current composition Type
- *
- * @return the compositon Type
- */
-int getCompositionType() {
-    char property[PROPERTY_VALUE_MAX];
-    int compositionType = 0;
-    if (property_get("debug.sf.hw", property, NULL) > 0) {
-        if(atoi(property) == 0) {
-            compositionType = COMPOSITION_TYPE_CPU;
-        } else { //debug.sf.hw = 1
-            property_get("debug.composition.type", property, NULL);
-            if (property == NULL) {
-                compositionType = COMPOSITION_TYPE_GPU;
-            } else if ((strncmp(property, "mdp", 3)) == 0) {
-                compositionType = COMPOSITION_TYPE_MDP;
-            } else if ((strncmp(property, "c2d", 3)) == 0) {
-                compositionType = COMPOSITION_TYPE_C2D;
-            } else if ((strncmp(property, "dyn", 3)) == 0) {
-                compositionType = COMPOSITION_TYPE_DYN;
-            } else {
-                compositionType = COMPOSITION_TYPE_GPU;
-            }
-        }
-    } else { //debug.sf.hw is not set. Use cpu composition
-        compositionType = COMPOSITION_TYPE_CPU;
-    }
-    return compositionType;
-}
-
-/*
  * Clear Region implementation for C2D/MDP versions.
  *
  * @param: region to be cleared
@@ -397,18 +364,12 @@ int getCompositionType() {
 int qcomuiClearRegion(Region region, EGLDisplay dpy, EGLSurface sur)
 {
     int ret = 0;
+    int compositionType = QCCompositionType::getInstance().getCompositionType();
 
-    if (-1 == sCompositionType) {
-        sCompositionType = getCompositionType();
-    }
-
-    if ((COMPOSITION_TYPE_MDP != sCompositionType) &&
-        (COMPOSITION_TYPE_C2D != sCompositionType) &&
-#ifdef USE_MDP3
-        (COMPOSITION_TYPE_DYN != sCompositionType) &&
-#endif
-        (COMPOSITION_TYPE_CPU != sCompositionType)) {
-        // For non CPU/C2D/MDP composition, return an error, so that SF can use
+    if (compositionType & COMPOSITION_TYPE_GPU ||
+       (compositionType == COMPOSITION_TYPE_DYN|COMPOSITION_TYPE_C2D))
+    {
+        // For GPU or DYN comp. with C2D, return an error, so that SF can use
         // the GPU to draw the wormhole.
         return -1;
     }
@@ -900,3 +861,5 @@ void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int maxWidt
 
     }
 }
+
+

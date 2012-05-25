@@ -97,13 +97,6 @@ enum {
 };
 
 
-enum {
-    GPU_COMPOSITION,
-    C2D_COMPOSITION,
-    MDP_COMPOSITION,
-    CPU_COMPOSITION,
-};
-
 #define INTERLACE_MASK 0x80
 #define S3D_FORMAT_MASK 0xFF000
 #define DEVICE_PMEM "/dev/pmem"

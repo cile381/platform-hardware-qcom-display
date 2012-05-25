@@ -282,13 +282,6 @@ int getPerFrameFlags(int hwclFlags, int layerFlags);
 bool isUpdatingFB(HWCCompositionType compositionType);
 
 /*
- * Get the current composition Type
- *
- * @return the compositon Type
- */
-int getCompositionType();
-
-/*
  * Clear region implementation for C2D/MDP versions.
  *
  * @param: region to be cleared

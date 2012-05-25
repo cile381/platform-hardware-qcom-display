@@ -38,28 +38,6 @@ gpu_context_t::gpu_context_t(const private_module_t* module,
     // Zero out the alloc_device_t
     memset(static_cast<alloc_device_t*>(this), 0, sizeof(alloc_device_t));
 
-    char property[PROPERTY_VALUE_MAX];
-    if (property_get("debug.sf.hw", property, NULL) > 0) {
-        if(atoi(property) == 0) {
-            //debug.sf.hw = 0
-            compositionType = CPU_COMPOSITION;
-        } else { //debug.sf.hw = 1
-            // Get the composition type
-            property_get("debug.composition.type", property, NULL);
-            if (property == NULL) {
-                compositionType = GPU_COMPOSITION;
-            } else if ((strncmp(property, "mdp", 3)) == 0) {
-                compositionType = MDP_COMPOSITION;
-            } else if ((strncmp(property, "c2d", 3)) == 0) {
-                compositionType = C2D_COMPOSITION;
-            } else {
-                compositionType = GPU_COMPOSITION;
-            }
-        }
-    } else { //debug.sf.hw is not set. Use cpu composition
-        compositionType = CPU_COMPOSITION;
-    }
-
     // Initialize the procs
     common.tag     = HARDWARE_DEVICE_TAG;
     common.version = 0;
@@ -162,7 +140,7 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
     else
         data.align = getpagesize();
     data.pHandle = (unsigned int) pHandle;
-    err = mAllocCtrl->allocate(data, usage, compositionType);
+    err = mAllocCtrl->allocate(data, usage, 0);
 
     if (usage & GRALLOC_USAGE_PRIVATE_UNSYNCHRONIZED) {
         flags |= private_handle_t::PRIV_FLAGS_UNSYNCHRONIZED;
