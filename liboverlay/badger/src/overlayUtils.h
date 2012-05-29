@@ -595,8 +595,8 @@ namespace utils {
 
    // Cannot use HW_OVERLAY_MAGNIFICATION_LIMIT, since at the time
    // of integration, HW_OVERLAY_MAGNIFICATION_LIMIT was a define
-   enum { HW_OV_MAGNIFICATION_LIMIT = 8,
-          HW_OV_MINIFICATION_LIMIT = HW_OV_MAGNIFICATION_LIMIT
+   enum { HW_OV_MAGNIFICATION_LIMIT = 20,
+          HW_OV_MINIFICATION_LIMIT  = 8
    };
 
    inline bool rotated(int orie) {

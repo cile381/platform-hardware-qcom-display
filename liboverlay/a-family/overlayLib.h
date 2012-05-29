@@ -49,8 +49,14 @@
 #include "lib-postproc.h"
 #endif
 
+
+/* Overlay MDP4.1 and above has up-scaling support up to 20x times. */
+#ifdef DISPLAY_MDP_REV_4_OR_LESS
 #define HW_OVERLAY_MAGNIFICATION_LIMIT 8
-#define HW_OVERLAY_MINIFICATION_LIMIT HW_OVERLAY_MAGNIFICATION_LIMIT
+#else
+#define HW_OVERLAY_MAGNIFICATION_LIMIT 20
+#endif
+#define HW_OVERLAY_MINIFICATION_LIMIT 8
 
 #define EVEN_OUT(x) if (x & 0x0001) {x--;}
 #define NO_PIPE -1
