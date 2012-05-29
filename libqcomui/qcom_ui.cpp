@@ -122,6 +122,9 @@ int getNumberOfArgsForOperation(int operation) {
         case  NATIVE_WINDOW_UPDATE_BUFFERS_GEOMETRY:
             num_args = 3;
             break;
+        case NATIVE_WINDOW_SET_S3D_FORMAT:
+            num_args = 1;
+            break;
         default: LOGE("%s: invalid operation(0x%x)", __FUNCTION__, operation);
             break;
     };
@@ -271,7 +274,12 @@ int updateBufferS3DFormat(sp<GraphicBuffer> buffer, const int s3dFormat)
         return -EINVAL;
     }
 
+    private_handle_t *hnd = (private_handle_t*)(buffer->handle);
     buffer->format |= s3dFormat;
+    if (hnd) {
+        hnd->format  |= s3dFormat;
+    }
+
     return 0;
 }
 /*
