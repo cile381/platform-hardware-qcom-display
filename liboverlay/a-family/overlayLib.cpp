@@ -863,6 +863,7 @@ bool Overlay::setTransform(int value) {
             return objOvCtrlChannel[VG0_PIPE].setTransform(transform);
             break;
         case OV_2D_VIDEO_ON_TV:
+        case OV_3D_VIDEO_2D_TV:
             for (int i=0; i<NUM_CHANNELS; i++) {
                 //if its the secondary channel set orientation to be srcOrientation
                 if(i) // i - external display channel
@@ -873,7 +874,6 @@ bool Overlay::setTransform(int value) {
                 }
             }
             break;
-        case OV_3D_VIDEO_2D_TV:
         case OV_3D_VIDEO_3D_TV:
             for (int i=0; i<NUM_CHANNELS; i++) {
                 if(!objOvCtrlChannel[i].setTransform(value)) {
