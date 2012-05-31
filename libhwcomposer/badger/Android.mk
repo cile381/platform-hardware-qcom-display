@@ -14,9 +14,6 @@ LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/qcom/display
 LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/badger/src
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 
-#XXX Temporary include for compiling
-LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/a-family
-
 LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_SHARED_LIBRARY)

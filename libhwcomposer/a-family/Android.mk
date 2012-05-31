@@ -2,7 +2,6 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_COPY_HEADERS_TO := qcom/display
-LOCAL_COPY_HEADERS := external_display_only.h
 include $(BUILD_COPY_HEADERS)
 # HAL module implemenation, not prelinked and stored in
 # hw/<OVERLAY_HARDWARE_MODULE_ID>.<ro.product.board>.so
