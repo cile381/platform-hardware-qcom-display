@@ -52,6 +52,10 @@
 
 #define DEBUG_HWC 0
 
+#define MAX_FRAME_BUFFER_NAME_SIZE 80
+#define MAX_DISPLAY_DEVICES 3
+#define MAX_DISPLAY_EXTERNAL_DEVICES (MAX_DISPLAY_DEVICES - 1)
+
 #ifdef COMPOSITION_BYPASS
 #define MAX_BYPASS_LAYERS 3
 #define BYPASS_DEBUG 0
@@ -110,6 +114,15 @@ struct hwc_context_t {
     int previousLayerCount;
     eHWCOverlayStatus hwcOverlayStatus;
     int swapInterval;
+};
+
+
+static int extDeviceFbIndex[MAX_DISPLAY_EXTERNAL_DEVICES];
+
+static const char *extFrameBufferName[MAX_DISPLAY_EXTERNAL_DEVICES] =
+{
+    "dtv panel",
+    "writeback panel"
 };
 
 static int hwc_device_open(const struct hw_module_t* module,
@@ -908,6 +921,43 @@ static void hwc_registerProcs(struct hwc_composer_device* dev, hwc_procs_t const
     ctx->device.reserved_proc[0] = (void*)procs;
 }
 
+
+/*
+ * Returns the framebuffer index associated with the external display device
+ *
+ */
+static inline int getExtDeviceFBIndex(int index)
+{
+   return extDeviceFbIndex[index];
+}
+
+/*
+ * Updates extDeviceFbIndex Array with the correct frame buffer indices
+ * of avaiable external devices
+ *
+ */
+static void updateExtDispDevFbIndex()
+{
+    FILE *displayDeviceFP = NULL;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
+    for(int i = 0, j = 1; j < MAX_DISPLAY_DEVICES; j++) {
+        sprintf (msmFbTypePath, "/sys/class/graphics/fb%d/msm_fb_type", j);
+        displayDeviceFP = fopen(msmFbTypePath, "r");
+        if(displayDeviceFP){
+            fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                  displayDeviceFP);
+            if(strncmp(fbType, extFrameBufferName[i],
+                       strlen(extFrameBufferName[i])) == 0){
+                // this is the framebuffer index that we want to send it further
+                extDeviceFbIndex[i++] = j;
+            }
+            fclose(displayDeviceFP);
+        }
+    }
+}
+
+
 /*
  * function to set the status of external display in hwc
  * Just mark flags and do stuff after eglSwapBuffers
@@ -917,6 +967,10 @@ static void hwc_enableHDMIOutput(hwc_composer_device_t *dev, int externaltype) {
 #if defined HDMI_DUAL_DISPLAY
     LOGE_IF(DEBUG_HWC, "%s: externaltype=%d", __FUNCTION__, externaltype);
     hwc_context_t* ctx = (hwc_context_t*)(dev);
+
+    if(externaltype)
+        externaltype = getExtDeviceFBIndex(externaltype-1);
+
     if(externaltype && ctx->mHDMIEnabled &&
             (externaltype != ctx->mHDMIEnabled)) {
         // Close the current external display - as the SF will
@@ -1866,6 +1920,8 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
         *device = &dev->device.common;
 
         status = 0;
+        /* Store framebuffer indices of avaiable external devices*/
+        updateExtDispDevFbIndex();
     }
     return status;
 }
