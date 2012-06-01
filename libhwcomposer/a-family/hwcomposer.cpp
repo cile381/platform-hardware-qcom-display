@@ -1253,9 +1253,9 @@ static int hwc_set(hwc_composer_device_t *dev,
 
             if(Bypass::get_state() == Bypass::BYPASS_OFF_PENDING)
                 Bypass::set_state(Bypass::BYPASS_OFF);
-
-            CALC_FPS();
         }
+    } else {
+        CALC_FPS();
     }
 
     Bypass::unlock_prev_frame_buffers();
