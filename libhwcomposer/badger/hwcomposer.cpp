@@ -38,6 +38,7 @@
 #include <ui/android_native_buffer.h>
 #include <genlock.h>
 #include <qcom_ui.h>
+#include <utils/comptype.h>
 #include <gr.h>
 #include <utils/profiler.h>
 #include <utils/IdleTimer.h>
@@ -1412,7 +1413,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
             } else if (hnd && (hwcModule->compositionType &
                     (COMPOSITION_TYPE_C2D|COMPOSITION_TYPE_MDP))) {
                 list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
-            } else if ((hwcModule->compositionType == COMPOSITION_TYPE_DYN)
+            } else if ((hwcModule->compositionType & COMPOSITION_TYPE_DYN)
                     && useCopybit) {
                 list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
             }
@@ -2038,34 +2039,10 @@ static int hwc_module_initialize(struct private_hwc_module_t* hwcModule)
     }
 
     // get the current composition type
-    char property[PROPERTY_VALUE_MAX];
-    if (property_get("debug.sf.hw", property, NULL) > 0) {
-        if(atoi(property) == 0) {
-            //debug.sf.hw = 0
-            hwcModule->compositionType = COMPOSITION_TYPE_CPU;
-        } else { //debug.sf.hw = 1
-            // Get the composition type
-            property_get("debug.composition.type", property, NULL);
-            if (property == NULL) {
-                hwcModule->compositionType = COMPOSITION_TYPE_GPU;
-            } else if ((strncmp(property, "mdp", 3)) == 0) {
-                hwcModule->compositionType = COMPOSITION_TYPE_MDP;
-            } else if ((strncmp(property, "c2d", 3)) == 0) {
-                hwcModule->compositionType = COMPOSITION_TYPE_C2D;
-            } else if ((strncmp(property, "dyn", 3)) == 0) {
-                hwcModule->compositionType = COMPOSITION_TYPE_DYN;
-            } else {
-                hwcModule->compositionType = COMPOSITION_TYPE_GPU;
-            }
-
-            if(!hwcModule->copybitEngine)
-                hwcModule->compositionType = COMPOSITION_TYPE_GPU;
-        }
-    } else { //debug.sf.hw is not set. Use cpu composition
-        hwcModule->compositionType = COMPOSITION_TYPE_CPU;
-    }
+    hwcModule->compositionType = QCCompositionType::getInstance().getCompositionType();
 
     //Check if composition bypass is enabled
+    char property[PROPERTY_VALUE_MAX];
     if(property_get("debug.compbypass.enable", property, NULL) > 0) {
         if(atoi(property) == 1) {
             hwcModule->isBypassEnabled = true;

@@ -68,12 +68,8 @@ namespace gralloc {
 
             static int gralloc_close(struct hw_device_t *dev);
 
-            int get_composition_type() const { return compositionType; }
-
-
         private:
             android::sp<IAllocController> mAllocCtrl;
-            int compositionType;
             void getGrallocInformationFromFormat(int inputFormat,
                                                  int *colorFormat,
                                                  int *bufferType);

@@ -37,6 +37,8 @@
 #include "pmemalloc.h"
 #include "ashmemalloc.h"
 #include "gr.h"
+#include "qcom_ui.h"
+#include "utils/comptype.h"
 
 using namespace gralloc;
 using android::sp;
@@ -52,7 +54,7 @@ const int GRALLOC_HEAP_MASK = GRALLOC_USAGE_PRIVATE_ADSP_HEAP      |
 
 
 //Common functions
-static bool canFallback(int compositionType, int usage, bool triedSystem)
+static bool canFallback(int usage, bool triedSystem)
 {
     // Fallback to system heap when alloc fails unless
     // 1. Composition type is MDP
@@ -61,7 +63,7 @@ static bool canFallback(int compositionType, int usage, bool triedSystem)
     // 4. The heap type is protected
     // 5. The buffer is meant for external display only
 
-    if(compositionType == MDP_COMPOSITION)
+    if(QCCompositionType::getInstance().getCompositionType() & COMPOSITION_TYPE_MDP)
         return false;
     if(triedSystem)
         return false;
@@ -157,8 +159,7 @@ int IonController::allocate(alloc_data& data, int usage,
     ret = mIonAlloc->alloc_buffer(data);
 
     // Fallback
-    if(ret < 0 && canFallback(compositionType,
-                              usage,
+    if(ret < 0 && canFallback(usage,
                               (ionFlags & ION_SYSTEM_HEAP_ID)))
     {
         LOGW("Falling back to system heap");
@@ -305,7 +306,7 @@ int PmemAshmemController::allocate(alloc_data& data, int usage,
     // Fallback
     if(ret >= 0 ) {
         data.allocType = private_handle_t::PRIV_FLAGS_USES_PMEM;
-    } else if(ret < 0 && canFallback(compositionType, usage, false)) {
+    } else if(ret < 0 && canFallback(usage, false)) {
         LOGW("Falling back to ashmem");
         ret = mAshmemAlloc->alloc_buffer(data);
         if(ret >= 0) {
