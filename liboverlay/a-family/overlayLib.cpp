@@ -1377,6 +1377,11 @@ bool OverlayControlChannel::startOVRotatorSessions(
         } else
             mRotInfo.enable = 1;
 
+        if (mOVInfo.flags & MDP_SECURE_OVERLAY_SESSION)
+	    mRotInfo.secure = 1;
+        else
+            mRotInfo.secure = 0;
+
         int result = ioctl(mRotFD, MSM_ROTATOR_IOCTL_START, &mRotInfo);
         if (result) {
             reportError("Rotator session failed");
