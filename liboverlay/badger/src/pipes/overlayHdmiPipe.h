@@ -64,9 +64,7 @@ public:
    utils::eOverlayPipeType getOvPipeType() const;
    void dump() const;
 private:
-   typedef ovutils::CtrlData<Ctrl, Data> ctrlData_t;
-   typedef overlay2::GenericPipe<ctrlData_t, ovutils::FB1> hdmipipe_t;
-   hdmipipe_t mHdmi;
+   overlay2::GenericPipe<ovutils::FB1> mHdmi;
 };
 
 } // overlay2

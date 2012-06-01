@@ -27,50 +27,22 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef OVERLAY_BYPASS_PIPE_H
-#define OVERLAY_BYPASS_PIPE_H
-
-#include "overlayGenPipe.h"
-#include "overlayUtils.h"
 #include "overlayCtrl.h"
 #include "overlayData.h"
-#include "overlayMdp.h"
-#include "overlayRotator.h"
+
+#ifndef OVERLAY_CTRLDATA_H
+#define OVERLAY_CTRLDATA_H
 
 namespace overlay2 {
 
-/* A specific impl of GenericPipe
- * Whenever needed to have a pass through - we do it.
- * If there is a special need for a different behavior - do it here
- * PipeType = 0 (RGB), 1 (VG) */
-template <utils::eMdpPipeType PipeType, utils::eIsFg IsFg, utils::eWait Wait, utils::eZorder Zorder>
-class BypassPipe : utils::NoCopy {
-public:
-   /* Please look at overlayGenPipe.h for info */
-   explicit BypassPipe();
-   ~BypassPipe();
-   bool open(RotatorBase* rot);
-   bool close();
-   bool commit();
-   void setId(int id);
-   void setMemoryId(int id);
-   bool queueBuffer(uint32_t offset);
-   bool dequeueBuffer(void*& buf);
-   bool waitForVsync();
-   bool setCrop(const utils::Dim& dim);
-   bool start(const utils::PipeArgs& args);
-   bool setPosition(const utils::Dim& dim);
-   bool setParameter(const utils::Params& param);
-   bool setSource(const utils::PipeArgs& args);
-   const utils::PipeArgs& getArgs() const;
-   utils::eOverlayPipeType getOvPipeType() const;
-   void dump() const;
-private:
-   overlay2::GenericPipe<ovutils::FB0> mBypass;
+/* This class just creates a Ctrl Data pair to be used by a pipe.
+ * Although this was legacy design, this separation still makes sense, since we
+ * need to use the Ctrl channel in hwc_prepare (i.e config stage) and Data
+ * channel in hwc_set (i.e draw stage)
+ */
+struct CtrlData {
+    Ctrl ctrl;
+    Data data;
 };
-
-} // overlay2
-
-#include "overlayBypassPipe_T.cpp"
-
-#endif // OVERLAY_BYPASS_PIPE_H
+}
+#endif

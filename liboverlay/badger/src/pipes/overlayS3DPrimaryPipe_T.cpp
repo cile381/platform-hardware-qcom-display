@@ -30,12 +30,12 @@
 #include "overlayUtils.h"
 
 namespace overlay2 {
-   template <int FB, int CHAN>
-   inline S3DPrimaryPipe<FB, CHAN>::S3DPrimaryPipe() : mS3Dfmt(0) {}
-   template <int FB, int CHAN>
-   inline S3DPrimaryPipe<FB, CHAN>::~S3DPrimaryPipe() { close(); }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::open(RotatorBase* rot) {
+   template <int CHAN>
+   inline S3DPrimaryPipe<CHAN>::S3DPrimaryPipe() : mS3Dfmt(0) {}
+   template <int CHAN>
+   inline S3DPrimaryPipe<CHAN>::~S3DPrimaryPipe() { close(); }
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::open(RotatorBase* rot) {
       LOGE_IF(DEBUG_OVERLAY, "S3DPrimaryPipe open");
       if(!mS3d.open(rot)) {
          LOGE("3Dpipe failed to open");
@@ -45,31 +45,31 @@ namespace overlay2 {
       mCtrl3D.setFd(mS3d.getCtrlFd());
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::close() {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::close() {
       if(!utils::enableBarrier(0)) {
          LOGE("S3DExtPipe close failed enable barrier");
       }
       mCtrl3D.close();
       return mS3d.close();
    }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::commit() { return mS3d.commit(); }
-   template <int FB, int CHAN>
-   inline void S3DPrimaryPipe<FB, CHAN>::setId(int id) { mS3d.setId(id); }
-   template <int FB, int CHAN>
-   inline void S3DPrimaryPipe<FB, CHAN>::setMemoryId(int id) { mS3d.setMemoryId(id); }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::queueBuffer(uint32_t offset) {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::commit() { return mS3d.commit(); }
+   template <int CHAN>
+   inline void S3DPrimaryPipe<CHAN>::setId(int id) { mS3d.setId(id); }
+   template <int CHAN>
+   inline void S3DPrimaryPipe<CHAN>::setMemoryId(int id) { mS3d.setMemoryId(id); }
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::queueBuffer(uint32_t offset) {
       return mS3d.queueBuffer(offset); }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::dequeueBuffer(void*& buf) {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::dequeueBuffer(void*& buf) {
       return mS3d.dequeueBuffer(buf); }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::waitForVsync() {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::waitForVsync() {
       return mS3d.waitForVsync(); }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::setCrop(const utils::Dim& d) {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::setCrop(const utils::Dim& d) {
       utils::Dim _dim;
       if(!utils::getCropS3D<CHAN>(d, _dim, mS3Dfmt)){
          LOGE("S3DPrimaryPipe setCrop failed to getCropS3D");
@@ -77,23 +77,23 @@ namespace overlay2 {
       }
       return mS3d.setCrop(_dim);
    }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::start(const utils::PipeArgs& args) {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::start(const utils::PipeArgs& args) {
       if(!mS3d.start(args)) {
          LOGE("S3DPrimaryPipe start failed");
          return false;
       }
       return true;
    }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::setPosition(const utils::Dim& d)
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d)
    {
       utils::Whf fbwhf(mS3d.getScreenInfo().mFBWidth,
                        mS3d.getScreenInfo().mFBHeight,
                        0 /* fmt dont care*/);
       mCtrl3D.setWh(fbwhf);
       if(!mCtrl3D.useVirtualFB()) {
-         LOGE("Failed to use VFB on %d (non fatal)", FB);
+         LOGE("Failed to use VFB on %d (non fatal)", utils::FB0);
          return false;
       }
       utils::Dim _dim;
@@ -113,7 +113,7 @@ namespace overlay2 {
     * So the easiest way to achieve it, is to make sure FB0 is having it before
     * setParam is running */
    template <>
-   inline bool S3DPrimaryPipe<utils::FB0, utils::OV_PIPE0>::setParameter(
+   inline bool S3DPrimaryPipe<utils::OV_PIPE0>::setParameter(
       const utils::Params& param) {
       if(utils::OVERLAY_TRANSFORM == param.param){
          uint32_t barrier=0;
@@ -133,12 +133,12 @@ namespace overlay2 {
       return mS3d.setParameter(param);
    }
 
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::setParameter(const utils::Params& param) {
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::setParameter(const utils::Params& param) {
       return mS3d.setParameter(param);
    }
-   template <int FB, int CHAN>
-   inline bool S3DPrimaryPipe<FB, CHAN>::setSource(const utils::PipeArgs& args)
+   template <int CHAN>
+   inline bool S3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)
    {
       mS3Dfmt = utils::getS3DFormat(args.whf.format);
       if(mS3d.isClosed()){
@@ -149,16 +149,16 @@ namespace overlay2 {
       }
       return mS3d.setSource(args);
    }
-   template <int FB, int CHAN>
-   inline const utils::PipeArgs& S3DPrimaryPipe<FB, CHAN>::getArgs() const {
+   template <int CHAN>
+   inline const utils::PipeArgs& S3DPrimaryPipe<CHAN>::getArgs() const {
       return mS3d.getArgs();
    }
-   template <int FB, int CHAN>
-   inline utils::eOverlayPipeType S3DPrimaryPipe<FB, CHAN>::getOvPipeType() const {
+   template <int CHAN>
+   inline utils::eOverlayPipeType S3DPrimaryPipe<CHAN>::getOvPipeType() const {
       return utils::OV_PIPE_TYPE_S3D_PRIMARY;
    }
-   template <int FB, int CHAN>
-   inline void S3DPrimaryPipe<FB, CHAN>::dump() const {
+   template <int CHAN>
+   inline void S3DPrimaryPipe<CHAN>::dump() const {
       LOGE("S3DPrimaryPipe Pipe fmt=%d", mS3Dfmt);
       mS3d.dump();
    }

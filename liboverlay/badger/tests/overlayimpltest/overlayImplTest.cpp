@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <utils/Log.h>
 #include <cassert>
-#include "overlayGenPipe.h"
+#include "pipes/overlayGenPipe.h"
 #include "overlayMdp.h"
 #include "overlayCtrl.h"
 #include "overlayData.h"
@@ -50,8 +50,7 @@ int main(int, char**)
 {
    LOGE("%s start", LOG_TAG);
 
-   typedef ovutils::CtrlData<overlay2::Ctrl, overlay2::Data> ctrlData_t;
-   typedef overlay2::GenericPipe<ctrlData_t, ovutils::FB0> genpipe;
+   typedef overlay2::GenericPipe<ovutils::FB0> genpipe;
    overlay2::RotatorBase* r = new overlay2::NullRotator();
    overlay2::OverlayImplBase* ov = new overlay2::OverlayImpl<genpipe>;
    LOGE("Using null rotator");

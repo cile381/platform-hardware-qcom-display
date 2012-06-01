@@ -33,7 +33,7 @@
 #include "overlayUtils.h"
 #include "overlayImpl.h"
 #include "overlayRotator.h"
-#include "overlayGenPipe.h"
+#include "pipes/overlayGenPipe.h"
 #include "pipes/overlayBypassPipe.h"
 #include "pipes/overlayHdmiPipe.h"
 #include "pipes/overlayS3DPrimaryPipe.h"
@@ -55,9 +55,7 @@ template <int STATE> struct StateTraits {};
 
 template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL>
 {
-   typedef utils::CtrlData<Ctrl, Data> ctrlData_t;
-
-   typedef overlay2::GenericPipe<ctrlData_t, utils::FB0> pipe0;
+   typedef overlay2::GenericPipe<utils::FB0> pipe0;
    typedef overlay2::NullPipe pipe1;   // place holder
    typedef overlay2::NullPipe pipe2;   // place holder
 
@@ -70,9 +68,7 @@ template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL>
 
 template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL_TV>
 {
-   typedef utils::CtrlData<Ctrl, Data> ctrlData_t;
-
-   typedef overlay2::GenericPipe<ctrlData_t, utils::FB0> pipe0;
+   typedef overlay2::GenericPipe<utils::FB0> pipe0;
    typedef overlay2::HdmiPipe pipe1;
    typedef overlay2::NullPipe pipe2;   // place holder
 
@@ -85,7 +81,7 @@ template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL_TV>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL>
 {
-   typedef overlay2::M3DPrimaryPipe<utils::FB0, utils::OV_PIPE0> pipe0;
+   typedef overlay2::M3DPrimaryPipe<utils::OV_PIPE0> pipe0;
    typedef overlay2::NullPipe pipe1;   // place holder
    typedef overlay2::NullPipe pipe2;   // place holder
 
@@ -98,8 +94,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_PANEL>
 {
-   typedef overlay2::S3DPrimaryPipe<utils::FB0, utils::OV_PIPE0> pipe0;
-   typedef overlay2::S3DPrimaryPipe<utils::FB0, utils::OV_PIPE1> pipe1;
+   typedef overlay2::S3DPrimaryPipe<utils::OV_PIPE0> pipe0;
+   typedef overlay2::S3DPrimaryPipe<utils::OV_PIPE1> pipe1;
    typedef overlay2::NullPipe pipe2;   // place holder
 
    typedef Rotator rot0;
@@ -111,8 +107,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_PANEL>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_TV>
 {
-   typedef overlay2::S3DExtPipe<utils::FB1, utils::OV_PIPE0> pipe0;
-   typedef overlay2::S3DExtPipe<utils::FB1, utils::OV_PIPE1> pipe1;
+   typedef overlay2::S3DExtPipe<utils::OV_PIPE0> pipe0;
+   typedef overlay2::S3DExtPipe<utils::OV_PIPE1> pipe1;
    typedef overlay2::NullPipe pipe2;   // place holder
 
    typedef NullRotator rot0;
@@ -124,8 +120,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_TV>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV>
 {
-   typedef overlay2::M3DPrimaryPipe<utils::FB0, utils::OV_PIPE0> pipe0;
-   typedef overlay2::M3DExtPipe<utils::FB1, utils::OV_PIPE1> pipe1;
+   typedef overlay2::M3DPrimaryPipe<utils::OV_PIPE0> pipe0;
+   typedef overlay2::M3DExtPipe<utils::OV_PIPE1> pipe1;
    typedef overlay2::NullPipe pipe2;   // place holder
 
    typedef Rotator rot0;
@@ -150,9 +146,7 @@ template <> struct StateTraits<utils::OV_UI_MIRROR>
 
 template <> struct StateTraits<utils::OV_2D_TRUE_UI_MIRROR>
 {
-   typedef utils::CtrlData<Ctrl, Data> ctrlData_t;
-
-   typedef overlay2::GenericPipe<ctrlData_t, utils::FB0> pipe0;
+   typedef overlay2::GenericPipe<utils::FB0> pipe0;
    typedef overlay2::HdmiPipe pipe1;
    typedef overlay2::UIMirrorPipe pipe2;
 
@@ -165,8 +159,6 @@ template <> struct StateTraits<utils::OV_2D_TRUE_UI_MIRROR>
 
 template <> struct StateTraits<utils::OV_BYPASS_1_LAYER>
 {
-   typedef utils::CtrlData<Ctrl, Data> ctrlData_t;
-
    typedef overlay2::BypassPipe<utils::OV_MDP_PIPE_VG, utils::IS_FG_SET, utils::WAIT, utils::ZORDER_0> pipe0;
    typedef overlay2::NullPipe pipe1;   // place holder
    typedef overlay2::NullPipe pipe2;   // place holder
@@ -180,8 +172,6 @@ template <> struct StateTraits<utils::OV_BYPASS_1_LAYER>
 
 template <> struct StateTraits<utils::OV_BYPASS_2_LAYER>
 {
-   typedef utils::CtrlData<Ctrl, Data> ctrlData_t;
-
    typedef overlay2::BypassPipe<utils::OV_MDP_PIPE_VG, utils::IS_FG_SET, utils::NO_WAIT, utils::ZORDER_0> pipe0;
    typedef overlay2::BypassPipe<utils::OV_MDP_PIPE_VG, utils::IS_FG_OFF, utils::WAIT, utils::ZORDER_1> pipe1;
    typedef overlay2::NullPipe pipe2;   // place holder

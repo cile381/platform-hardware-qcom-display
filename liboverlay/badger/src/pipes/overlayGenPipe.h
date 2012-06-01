@@ -32,12 +32,13 @@
 
 #include "overlayUtils.h"
 #include "overlayRotator.h"
+#include "overlayCtrlData.h"
 
 // FIXME make int to be uint32 whenever possible
 
 namespace overlay2 {
 
-template <class CTRL_DATA, int FB>
+template <int FB>
 class GenericPipe : utils::NoCopy {
 public:
    /* ctor init */
@@ -128,7 +129,7 @@ private:
    bool startRotator();
 
    /* Ctrl/Data aggregator */
-   CTRL_DATA mCtrlData;
+   CtrlData mCtrlData;
 
    /* caching startup params. useful when need
     * to have the exact copy of that pipe.
