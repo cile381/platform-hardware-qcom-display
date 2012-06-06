@@ -65,7 +65,7 @@ public:
     utils::eOverlayPipeType getOvPipeType() const;
     void dump() const;
 private:
-    overlay2::GenericPipe<utils::FB1> mS3d;
+    overlay2::GenericPipe<utils::EXTERNAL> mS3d;
     // Cache the 3D format
     uint32_t mS3Dfmt;
 };

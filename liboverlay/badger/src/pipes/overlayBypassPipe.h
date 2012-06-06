@@ -67,7 +67,7 @@ public:
     utils::eOverlayPipeType getOvPipeType() const;
     void dump() const;
 private:
-    overlay2::GenericPipe<ovutils::FB0> mBypass;
+    overlay2::GenericPipe<ovutils::PRIMARY> mBypass;
 };
 
 } // overlay2

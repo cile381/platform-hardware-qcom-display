@@ -55,7 +55,7 @@ template <int STATE> struct StateTraits {};
 
 template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL>
 {
-    typedef overlay2::GenericPipe<utils::FB0> pipe0;
+    typedef overlay2::GenericPipe<utils::PRIMARY> pipe0;
     typedef overlay2::NullPipe pipe1;   // place holder
     typedef overlay2::NullPipe pipe2;   // place holder
 
@@ -68,7 +68,7 @@ template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL>
 
 template <> struct StateTraits<utils::OV_2D_VIDEO_ON_PANEL_TV>
 {
-    typedef overlay2::GenericPipe<utils::FB0> pipe0;
+    typedef overlay2::GenericPipe<utils::PRIMARY> pipe0;
     typedef overlay2::HdmiPipe pipe1;
     typedef overlay2::NullPipe pipe2;   // place holder
 
@@ -146,7 +146,7 @@ template <> struct StateTraits<utils::OV_UI_MIRROR>
 
 template <> struct StateTraits<utils::OV_2D_TRUE_UI_MIRROR>
 {
-    typedef overlay2::GenericPipe<utils::FB0> pipe0;
+    typedef overlay2::GenericPipe<utils::PRIMARY> pipe0;
     typedef overlay2::HdmiPipe pipe1;
     typedef overlay2::UIMirrorPipe pipe2;
 

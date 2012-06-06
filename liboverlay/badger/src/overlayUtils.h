@@ -540,8 +540,55 @@ inline void clearMdpFlags(eMdpFlags& f, eMdpFlags v) {
     f = static_cast<eMdpFlags>(clrBit(f, v));
 }
 
-// fb0/1
-enum { FB0, FB1 };
+// fb 0/1/2
+enum { FB0, FB1, FB2 };
+
+//Panels could be categorized as primary and external
+enum { PRIMARY, EXTERNAL };
+
+//External Panels could use HDMI or WFD
+enum {
+    HDMI = 1,
+    WFD = 2
+};
+
+static int sExtType = HDMI; //HDMI or WFD
+
+//Set by client as HDMI/WFD
+static inline void setExtType(const int& type) {
+    if(type != HDMI || type != WFD) {
+        LOGE("%s: Unrecognized type %d", __func__, type);
+        return;
+    }
+    sExtType = type;
+}
+
+//Return External panel type set by client.
+static inline int getExtType() {
+    return sExtType;
+}
+
+//Gets the FB number for the external type.
+//As of now, HDMI always has fb1, WFD could use fb1 or fb2
+//Assumes Ext type set by setExtType() from client.
+static int getFBForPanel(int panel) { // PRIMARY OR EXTERNAL
+    switch(panel) {
+        case PRIMARY: return FB0;
+            break;
+        case EXTERNAL:
+            switch(getExtType()) {
+                case HDMI: return FB1;
+                    break;
+                case WFD: return FB2;//Hardcoding fb2 for wfd. Will change.
+                    break;
+            }
+            break;
+        default:
+            LOGE("%s: Unrecognized PANEL category %d", __func__, panel);
+            break;
+    }
+    return -1;
+}
 
 // number of rgb pipes bufs (max)
 // 2 for rgb0/1 double bufs

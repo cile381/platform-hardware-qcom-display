@@ -49,7 +49,7 @@ int main(int, char**)
 {
    LOGE("%s start", LOG_TAG);
 
-   overlay2::GenericPipe<ovutils::FB0> pipe;
+   overlay2::GenericPipe<ovutils::PRIMARY> pipe;
    overlay2::RotatorBase* r = new overlay2::NullRotator();
    LOGE("Using null rotator");
    bool ret = pipe.open(r);
