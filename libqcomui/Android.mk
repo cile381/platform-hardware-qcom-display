@@ -30,14 +30,15 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES := $(TOP)/hardware/qcom/display/libgralloc \
                     $(TOP)/frameworks/base/services/surfaceflinger \
                     $(TOP)/external/skia/include/core \
-                    $(TOP)/external/skia/include/images
+                    $(TOP)/external/skia/include/images \
+                    $(TOP)/hardware/qcom/display/libgenlock
 
 LOCAL_CFLAGS := -DLOG_TAG=\"libQcomUI\"
 
 ifneq ($(call is-vendor-board-platform,QCOM),true)
     LOCAL_CFLAGS += -DNON_QCOM_TARGET
 else
-    LOCAL_SHARED_LIBRARIES += libmemalloc
+    LOCAL_SHARED_LIBRARIES += libmemalloc libgenlock
 endif
 
 ifeq ($(TARGET_USES_MDP3), true)

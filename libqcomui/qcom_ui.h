@@ -342,4 +342,6 @@ bool needsAspectRatio (int wRatio, int hRatio);
 void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int fbWidth,
          int fbHeight, Rect& visibleRect, GLfloat vertices[][2], bool wideVideo);
 
+void unlock_lastGpuSupportedBuffer(void *handle);
+
 #endif // INCLUDE_LIBQCOM_UI
