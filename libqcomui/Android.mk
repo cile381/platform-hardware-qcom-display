@@ -8,7 +8,7 @@ include $(BUILD_COPY_HEADERS)
 
 include $(CLEAR_VARS)
 LOCAL_COPY_HEADERS_TO := qcom/display/utils
-LOCAL_COPY_HEADERS := utils/IdleTimer.h
+LOCAL_COPY_HEADERS := utils/IdleInvalidator.h
 LOCAL_COPY_HEADERS += utils/profiler.h
 LOCAL_COPY_HEADERS += utils/comptype.h
 include $(BUILD_COPY_HEADERS)
@@ -18,7 +18,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
         qcom_ui.cpp \
         utils/profiler.cpp \
-        utils/IdleTimer.cpp
+        utils/IdleInvalidator.cpp
 
 LOCAL_SHARED_LIBRARIES := \
         libutils \

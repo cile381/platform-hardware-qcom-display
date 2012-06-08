@@ -41,7 +41,7 @@
 #include <utils/comptype.h>
 #include <gr.h>
 #include <utils/profiler.h>
-#include <utils/IdleTimer.h>
+#include <utils/IdleInvalidator.h>
 
 #include <overlayMgr.h>
 #include <overlayMgrSingleton.h>
@@ -102,11 +102,12 @@ struct hwc_context_t {
     int layerindex[MAX_BYPASS_LAYERS];
     int nPipesUsed;
     BypassState bypassState;
-    IdleTimer idleTimer;
-    bool idleTimeOut;
+    IdleInvalidator *idleInvalidator;
 #endif
     external_display_type mHDMIEnabled; // Type of external display
     bool pendingHDMI;
+
+    bool forceComposition; //Used to force composition.
     int previousLayerCount;
     eHWCOverlayStatus hwcOverlayStatus;
     int swapInterval;
@@ -302,8 +303,8 @@ static void timeout_handler(void *udata) {
         return;
     }
     /* Trigger SF to redraw the current frame */
+    ctx->forceComposition = true;
     proc->invalidate(proc);
-    ctx->idleTimeOut = true;
 }
 
 void setLayerbypassIndex(hwc_layer_t* layer, const int bypass_index)
@@ -593,8 +594,7 @@ inline static bool isBypassDoable(hwc_composer_device_t *dev, const int yuvCount
     }
 #endif
 
-    if(ctx->idleTimeOut) {
-        ctx->idleTimeOut = false;
+    if(ctx->forceComposition) {
         return false;
     }
 
@@ -1006,17 +1006,22 @@ void unlockPreviousOverlayBuffer(hwc_context_t* ctx)
     ctx->currentOverlayHandle = NULL;
 }
 
-bool canSkipComposition(hwc_context_t* ctx, int yuvBufferCount, int currentLayerCount,
-                        int numLayersNotUpdating)
+bool canSkipComposition(hwc_context_t* ctx, int yuvBufferCount,
+        int currentLayerCount, int numLayersNotUpdating)
 {
     if (!ctx) {
         LOGE("%s: invalid context",__FUNCTION__);
         return false;
     }
 
+    if(ctx->forceComposition) {
+        return false;
+    }
+
     hwc_composer_device_t* dev = (hwc_composer_device_t *)(ctx);
     private_hwc_module_t* hwcModule = reinterpret_cast<private_hwc_module_t*>(
-                                                           dev->common.module);
+            dev->common.module);
+
     if (hwcModule->compositionType == COMPOSITION_TYPE_CPU)
         return false;
 
@@ -1466,6 +1471,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
 #endif
         unlockPreviousOverlayBuffer(ctx);
     }
+    ctx->forceComposition = false;
     return 0;
 }
 // ---------------------------------------------------------------------------
@@ -1903,7 +1909,8 @@ static int hwc_set(hwc_composer_device_t *dev,
                 continue;
 #ifdef COMPOSITION_BYPASS
             } else if (list->hwLayers[i].flags & HWC_COMP_BYPASS) {
-                ctx->idleTimer.reset();
+                if(ctx->idleInvalidator)
+                    ctx->idleInvalidator->markForSleep();
                 drawLayerUsingBypass(ctx, &(list->hwLayers[i]), i);
 #endif
             } else if (list->hwLayers[i].compositionType == HWC_USE_OVERLAY) {
@@ -1974,6 +1981,7 @@ static int hwc_set(hwc_composer_device_t *dev,
              * Used when the video is paused and external
              * display is connected
              */
+            ctx->forceComposition = true;
             proc->invalidate(proc);
         }
     }
@@ -2090,9 +2098,14 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
                 idle_timeout = atoi(property);
         }
 
-        dev->idleTimer.create(timeout_handler, dev);
-        dev->idleTimer.setFreq(idle_timeout);
-        dev->idleTimeOut = false;
+        //create Idle Invalidator
+        dev->idleInvalidator = IdleInvalidator::getInstance();
+
+        if(dev->idleInvalidator == NULL) {
+            LOGE("%s: failed to instantiate idleInvalidator object", __FUNCTION__);
+        } else {
+            dev->idleInvalidator->init(timeout_handler, dev, idle_timeout);
+        }
 #endif
 #if defined HDMI_DUAL_DISPLAY
         dev->mHDMIEnabled = EXT_TYPE_NONE;
