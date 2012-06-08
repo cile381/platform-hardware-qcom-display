@@ -27,36 +27,62 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef INCLUDE_IDLETIMER
-#define INCLUDE_IDLETIMER
+#include "IdleInvalidator.h"
+#include <unistd.h>
 
-#include <signal.h>
-#include <time.h>
-#include <cutils/log.h>
+#define II_DEBUG 1
 
-typedef void (*TimerFP)(int, siginfo_t *, void*);
-typedef void (*TimerHandler)(void*);
+static const char *threadName = "Invalidator";
+InvalidatorHandler IdleInvalidator::mHandler = NULL;
+android::sp<IdleInvalidator> IdleInvalidator::sInstance(0);
 
-class IdleTimer
-{
-    struct sigaction mSAction;
-    struct sigevent mSEvent;
-    struct itimerspec mSpec;
-    timer_t mID;
-    static TimerHandler mHandler;
+IdleInvalidator::IdleInvalidator(): Thread(false), mHwcContext(0),
+    mSleepAgain(false), mSleepTime(0) {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
+}
 
-public:
-    IdleTimer();
-    /* create timer obj */
-    int create(TimerHandler reg_handler, void* user_data);
-    /* arm timer with given value */
-    int reset();
-    /* set timeout period */
-    void setFreq(unsigned long freq_msecs);
-    /* internal timeout callback function before
-     * invoking user registered handler */
-    static void timer_cb(int sig, siginfo_t* si, void* uc);
-};
+int IdleInvalidator::init(InvalidatorHandler reg_handler, void* user_data,
+    unsigned int idleSleepTime) {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
 
+    /* store registered handler */
+    mHandler = reg_handler;
+    mHwcContext = user_data;
+    mSleepTime = idleSleepTime; //Time in millis
+    return 0;
+}
 
-#endif // INCLUDE_IDLETIMER
+bool IdleInvalidator::threadLoop() {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    usleep(mSleepTime * 1000);
+    if(mSleepAgain) {
+        //We need to sleep again!
+        mSleepAgain = false;
+        return true;
+    }
+
+    mHandler((void*)mHwcContext);
+    return false;
+}
+
+int IdleInvalidator::readyToRun() {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    return 0; /*NO_ERROR*/
+}
+
+void IdleInvalidator::onFirstRef() {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
+}
+
+void IdleInvalidator::markForSleep() {
+    mSleepAgain = true;
+    //Triggers the threadLoop to run, if not already running.
+    run(threadName, android::PRIORITY_AUDIO);
+}
+
+IdleInvalidator *IdleInvalidator::getInstance() {
+    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    if(sInstance.get() == NULL)
+        sInstance = new IdleInvalidator();
+    return sInstance.get();
+}
