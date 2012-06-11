@@ -685,8 +685,7 @@ bool Overlay::setSource(const overlay_buffer_info& info, int orientation,
     }
 
     if (stateChange) {
-        if (isS3DFormatChange ||
-            (mState == OV_3D_VIDEO_3D_PANEL) ||
+        if ((mState == OV_3D_VIDEO_3D_PANEL) ||
             (mState == OV_3D_VIDEO_3D_TV) ||
             (newState == OV_3D_VIDEO_3D_PANEL) ||
             (newState == OV_3D_VIDEO_3D_TV)) {
@@ -713,8 +712,13 @@ bool Overlay::setSource(const overlay_buffer_info& info, int orientation,
                     closeExternalChannel();
                     break;
                 }
-                return startChannel(info, FRAMEBUFFER_0, noRot, false,
-                        mS3DFormat, VG0_PIPE, flags, num_buffers);
+                if (isS3DFormatChange) {
+                    updateOverlaySource(info, flags);
+                } else {
+                    startChannel(info, FRAMEBUFFER_0, noRot, false,
+                                 mS3DFormat, VG0_PIPE, flags, num_buffers);
+                }
+                break;
             case OV_3D_VIDEO_3D_PANEL:
                 if (sHDMIAsPrimary) {
                     noRot = true;
@@ -754,10 +758,15 @@ bool Overlay::setSource(const overlay_buffer_info& info, int orientation,
                             fbnum = hdmiConnected;
                             flags &= ~WAIT_FOR_VSYNC;
                         }
-                        if(!startChannel(info, fbnum, noRot, false, mS3DFormat,
-                                    i, flags, num_buffers)) {
-                            LOGE("%s:failed to open channel %d", __FUNCTION__, i);
-                            return false;
+
+                        if (isS3DFormatChange && objOvCtrlChannel[i].isChannelUP()) {
+                            updateOverlaySource(info, flags);
+                        } else {
+                            if(!startChannel(info, fbnum, noRot, false, mS3DFormat,
+                                        i, flags, num_buffers)) {
+                                LOGE("%s:failed to open channel %d", __FUNCTION__, i);
+                                return false;
+                            }
                         }
                     }
                 }
