@@ -30,7 +30,7 @@
 #include "IdleInvalidator.h"
 #include <unistd.h>
 
-#define II_DEBUG 1
+#define II_DEBUG 0
 
 static const char *threadName = "Invalidator";
 InvalidatorHandler IdleInvalidator::mHandler = NULL;
@@ -38,12 +38,12 @@ android::sp<IdleInvalidator> IdleInvalidator::sInstance(0);
 
 IdleInvalidator::IdleInvalidator(): Thread(false), mHwcContext(0),
     mSleepAgain(false), mSleepTime(0) {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
 }
 
 int IdleInvalidator::init(InvalidatorHandler reg_handler, void* user_data,
     unsigned int idleSleepTime) {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
 
     /* store registered handler */
     mHandler = reg_handler;
@@ -53,35 +53,41 @@ int IdleInvalidator::init(InvalidatorHandler reg_handler, void* user_data,
 }
 
 bool IdleInvalidator::threadLoop() {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
     usleep(mSleepTime * 1000);
+    //If there are continuous mdp-comp updates, all we need to do is sleep over
+    //and over again.
     if(mSleepAgain) {
         //We need to sleep again!
         mSleepAgain = false;
         return true;
     }
 
+    //The handler is not a part of this class just because hwc_context_t
+    //definition exists in hwc. Else there is no reason for it to be defined
+    //there.
     mHandler((void*)mHwcContext);
     return false;
 }
 
 int IdleInvalidator::readyToRun() {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
     return 0; /*NO_ERROR*/
 }
 
 void IdleInvalidator::onFirstRef() {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
 }
 
 void IdleInvalidator::markForSleep() {
+    //There was an mdp comp update, so keep sleeping.
     mSleepAgain = true;
     //Triggers the threadLoop to run, if not already running.
     run(threadName, android::PRIORITY_AUDIO);
 }
 
 IdleInvalidator *IdleInvalidator::getInstance() {
-    LOGE_IF(II_DEBUG, "shs %s", __func__);
+    LOGE_IF(II_DEBUG, "%s", __func__);
     if(sInstance.get() == NULL)
         sInstance = new IdleInvalidator();
     return sInstance.get();

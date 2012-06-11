@@ -40,15 +40,19 @@ class IdleInvalidator : public android::Thread {
     bool mSleepAgain;
     unsigned int mSleepTime;
     static InvalidatorHandler mHandler;
+    //This is a strong pointer just because this class derives indirectly from
+    //RefBase. The instance having a process-lifetime, there is no need for ref
+    //counting, so will never be exposed to clients.
     static android::sp<IdleInvalidator> sInstance;
-
-public:
     IdleInvalidator();
-    /* init timer obj */
+public:
+    virtual ~IdleInvalidator(){}
+    //init handler, store hwc context, init sleep time
     int init(InvalidatorHandler reg_handler, void* user_data, unsigned int
             idleSleepTime);
+    //Called on mdp-comp update
     void markForSleep();
-    /*Overrides*/
+    //Overrides
     virtual bool        threadLoop();
     virtual int         readyToRun();
     virtual void        onFirstRef();

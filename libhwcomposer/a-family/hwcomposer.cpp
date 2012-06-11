@@ -183,8 +183,10 @@ inline void getLayerResolution(const hwc_layer_t* layer, int& width, int& height
 }
 
 #ifdef COMPOSITION_BYPASS
+//This ideally should be in IdleInvalidator class, but since the hwc_context is
+//defined here, we implement this here.
 static void timeout_handler(void *udata) {
-    LOGE("Comp bypass timeout_handler...");
+    LOGE_IF(BYPASS_DEBUG, "Comp bypass: %s begin", __func__);
     struct hwc_context_t* ctx = (struct hwc_context_t*)(udata);
 
     if(!ctx) {
@@ -201,7 +203,7 @@ static void timeout_handler(void *udata) {
     /* Trigger SF to redraw the current frame */
     ctx->forceComposition = true;
     proc->invalidate(proc);
-    LOGE("Comp bypass timeout_handler...Done");
+    LOGE_IF(BYPASS_DEBUG, "Comp bypass: %s end", __func__);
 }
 
 void setLayerbypassIndex(hwc_layer_t* layer, const int bypass_index)
