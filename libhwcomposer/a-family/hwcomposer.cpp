@@ -780,7 +780,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
             } else if (hnd && hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY) {
                 //handle later after other layers are handled
             } else if (hnd && (hwcModule->compositionType &
-                    (COMPOSITION_TYPE_C2D|COMPOSITION_TYPE_MDP))) {
+                    (COMPOSITION_TYPE_C2D|COMPOSITION_TYPE_MDP)) &&
+                    (!(hwcModule->compositionType & COMPOSITION_TYPE_DYN))) {
                 list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
             } else if ((hwcModule->compositionType & COMPOSITION_TYPE_DYN)
                     && useCopybit) {
