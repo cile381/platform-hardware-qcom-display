@@ -17,6 +17,14 @@
 
 #include "overlayLib.h"
 #include "gralloc_priv.h"
+#include "string.h"
+
+// string to store format_3d file
+char format_3d_file[40] = "/sys/class/graphics/fb1/format_3d";
+char format_3d_file_primary[40] = "/sys/class/graphics/fb0/format_3d";
+// string to store edid_packet data file
+char edid_3d_info_file[40] = "/sys/class/graphics/fb1/3d_present";
+char edid_3d_info_file_primary[40] = "/sys/class/graphics/fb0/3d_present";
 
 #define INTERLACE_MASK 0x80
 #define DEBUG_OVERLAY true
@@ -31,11 +39,7 @@ using gralloc::IMemAlloc;
 using gralloc::IonController;
 using gralloc::alloc_data;
 
-#ifdef HDMI_AS_PRIMARY
-bool Overlay::sHDMIAsPrimary = true;
-#else
 bool Overlay::sHDMIAsPrimary = false;
-#endif
 
 template <class Type>
 void swapWidthHeight(Type& width, Type& height) {
@@ -265,7 +269,14 @@ bool overlay::isHDMIConnected () {
 
 bool overlay::is3DTV() {
     char is3DTV = '0';
-    FILE *fp = fopen(EDID_3D_INFO_FILE, "r");
+    FILE *fp = NULL;
+
+    if (overlay::isHDMIPrimary()) {
+       fp = fopen(edid_3d_info_file_primary, "r");
+    } else {
+       fp = fopen(edid_3d_info_file, "r");
+    }
+
     if (fp) {
         fread(&is3DTV, 1, 1, fp);
         fclose(fp);
@@ -304,7 +315,12 @@ bool overlay::usePanel3D() {
 }
 
 bool overlay::send3DInfoPacket (unsigned int format3D) {
-    FILE *fp = fopen(FORMAT_3D_FILE, "wb");
+    FILE *fp = NULL;
+    if (overlay::isHDMIPrimary()) {
+       fp = fopen(format_3d_file_primary, "wb");
+    } else {
+       fp = fopen(format_3d_file, "wb");
+    }
     if (fp) {
         fprintf(fp, "%d", format3D);
         fclose(fp);
@@ -417,6 +433,34 @@ int overlay::initOverlay() {
         fd = -1;
     }
     return 0;
+}
+
+/* check if HDMI is primary or not */
+
+bool overlay::isHDMIPrimary (void) {
+
+   char isPrimaryHDMI = '0';
+   // read HDMI sysfs nodes
+    FILE *fp = fopen(HDMI_PRIMARY_NODE, "r");
+    if (fp) {
+        fread(&isPrimaryHDMI, 1, 1, fp);
+        if (isPrimaryHDMI == '1'){
+          // HDMI is primary
+          LOGI("%s: HDMI is primary display", __FUNCTION__);
+          Overlay::sHDMIAsPrimary = true;
+          fclose(fp);
+          return true;
+        } else {
+          // Should never happen
+          LOGE("%s: HDMI_PRIMARY_NODE is: %c", __FUNCTION__, isPrimaryHDMI);
+          fclose(fp);
+          return false;
+        }
+    } else {
+        // HDMI_PRIMARY_NODE not present
+        LOGI("%s: HDMI is not primary display", __FUNCTION__);
+        return false;
+    }
 }
 
 Overlay::Overlay() : mChannelUP(false), mExternalDisplay(false),

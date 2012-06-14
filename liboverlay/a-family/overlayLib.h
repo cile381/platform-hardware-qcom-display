@@ -127,13 +127,8 @@ enum {
 #define BARRIER_LANDSCAPE 1
 #define BARRIER_PORTRAIT  2
 
-#ifdef HDMI_AS_PRIMARY
-#define FORMAT_3D_FILE        "/sys/class/graphics/fb0/format_3d"
-#define EDID_3D_INFO_FILE     "/sys/class/graphics/fb0/3d_present"
-#else
-#define FORMAT_3D_FILE        "/sys/class/graphics/fb1/format_3d"
-#define EDID_3D_INFO_FILE     "/sys/class/graphics/fb1/3d_present"
-#endif
+#define HDMI_PRIMARY_NODE   "/sys/class/graphics/fb0/hdmi_primary"
+#define HDMI_SECONDARY_NODE "/sys/class/graphics/fb1/hdmi_primary"
 #define BARRIER_FILE          "/sys/devices/platform/mipi_novatek.0/enable_3d_barrier"
 /* -------------------------- end 3D defines ----------------------------------------*/
 
@@ -226,6 +221,9 @@ int get_mdp_orientation(int value);
 void normalize_crop(uint32_t& xy, uint32_t& wh);
 //Initializes the overlay - cleans up any existing overlay pipes
 int initOverlay();
+
+//Check, if HDMI is primary or not
+bool isHDMIPrimary(void);
 
 /* Print values being sent to driver in case of ioctl failures
    These logs are enabled only if DEBUG_OVERLAY is true       */

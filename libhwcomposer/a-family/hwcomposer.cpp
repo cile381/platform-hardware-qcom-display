@@ -86,6 +86,7 @@ struct hwc_context_t {
     int previousLayerCount;
     eHWCOverlayStatus hwcOverlayStatus;
     int swapInterval;
+    bool isPrimary;
 };
 
 
@@ -680,29 +681,29 @@ static void hwc_perform(hwc_composer_device_t *dev, int event, int value) {
 }
 
 
-static bool isS3DCompositionRequired() {
-#ifdef HDMI_AS_PRIMARY
-    return overlay::is3DTV();
-#endif
+static bool isS3DCompositionRequired (hwc_context_t *ctx) {
+    if (ctx->isPrimary) {
+       return overlay::is3DTV();
+    }
     return false;
 }
 
-static void markUILayerForS3DComposition (hwc_layer_t &layer, int s3dVideoFormat) {
-#ifdef HDMI_AS_PRIMARY
-    layer.compositionType = HWC_FRAMEBUFFER;
-    switch(s3dVideoFormat) {
-        case HAL_3D_IN_SIDE_BY_SIDE_L_R:
-        case HAL_3D_IN_SIDE_BY_SIDE_R_L:
-            layer.hints |= HWC_HINT_DRAW_S3D_SIDE_BY_SIDE;
-            break;
-        case HAL_3D_IN_TOP_BOTTOM:
-            layer.hints |= HWC_HINT_DRAW_S3D_TOP_BOTTOM;
-            break;
-        default:
-            LOGE("%s: Unknown S3D input format 0x%x", __FUNCTION__, s3dVideoFormat);
-            break;
+static void markUILayerForS3DComposition (hwc_layer_t &layer, hwc_context_t *ctx) {
+    if (ctx->isPrimary) {
+        layer.compositionType = HWC_FRAMEBUFFER;
+        switch(ctx->s3dLayerFormat) {
+            case HAL_3D_IN_SIDE_BY_SIDE_L_R:
+            case HAL_3D_IN_SIDE_BY_SIDE_R_L:
+                layer.hints |= HWC_HINT_DRAW_S3D_SIDE_BY_SIDE;
+                break;
+            case HAL_3D_IN_TOP_BOTTOM:
+                layer.hints |= HWC_HINT_DRAW_S3D_TOP_BOTTOM;
+                break;
+            default:
+                LOGE("%s: Unknown S3D input format 0x%x", __FUNCTION__, ctx->s3dLayerFormat);
+                break;
+        }
     }
-#endif
     return;
 }
 
@@ -780,7 +781,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
          * Check if we need the S3D compostion for other layers
          */
         if (ctx->s3dLayerFormat)
-            isS3DCompositionNeeded = isS3DCompositionRequired();
+            isS3DCompositionNeeded = isS3DCompositionRequired(ctx);
 
         for (size_t i=0 ; i<list->numHwLayers ; i++) {
             private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
@@ -802,7 +803,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 // During the animaton UI layers are marked as SKIP
                 // need to still mark the layer for S3D composition
                 if (isS3DCompositionNeeded)
-                    markUILayerForS3DComposition(list->hwLayers[i], ctx->s3dLayerFormat);
+                    markUILayerForS3DComposition(list->hwLayers[i], ctx);
 
                 list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
                 list->hwLayers[i].hints &= ~HWC_HINT_CLEAR_FB;
@@ -859,7 +860,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 }
 #endif
             } else if (isS3DCompositionNeeded) {
-                markUILayerForS3DComposition(list->hwLayers[i], ctx->s3dLayerFormat);
+                markUILayerForS3DComposition(list->hwLayers[i], ctx);
             } else if (hnd && hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY) {
                 //handle later after other layers are handled
             } else if (hnd && (hwcModule->compositionType &
@@ -1382,6 +1383,11 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
         dev->mOverlayLibObject = new overlay::Overlay();
         if(overlay::initOverlay() == -1)
             LOGE("overlay::initOverlay() ERROR!!");
+        // check if HDMI is primary or not
+        dev->isPrimary = overlay::isHDMIPrimary();
+        if (dev->isPrimary) {
+           LOGD("%s : HDMI is primary display", __FUNCTION__);
+        }
 #else
         dev->mOverlayLibObject = NULL;
 #endif
