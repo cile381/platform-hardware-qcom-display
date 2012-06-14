@@ -366,8 +366,8 @@ int qcomuiClearRegion(Region region, EGLDisplay dpy, EGLSurface sur)
     int ret = 0;
     int compositionType = QCCompositionType::getInstance().getCompositionType();
 
-    if (compositionType & COMPOSITION_TYPE_GPU ||
-       (compositionType == COMPOSITION_TYPE_DYN|COMPOSITION_TYPE_C2D))
+    if (( compositionType == COMPOSITION_TYPE_GPU) ||
+        (compositionType == (COMPOSITION_TYPE_DYN|COMPOSITION_TYPE_C2D)))
     {
         // For GPU or DYN comp. with C2D, return an error, so that SF can use
         // the GPU to draw the wormhole.
