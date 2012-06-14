@@ -67,7 +67,7 @@ public:
 private:
     /* needed for 3D related IOCTL */
     MdpCtrl3D mCtrl3D;
-    overlay2::GenericPipe<utils::FB0> mS3d;
+    overlay2::GenericPipe<utils::PRIMARY> mS3d;
     // Cache the 3D format
     uint32_t mS3Dfmt;
 };

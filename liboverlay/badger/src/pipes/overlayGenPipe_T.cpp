@@ -29,20 +29,20 @@
 
 namespace overlay2 {
 
-template <int FB>
-GenericPipe<FB>::GenericPipe() : mRot(0), mFlags(CLOSED) {}
+template <int PANEL>
+GenericPipe<PANEL>::GenericPipe() : mRot(0), mFlags(CLOSED) {}
 
-template <int FB>
-GenericPipe<FB>::~GenericPipe() {
+template <int PANEL>
+GenericPipe<PANEL>::~GenericPipe() {
     close();
 }
 
-template <int FB>
-bool GenericPipe<FB>::open(RotatorBase* rot)
+template <int PANEL>
+bool GenericPipe<PANEL>::open(RotatorBase* rot)
 {
     OVASSERT(rot, "rot is null");
     // open ctrl and data
-    uint32_t fbnum = FB;
+    uint32_t fbnum = utils::getFBForPanel(PANEL);
     LOGE_IF(DEBUG_OVERLAY, "GenericPipe open");
     if(!mCtrlData.ctrl.open(fbnum, rot)) {
         LOGE("GenericPipe failed to open ctrl");
@@ -61,8 +61,8 @@ bool GenericPipe<FB>::open(RotatorBase* rot)
     return true;
 }
 
-template <int FB>
-bool GenericPipe<FB>::close() {
+template <int PANEL>
+bool GenericPipe<PANEL>::close() {
     if(isClosed()) return true;
     bool ret = true;
     if(!mCtrlData.ctrl.close()) {
@@ -77,14 +77,14 @@ bool GenericPipe<FB>::close() {
     return ret;
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::commit(){
+template <int PANEL>
+inline bool GenericPipe<PANEL>::commit(){
     OVASSERT(isOpen(), "State is closed, cannot commit");
     return mCtrlData.ctrl.commit();
 }
 
-template <int FB>
-inline void GenericPipe<FB>::setMemoryId(int id) {
+template <int PANEL>
+inline void GenericPipe<PANEL>::setMemoryId(int id) {
     OVASSERT(isOpen(), "State is closed, cannot setMemoryId");
     if(utils::RECONFIG_ON == mArgs.reconf) {
         id = mArgs.play.fd;
@@ -93,24 +93,24 @@ inline void GenericPipe<FB>::setMemoryId(int id) {
     mCtrlData.data.setMemoryId(id);
 }
 
-template <int FB>
-inline void GenericPipe<FB>::setId(int id) {
+template <int PANEL>
+inline void GenericPipe<PANEL>::setId(int id) {
     mCtrlData.data.setId(id); }
 
-template <int FB>
-inline int GenericPipe<FB>::getCtrlFd() const {
+template <int PANEL>
+inline int GenericPipe<PANEL>::getCtrlFd() const {
     return mCtrlData.ctrl.getFd();
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::setCrop(
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setCrop(
         const overlay2::utils::Dim& d) {
     OVASSERT(isOpen(), "State is closed, cannot setCrop");
     return mCtrlData.ctrl.setCrop(d);
 }
 
-template <int FB>
-bool GenericPipe<FB>::start(const utils::PipeArgs& args)
+template <int PANEL>
+bool GenericPipe<PANEL>::start(const utils::PipeArgs& args)
 {
     /* open before your start control rotator */
     uint32_t sz = args.whf.size; //utils::getSizeByMdp(args.whf);
@@ -143,14 +143,14 @@ bool GenericPipe<FB>::start(const utils::PipeArgs& args)
     return true;
 }
 
-template <int FB>
-inline const utils::PipeArgs& GenericPipe<FB>::getArgs() const
+template <int PANEL>
+inline const utils::PipeArgs& GenericPipe<PANEL>::getArgs() const
 {
     return mArgs;
 }
 
-template <int FB>
-bool GenericPipe<FB>::startRotator() {
+template <int PANEL>
+bool GenericPipe<PANEL>::startRotator() {
     // kick off rotator
     if(!mRot->start()) {
         LOGE("GenericPipe failed to start rotator");
@@ -159,8 +159,8 @@ bool GenericPipe<FB>::startRotator() {
     return true;
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::queueBuffer(uint32_t offset) {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::queueBuffer(uint32_t offset) {
     OVASSERT(isOpen(), "State is closed, cannot queueBuffer");
     // when dealing with reconfig - we need to make sure data
     // channel is setup with the proper offset/fd as the src
@@ -174,29 +174,29 @@ inline bool GenericPipe<FB>::queueBuffer(uint32_t offset) {
     return mCtrlData.data.queueBuffer(offset);
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::dequeueBuffer(void*&) {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::dequeueBuffer(void*&) {
     OVASSERT(isOpen(), "State is closed, cannot dequeueBuffer");
     // can also set error to NOTSUPPORTED in the future
     return false;
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::waitForVsync() {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::waitForVsync() {
     OVASSERT(isOpen(), "State is closed, cannot waitForVsync");
 
     return mCtrlData.data.waitForVsync();
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::setPosition(const utils::Dim& dim)
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setPosition(const utils::Dim& dim)
 {
     OVASSERT(isOpen(), "State is closed, cannot setPosition");
     return mCtrlData.ctrl.setPosition(dim);
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::setParameter(
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setParameter(
         const utils::Params& param)
 {
     OVASSERT(isOpen(), "State is closed, cannot setParameter");
@@ -213,8 +213,8 @@ inline bool GenericPipe<FB>::setParameter(
     return startRotator();
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::setSource(
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setSource(
         const utils::PipeArgs& args)
 {
     // cache the recent args.
@@ -233,39 +233,39 @@ inline bool GenericPipe<FB>::setSource(
     return mCtrlData.ctrl.setSource(args);
 }
 
-template <int FB>
-inline utils::Dim GenericPipe<FB>::getAspectRatio(
+template <int PANEL>
+inline utils::Dim GenericPipe<PANEL>::getAspectRatio(
         const utils::Whf& whf) const
 {
     return mCtrlData.ctrl.getAspectRatio(whf);
 }
 
-template <int FB>
-inline utils::Dim GenericPipe<FB>::getAspectRatio(
+template <int PANEL>
+inline utils::Dim GenericPipe<PANEL>::getAspectRatio(
         const utils::Dim& dim) const
 {
     return mCtrlData.ctrl.getAspectRatio(dim);
 }
 
-template <int FB>
-inline utils::ScreenInfo GenericPipe<FB>::getScreenInfo() const
+template <int PANEL>
+inline utils::ScreenInfo GenericPipe<PANEL>::getScreenInfo() const
 {
     return mCtrlData.ctrl.getScreenInfo();
 }
 
-template <int FB>
-inline utils::Dim GenericPipe<FB>::getCrop() const
+template <int PANEL>
+inline utils::Dim GenericPipe<PANEL>::getCrop() const
 {
     return mCtrlData.ctrl.getCrop();
 }
 
-template <int FB>
-inline utils::eOverlayPipeType GenericPipe<FB>::getOvPipeType() const {
+template <int PANEL>
+inline utils::eOverlayPipeType GenericPipe<PANEL>::getOvPipeType() const {
     return utils::OV_PIPE_TYPE_GENERIC;
 }
 
-template <int FB>
-void GenericPipe<FB>::dump() const
+template <int PANEL>
+void GenericPipe<PANEL>::dump() const
 {
     LOGE("== Dump Generic pipe start ==");
     LOGE("flags=0x%x", mFlags);
@@ -276,18 +276,18 @@ void GenericPipe<FB>::dump() const
     LOGE("== Dump Generic pipe end ==");
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::isClosed() const  {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::isClosed() const  {
     return utils::getBit(mFlags, CLOSED);
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::isOpen() const  {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::isOpen() const  {
     return !isClosed();
 }
 
-template <int FB>
-inline bool GenericPipe<FB>::setClosed() {
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setClosed() {
     return utils::setBit(mFlags, CLOSED);
 }
 

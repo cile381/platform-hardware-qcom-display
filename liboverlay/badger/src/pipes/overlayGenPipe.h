@@ -38,7 +38,7 @@
 
 namespace overlay2 {
 
-template <int FB>
+template <int PANEL>
 class GenericPipe : utils::NoCopy {
 public:
     /* ctor init */

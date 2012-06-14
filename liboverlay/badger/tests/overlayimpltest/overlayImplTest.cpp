@@ -50,7 +50,7 @@ int main(int, char**)
 {
    LOGE("%s start", LOG_TAG);
 
-   typedef overlay2::GenericPipe<ovutils::FB0> genpipe;
+   typedef overlay2::GenericPipe<ovutils::PRIMARY> genpipe;
    overlay2::RotatorBase* r = new overlay2::NullRotator();
    overlay2::OverlayImplBase* ov = new overlay2::OverlayImpl<genpipe>;
    LOGE("Using null rotator");

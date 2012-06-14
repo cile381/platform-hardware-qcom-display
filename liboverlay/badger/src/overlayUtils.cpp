@@ -71,7 +71,7 @@ struct IOFile {
 namespace overlay2 {
 
 namespace utils {
-
+//--------------------------------------------------------
 FrameBufferInfo::FrameBufferInfo() {
     mFBWidth = 0;
     mFBHeight = 0;
@@ -133,6 +133,7 @@ bool FrameBufferInfo::supportTrueMirroring() const {
     return mBorderFillSupported;
 }
 
+//--------------------------------------------------------
 uint32_t getSize(const Whf& whf) {
     int aligned_height=0, pitch=0;
 

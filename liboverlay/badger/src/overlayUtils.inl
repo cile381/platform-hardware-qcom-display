@@ -249,7 +249,6 @@ inline Dim getPositionS3DImpl(const Whf& whf)
     return Dim();
 }
 
-// FB1
 template <>
 inline Dim getPositionS3DImpl<utils::OV_PIPE1>(const Whf& whf)
 {

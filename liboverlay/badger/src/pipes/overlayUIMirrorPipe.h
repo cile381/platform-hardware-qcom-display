@@ -64,7 +64,7 @@ public:
     utils::eOverlayPipeType getOvPipeType() const;
     void dump() const;
 private:
-    overlay2::GenericPipe<ovutils::FB1> mUI;
+    overlay2::GenericPipe<ovutils::EXTERNAL> mUI;
 };
 
 } // overlay2
