@@ -11,7 +11,7 @@ LOCAL_SRC_FILES :=  hwcomposer.cpp
 LOCAL_MODULE := hwcomposer.$(TARGET_BOARD_PLATFORM)
 LOCAL_CFLAGS:= -DLOG_TAG=\"$(TARGET_BOARD_PLATFORM).hwcomposer\" -DDEBUG_CALC_FPS
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/qcom/display
-LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/badger/src
+LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/badger
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 
 LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr

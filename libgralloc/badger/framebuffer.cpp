@@ -54,9 +54,8 @@
 
 #include "overlayUtils.h"
 #include "overlay.h"
-#include "overlayMgr.h"
-#include "overlayMgrSingleton.h"
-namespace ovutils = overlay2::utils;
+
+namespace ovutils = overlay::utils;
 
 #define FB_DEBUG 0
 
@@ -269,9 +268,7 @@ static void getSecondaryDisplayDestinationInfo(private_module_t* m, overlay_rect
    mirroring and whether video is playing or not */
 static ovutils::eOverlayState getOverlayState(struct private_module_t* module)
 {
-    overlay2::OverlayMgr* ovMgr =
-            overlay2::OverlayMgrSingleton::getOverlayMgr();
-    overlay2::Overlay& ov = ovMgr->ov();
+    overlay::Overlay& ov = *(overlay::Overlay::getInstance());
 
     // Default to existing state
     ovutils::eOverlayState state = ov.getState();
@@ -316,14 +313,8 @@ static ovutils::eOverlayState getOverlayState(struct private_module_t* module)
 /* Set overlay state */
 static void setOverlayState(ovutils::eOverlayState state)
 {
-    overlay2::OverlayMgr* ovMgr =
-            overlay2::OverlayMgrSingleton::getOverlayMgr();
-    if (!ovMgr) {
-        LOGE("%s: NULL ovMgr", __FUNCTION__);
-        return;
-    }
-
-    ovMgr->setState(state);
+    overlay::Overlay& ov = *(overlay::Overlay::getInstance());
+    ov.setState(state);
 }
 
 static void *hdmi_ui_loop(void *ptr)
@@ -347,9 +338,7 @@ static void *hdmi_ui_loop(void *ptr)
             continue;
         }
 
-        overlay2::OverlayMgr* ovMgr =
-            overlay2::OverlayMgrSingleton::getOverlayMgr();
-        overlay2::Overlay& ov = ovMgr->ov();
+        overlay::Overlay& ov = *(overlay::Overlay::getInstance());
 
         // Set overlay state
         ovutils::eOverlayState state = getOverlayState(m);
@@ -395,9 +384,7 @@ static void *hdmi_ui_loop(void *ptr)
                                    ovutils::WAIT,
                                    ovutils::ZORDER_0,
                                    ovutils::IS_FG_OFF,
-                                   ovutils::ROT_FLAG_ENABLED,
-                                   ovutils::PMEM_SRC_SMI,
-                                   ovutils::RECONFIG_OFF);
+                                   ovutils::ROT_FLAG_ENABLED);
             ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
             bool ret = ov.setSource(pargs, dest);
             if (!ret) {

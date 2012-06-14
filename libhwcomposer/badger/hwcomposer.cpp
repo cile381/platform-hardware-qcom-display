@@ -43,9 +43,9 @@
 #include <utils/profiler.h>
 #include <utils/IdleInvalidator.h>
 
-#include <overlayMgr.h>
-#include <overlayMgrSingleton.h>
-namespace ovutils = overlay2::utils;
+#include <overlay.h>
+
+namespace ovutils = overlay::utils;
 
 /*****************************************************************************/
 #define ALIGN(x, align) (((x) + ((align)-1)) & ~((align)-1))
@@ -88,7 +88,7 @@ enum eHWCOverlayStatus {
 struct hwc_context_t {
     hwc_composer_device_t device;
     /* our private state goes below here */
-    overlay2::OverlayMgr* mOverlayLibObject;
+    overlay::Overlay* mOverlayLibObject;
     native_handle_t *previousOverlayHandle;
     native_handle_t *currentOverlayHandle;
     int yuvBufferCount;
@@ -184,7 +184,7 @@ static ovutils::eOverlayState getOverlayState(hwc_context_t* ctx,
         return state;
     }
 
-    overlay2::Overlay& ov = ctx->mOverlayLibObject->ov();
+    overlay::Overlay& ov = *(ctx->mOverlayLibObject);
     state = ov.getState();
 
     // If there are any bypassLayers, state is based on number of layers
@@ -275,16 +275,16 @@ static void setOverlayState(hwc_context_t* ctx, ovutils::eOverlayState state)
         return;
     }
 
-    overlay2::OverlayMgr *ovMgr = ctx->mOverlayLibObject;
-    if (!ovMgr) {
-        LOGE("%s: NULL ovMgr", __FUNCTION__);
+    overlay::Overlay *ov = ctx->mOverlayLibObject;
+    if (!ov) {
+        LOGE("%s: NULL ov", __FUNCTION__);
         return;
     }
 
     // Using perform ensures a lock on overlay is obtained before changing state
     int ov_state = OVERLAY_STATE_CHANGE_START;
     fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, (void*)&ov_state);
-    ovMgr->setState(state);
+    ov->setState(state);
     ov_state = OVERLAY_STATE_CHANGE_END;
     fbDev->perform(fbDev, EVENT_OVERLAY_STATE_CHANGE, (void*)&ov_state);
 }
@@ -491,8 +491,7 @@ static int prepareBypass(hwc_context_t *ctx, hwc_layer_t *layer,
             dst_h = hw_h;
         }
 
-        overlay2::OverlayMgr *ovMgr = ctx->mOverlayLibObject;
-        overlay2::Overlay& ov = ovMgr->ov();
+        overlay::Overlay& ov = *(ctx->mOverlayLibObject);
 
         // Determine pipe to set based on pipe index
         ovutils::eDest dest = ovutils::OV_PIPE_ALL;
@@ -523,9 +522,7 @@ static int prepareBypass(hwc_context_t *ctx, hwc_layer_t *layer,
                                ovutils::NO_WAIT,
                                ovutils::ZORDER_0,
                                ovutils::IS_FG_OFF,
-                               ovutils::ROT_FLAG_DISABLED,
-                               ovutils::PMEM_SRC_SMI,
-                               ovutils::RECONFIG_OFF);
+                               ovutils::ROT_FLAG_DISABLED);
         ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
         if (!ov.setSource(pargs, dest)) {
             LOGE("%s: setSource failed", __FUNCTION__);
@@ -842,7 +839,6 @@ static int hwc_closeOverlayChannels(hwc_context_t* ctx) {
  */
 static int prepareOverlay(hwc_context_t *ctx,
                           hwc_layer_t *layer) {
-    ovutils::Timer t("prepareOverlay");
     int ret = 0;
 
 #ifdef COMPOSITION_BYPASS
@@ -862,8 +858,8 @@ static int prepareOverlay(hwc_context_t *ctx,
         }
 
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        overlay2::OverlayMgr *ovLibObject = ctx->mOverlayLibObject;
-        overlay2::Overlay& ov = ovLibObject->ov();
+        overlay::Overlay& ov = *(ctx->mOverlayLibObject);
+
         ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
 
         // Set overlay state
@@ -878,9 +874,6 @@ static int prepareOverlay(hwc_context_t *ctx,
             dest = static_cast<ovutils::eDest>(
                 ovutils::OV_PIPE0 | ovutils::OV_PIPE1);
         }
-
-        // that will make sure reconf is reset at that point
-        (void)ov.reconfigure(ovutils::ReconfArgs());
 
         // Order order order
         // setSource - just setting source
@@ -916,9 +909,7 @@ static int prepareOverlay(hwc_context_t *ctx,
                                waitFlag,
                                ovutils::ZORDER_0,
                                isFgFlag,
-                               ovutils::ROT_FLAG_DISABLED,
-                               ovutils::PMEM_SRC_SMI,
-                               ovutils::RECONFIG_OFF);
+                               ovutils::ROT_FLAG_DISABLED);
         ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
         ret = ov.setSource(pargs, dest);
         if (!ret) {
@@ -1084,7 +1075,7 @@ static void handleHDMIStateChange(hwc_composer_device_t *dev, int externaltype) 
 
     framebuffer_device_t *fbDev = hwcModule->fbDevice;
     if (fbDev) {
-            fbDev->perform(fbDev, EVENT_EXTERNAL_DISPLAY, externaltype);
+            fbDev->perform(fbDev, EVENT_EXTERNAL_DISPLAY, (void*)&externaltype);
     }
 #endif
 }
@@ -1233,59 +1224,8 @@ static void statCount(hwc_context_t *ctx, hwc_layer_list_t* list) {
     return;
  }
 
-static int prepareForReconfiguration(hwc_context_t *ctx, hwc_layer_t *layer)
-{
-   LOGD("prepareForReconfiguration E");
-   if(!ctx || !layer) {
-      LOGE("prepareForReconfiguration invalid context or layer");
-      return -1;
-   }
-
-   private_handle_t *hnd = (private_handle_t *)layer->handle;
-   overlay2::OverlayMgr *ovLibObject = ctx->mOverlayLibObject;
-   overlay2::Overlay& ov = ovLibObject->ov();
-
-   ovutils::Whf info;
-   info.w = hnd->width;
-   info.h = hnd->height;
-   info.format = hnd->format;
-   info.size = hnd->size;
-
-   ovutils::eTransform orient =
-      static_cast<ovutils::eTransform>(layer->transform);
-
-   hwc_rect_t sourceCrop = layer->sourceCrop;
-   // x,y,w,h
-   ovutils::Dim crop(sourceCrop.left, sourceCrop.top, // x, y
-                     sourceCrop.right - sourceCrop.left, // w
-                     sourceCrop.bottom - sourceCrop.top);// h
-
-   hwc_rect_t displayFrame = layer->displayFrame;
-   ovutils::Dim pos(displayFrame.left, displayFrame.top, //x,y
-                    (displayFrame.right - displayFrame.left), //w
-                    (displayFrame.bottom - displayFrame.top)); //h
-
-   ovutils::PlayInfo playInfo;
-   playInfo.fd = hnd->fd;
-   playInfo.offset = hnd->offset;
-
-   ovutils::ReconfArgs arg(info,
-                           crop,
-                           pos,
-                           playInfo,
-                           orient,
-                           ovutils::RECONFIG_ON);
-
-   if(!ov.reconfigure(arg)) {
-      return -1;
-   }
-
-   LOGD("prepareForReconfiguration X");
-   return 0;
-}
 
 static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
-    ovutils::Timer t("hwc_prepare");
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     ctx->currentOverlayHandle = NULL;
 
@@ -1708,7 +1648,6 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
 
 static int drawLayerUsingOverlay(hwc_context_t *ctx, hwc_layer_t *layer)
 {
-    ovutils::Timer t("drawLayerUsingOverlay");
     if (ctx && ctx->mOverlayLibObject) {
         private_hwc_module_t* hwcModule = reinterpret_cast<private_hwc_module_t*>(ctx->device.common.module);
         if (!hwcModule) {
@@ -1727,8 +1666,7 @@ static int drawLayerUsingOverlay(hwc_context_t *ctx, hwc_layer_t *layer)
 
         bool ret = true;
 
-        overlay2::OverlayMgr *ovLibObject = ctx->mOverlayLibObject;
-        overlay2::Overlay& ov = ovLibObject->ov();
+        overlay::Overlay& ov = *(ctx->mOverlayLibObject);
 
         ovutils::eOverlayState state = ov.getState();
 
@@ -1810,7 +1748,7 @@ static int drawLayerUsingBypass(hwc_context_t *ctx, hwc_layer_t *layer, int laye
     }
 
     if (ctx) {
-        overlay2::Overlay& ov = ctx->mOverlayLibObject->ov();
+        overlay::Overlay& ov = *(ctx->mOverlayLibObject);
         int ret = 0;
 
         private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -1864,7 +1802,6 @@ static int hwc_set(hwc_composer_device_t *dev,
         hwc_surface_t sur,
         hwc_layer_list_t* list)
 {
-    ovutils::Timer t("hwc_set");
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if(!ctx) {
         LOGE("hwc_set invalid context");
@@ -2064,12 +2001,7 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
 
         /* initialize our state here */
         memset(dev, 0, sizeof(*dev));
-        dev->mOverlayLibObject = new overlay2::OverlayMgr();
-        overlay2::OverlayMgrSingleton::setOverlayMgr(dev->mOverlayLibObject);
-        if(!dev->mOverlayLibObject->open()) {
-            LOGE("Failed open overlay");
-            return -1;
-        }
+        dev->mOverlayLibObject = overlay::Overlay::getInstance();
 
 #ifdef COMPOSITION_BYPASS
         for(int i = 0; i < MAX_BYPASS_LAYERS; i++) {
