@@ -736,7 +736,7 @@ bool needsAspectRatio (int wRatio, int hRatio) {
 }
 
 void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int maxWidth,
-                            int maxHeight, Rect& visibleRect, GLfloat mVertices[][2]) {
+       int maxHeight, Rect& visibleRect, GLfloat mVertices[][2], bool wideVideo) {
 
     if ((wRatio == 0) || (hRatio == 0))
         return;
@@ -751,10 +751,17 @@ void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int maxWidt
 
     if (orientation == Transform::ROT_INVALID) {
         // During animation, no defined orientation, rely on mTransformedBounds
-        if (old_width >= old_height)
-            orientation = Transform::ROT_0;
-        else
-            orientation = Transform::ROT_90;
+        if (wideVideo) {
+            if (old_width > old_height)
+                orientation = Transform::ROT_0;
+            else
+                orientation = Transform::ROT_90;
+        } else {
+            if (old_height > old_width)
+                orientation = Transform::ROT_0;
+            else
+                orientation = Transform::ROT_90;
+        }
     }
 
     switch (orientation) {
