@@ -11,7 +11,7 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_SHARED_LIBRARIES := liblog libcutils libEGL libhardware libutils liboverlay
 LOCAL_SHARED_LIBRARIES += libgenlock libQcomUI libmemalloc
 
-LOCAL_SRC_FILES :=  hwcomposer.cpp external_display_only.h
+LOCAL_SRC_FILES :=  hwcomposer.cpp external_display_only.h bypass.h
 
 LOCAL_MODULE := hwcomposer.$(TARGET_BOARD_PLATFORM)
 LOCAL_CFLAGS:= -DLOG_TAG=\"$(TARGET_BOARD_PLATFORM).hwcomposer\" -DDEBUG_CALC_FPS
@@ -31,8 +31,14 @@ LOCAL_CFLAGS += -DUSE_OVERLAY
 endif
 ifeq ($(TARGET_HAVE_BYPASS),true)
 LOCAL_CFLAGS += -DCOMPOSITION_BYPASS
+LOCAL_CFLAGS += -DMAX_BYPASS_LAYERS=$(TARGET_MAX_BYPASS)
+ifeq ($(TARGET_MAX_BYPASS),4)
 LOCAL_CFLAGS += -DUSE_OVERLAY_TO_POST
 endif
+else
+LOCAL_CFLAGS += -DMAX_BYPASS_LAYERS=0
+endif
+
 ifeq ($(TARGET_USE_HDMI_AS_PRIMARY),true)
 LOCAL_CFLAGS += -DHDMI_AS_PRIMARY
 endif

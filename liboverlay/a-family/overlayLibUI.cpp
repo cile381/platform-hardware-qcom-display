@@ -401,10 +401,16 @@ status_t OverlayUI::commit() {
     return ret;
 }
 
-status_t OverlayUI::closeChannel() {
+status_t OverlayUI::closeChannel(bool reset_wait_before_close) {
     if( mChannelState != UP ) {
         return NO_ERROR;
     }
+
+    if(reset_wait_before_close) {
+        if(resetVsyncWait() != NO_ERROR)
+            LOGE("%s: resetVsyncWait failed.",__FUNCTION__);
+    }
+
     if(NO_ERROR != closeOVSession()) {
         LOGE("%s: closeOVSession() failed.", __FUNCTION__);
         return BAD_VALUE;
@@ -438,6 +444,30 @@ status_t OverlayUI::startOVSession() {
             mOvInfo = ovInfo;
             ret = NO_ERROR;
         }
+    }
+    return ret;
+}
+
+// If closechannel of an MDP pipe is immediately
+// followed by a PLAY ioctl before next VSYNC, the client
+// can opt not to call stage commit by calling this
+// function.
+status_t OverlayUI::resetVsyncWait() {
+    status_t ret = NO_ERROR;
+    mdp_overlay ovInfo = mOvInfo;
+
+    if(ovInfo.flags & MDP_OV_PLAY_NOWAIT)
+        return ret;
+
+    ovInfo.flags |= MDP_OV_PLAY_NOWAIT;
+
+    if (ioctl(mobjDisplay.getFD(), MSMFB_OVERLAY_SET, &ovInfo)) {
+        LOGE("%s: Overlay set failed..",__FUNCTION__);
+        ret = BAD_VALUE;
+    } else {
+        mSessionID = ovInfo.id;
+        mOvInfo = ovInfo;
+        ret = NO_ERROR;
     }
     return ret;
 }

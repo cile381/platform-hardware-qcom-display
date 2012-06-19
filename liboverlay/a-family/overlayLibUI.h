@@ -129,7 +129,8 @@ public:
     void setDisplayParams(int fbNum, bool waitForVsync, bool isFg, int zorder,
             bool isVGPipe, bool isFBMem = false);
     status_t commit();
-    status_t closeChannel();
+    status_t resetVsyncWait();
+    status_t closeChannel(bool reset_wait_before_close = false);
     channel_state_t isChannelUP() const { return mChannelState; };
     int getFBWidth() const { return mobjDisplay.getFBWidth(); };
     int getFBHeight() const { return mobjDisplay.getFBHeight(); };
