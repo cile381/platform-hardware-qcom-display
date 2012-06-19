@@ -1352,9 +1352,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 ctx->previousLayerCount = -1;
 
                 //If YUV layer is marked as SKIP, close pipes.
-                //If External is connected we still want to pump data to it,
-                //so keep the pipes open.
-                if(isYuvBuffer(hnd) && !isExternalConnected(ctx)) {
+                if(isYuvBuffer(hnd)) {
                     if (ctx->hwcOverlayStatus == HWC_OVERLAY_OPEN)
                         ctx->hwcOverlayStatus = HWC_OVERLAY_PREPARE_TO_CLOSE;
                 }
