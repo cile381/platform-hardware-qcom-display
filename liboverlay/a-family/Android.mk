@@ -42,7 +42,11 @@ LOCAL_CFLAGS += -DDISPLAY_MDP_REV_4_OR_LESS
 else ifeq ($(call is-chipset-prefix-in-board-platform,msm7630),true)
 LOCAL_CFLAGS += -DDISPLAY_MDP_REV_4_OR_LESS
 endif
-
+ifeq ($(TARGET_HAVE_BYPASS),true)
+ifeq ($(TARGET_MAX_BYPASS),4)
+LOCAL_CFLAGS += -DBYPASS_USES_ZORDER_0
+endif
+endif
 ifeq ($(TARGET_USES_POST_PROCESSING),true)
 LOCAL_CFLAGS += -DUSES_POST_PROCESSING
 LOCAL_SHARED_LIBRARIES += libmm-abl

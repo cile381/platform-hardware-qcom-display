@@ -57,6 +57,10 @@ bool isRGBType(int format) {
     return ret;
 }
 
+bool isBorderFill(int format) {
+    return (format == MDP_RGB_BORDERFILL);
+}
+
 int getRGBBpp(int format) {
     int ret = -1;
     switch(format) {
@@ -232,13 +236,18 @@ OverlayUI::~OverlayUI() {
 void OverlayUI::setSource(const overlay_buffer_info& info, int orientation) {
     status_t ret = NO_INIT;
     int format3D = FORMAT_3D(info.format);
+    int border_fill_format = isBorderFill(info.format);
     int colorFormat = COLOR_FORMAT(info.format);
     int format = get_mdp_format(colorFormat);
 
-    if (format3D || !isRGBType(format)) {
+
+    if (format3D || (!isRGBType(format) && !border_fill_format)) {
         LOGE("%s: Unsupported format", __func__);
         return;
     }
+
+    if(border_fill_format)
+        format = info.format;
 
     mParamsChanged |= (mSource.width ^ info.width) ||
                       (mSource.height ^ info.height) ||
@@ -255,7 +264,7 @@ void OverlayUI::setSource(const overlay_buffer_info& info, int orientation) {
 }
 
 void OverlayUI::setDisplayParams(int fbNum, bool waitForVsync, bool isFg, int
-        zorder, bool isVGPipe) {
+        zorder, bool isVGPipe, bool isFBMem) {
     int flags = 0;
 
     if(false == waitForVsync)
@@ -267,6 +276,11 @@ void OverlayUI::setDisplayParams(int fbNum, bool waitForVsync, bool isFg, int
         flags |= MDP_OV_PIPE_SHARE;
     else
         flags &= ~MDP_OV_PIPE_SHARE;
+
+    if(isFBMem)
+        flags |= MDP_MEMORY_ID_TYPE_FB;
+    else
+        flags &= ~MDP_MEMORY_ID_TYPE_FB;
 
     //MDP needs this information to set up pixel repeat
     //for VG pipes when upscaling
@@ -441,7 +455,7 @@ status_t OverlayUI::closeOVSession() {
     return ret;
 }
 
-status_t OverlayUI::queueBuffer(buffer_handle_t buffer) {
+status_t OverlayUI::queueBuffer(buffer_handle_t buffer, int offset) {
     status_t ret = NO_INIT;
 
     if (mChannelState != UP)
@@ -452,13 +466,24 @@ status_t OverlayUI::queueBuffer(buffer_handle_t buffer) {
 
     private_handle_t const* hnd = reinterpret_cast
                                         <private_handle_t const*>(buffer);
-    ovData.data.memory_id = hnd->fd;
-    ovData.data.offset = hnd->offset;
+    if(hnd != NULL) {
+        ovData.data.memory_id = hnd->fd;
+        ovData.data.offset = hnd->offset;
+
+        if(mOvInfo.flags & MDP_MEMORY_ID_TYPE_FB){
+            ovData.data.flags |= MDP_MEMORY_ID_TYPE_FB;
+        }
+    }
+
     if (mOrientation) {
         msm_rotator_data_info rotData;
         memset(&rotData, 0, sizeof(rotData));
-        rotData.src.memory_id = hnd->fd;
-        rotData.src.offset = hnd->offset;
+
+        if(hnd != NULL) {
+           rotData.src.memory_id = hnd->fd;
+           rotData.src.offset = hnd->offset;
+        }
+
         if (mobjRotator.rotateBuffer(rotData) != NO_ERROR) {
             LOGE("Rotator failed.. ");
             return BAD_VALUE;
@@ -467,6 +492,10 @@ status_t OverlayUI::queueBuffer(buffer_handle_t buffer) {
         ovData.data.offset = rotData.dst.offset;
     }
     ovData.id = mSessionID;
+
+    if(!offset)
+        ovData.data.offset = offset;
+
     if (ioctl(mobjDisplay.getFD(), MSMFB_OVERLAY_PLAY, &ovData)) {
         LOGE("Queuebuffer failed ");
         return BAD_VALUE;

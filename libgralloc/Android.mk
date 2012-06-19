@@ -57,6 +57,11 @@ else
     LOCAL_CFLAGS += -DUSES_POST_PROCESSING
     LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/pp/inc
     endif
+    ifeq ($(TARGET_HAVE_BYPASS), true)
+    ifeq ($(TARGET_MAX_BYPASS),4)
+    LOCAL_CFLAGS += -DUSE_OVERLAY_TO_POST
+    endif
+    endif
 endif
 
 

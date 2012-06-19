@@ -570,26 +570,26 @@ static int handle_close_secure_end(private_module_t* m) {
 /* fb_perform - used to add custom event and handle them in fb HAL
  * Used for external display related functions as of now
 */
-static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
+static int fb_perform(struct framebuffer_device_t* dev, int event, void *value)
 {
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
     switch(event) {
 #if defined(HDMI_DUAL_DISPLAY)
         case EVENT_EXTERNAL_DISPLAY:
-            fb_enableHDMIOutput(dev, value);
+            fb_enableHDMIOutput(dev, *(int*)value);
             break;
         case EVENT_VIDEO_OVERLAY:
-            fb_videoOverlayStarted(dev, value);
+            fb_videoOverlayStarted(dev, *(int*)value);
             break;
         case EVENT_ORIENTATION_CHANGE:
-            fb_orientationChanged(dev, value);
+            fb_orientationChanged(dev, *(int*)value);
             break;
         case EVENT_OVERLAY_STATE_CHANGE:
-            if (value == OVERLAY_STATE_CHANGE_START) {
+            if (*(int*)value == OVERLAY_STATE_CHANGE_START) {
                 // When state change starts, get a lock on overlay
                 pthread_mutex_lock(&m->overlayLock);
-            } else if (value == OVERLAY_STATE_CHANGE_END) {
+            } else if (*(int*)value == OVERLAY_STATE_CHANGE_END) {
                 // When state change is complete, unlock overlay
                 pthread_mutex_unlock(&m->overlayLock);
             }
@@ -608,7 +608,7 @@ static int fb_perform(struct framebuffer_device_t* dev, int event, int value)
             break;
 #endif
         default:
-            LOGE("In %s: UNKNOWN Event = %d!!!", __FUNCTION__, event);
+            LOGV("%s: UNKNOWN Event = %d!!!", __FUNCTION__, event);
             break;
     }
     return 0;

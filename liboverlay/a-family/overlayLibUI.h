@@ -127,13 +127,13 @@ public:
     void setPosition(int x, int y, int w, int h);
     void setCrop(int x, int y, int w, int h);
     void setDisplayParams(int fbNum, bool waitForVsync, bool isFg, int zorder,
-            bool isVGPipe);
+            bool isVGPipe, bool isFBMem = false);
     status_t commit();
     status_t closeChannel();
     channel_state_t isChannelUP() const { return mChannelState; };
     int getFBWidth() const { return mobjDisplay.getFBWidth(); };
     int getFBHeight() const { return mobjDisplay.getFBHeight(); };
-    status_t queueBuffer(buffer_handle_t buffer);
+    status_t queueBuffer(buffer_handle_t buffer, int offset = 0);
 };
 
 };
