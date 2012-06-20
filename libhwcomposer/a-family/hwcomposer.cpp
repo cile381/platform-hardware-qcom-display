@@ -160,6 +160,11 @@ static inline int min(const int& a, const int& b) {
 static inline int max(const int& a, const int& b) {
     return (a > b) ? a : b;
 }
+static void swap(int &a, int&b) {
+    int c= a;
+    a = b;
+    b = c;
+}
 
 inline void getLayerResolution(const hwc_layer_t* layer, int& width, int& height)
 {
@@ -169,6 +174,90 @@ inline void getLayerResolution(const hwc_layer_t* layer, int& width, int& height
    height = displayFrame.bottom - displayFrame.top;
 }
 
+static bool isValidDestination(const framebuffer_device_t* fbDev,
+                        const hwc_rect_t& rect)
+{
+    if (!fbDev) {
+        LOGE("%s: fbDev is null", __FUNCTION__);
+        return false;
+    }
+
+    int dest_width = (rect.right - rect.left);
+    int dest_height = (rect.bottom - rect.top);
+
+    if (rect.left < 0 || rect.right < 0 || rect.top < 0 || rect.bottom < 0
+        || dest_width <= 0 || dest_height <= 0) {
+        LOGE("%s: destination: left=%d right=%d top=%d bottom=%d width=%d"
+             "height=%d", __FUNCTION__, rect.left, rect.right, rect.top,
+             rect.bottom, dest_width, dest_height);
+        return false;
+    }
+
+    if ((rect.left+dest_width) > fbDev->width ||
+                            (rect.top+dest_height) > fbDev->height) {
+        LOGE("%s: destination out of bound params", __FUNCTION__);
+        return false;
+    }
+
+    return true;
+}
+//Crops source buffer against destination and FB boundaries
+void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst, int hw_w, int hw_h) {
+
+    int& crop_x = crop.left;
+    int& crop_y = crop.top;
+    int& crop_r = crop.right;
+    int& crop_b = crop.bottom;
+    int crop_w = crop.right - crop.left;
+    int crop_h = crop.bottom - crop.top;
+
+    int& dst_x = dst.left;
+    int& dst_y = dst.top;
+    int& dst_r = dst.right;
+    int& dst_b = dst.bottom;
+    int dst_w = dst.right - dst.left;
+    int dst_h = dst.bottom - dst.top;
+
+    if(dst_x < 0) {
+        float scale_x =  crop_w * 1.0f / dst_w;
+        float diff_factor = (scale_x * abs(dst_x));
+        crop_x = crop_x + (int)diff_factor;
+        crop_w = crop_r - crop_x;
+
+        dst_x = 0;
+        dst_w = dst_r - dst_x;;
+    }
+    if(dst_r > hw_w) {
+        float scale_x = crop_w * 1.0f / dst_w;
+        float diff_factor = scale_x * (dst_r - hw_w);
+        crop_r = crop_r - diff_factor;
+        crop_w = crop_r - crop_x;
+
+        dst_r = hw_w;
+        dst_w = dst_r - dst_x;
+    }
+    if(dst_y < 0) {
+        float scale_y = crop_h * 1.0f / dst_h;
+        float diff_factor = scale_y * abs(dst_y);
+        crop_y = crop_y + diff_factor;
+        crop_h = crop_b - crop_y;
+
+        dst_y = 0;
+        dst_h = dst_b - dst_y;
+    }
+    if(dst_b > hw_h) {
+        float scale_y = crop_h * 1.0f / dst_h;
+        float diff_factor = scale_y * (dst_b - hw_h);
+        crop_b = crop_b - diff_factor;
+        crop_h = crop_b - crop_y;
+
+        dst_b = hw_h;
+        dst_h = dst_b - dst_y;
+    }
+
+    LOGD(" crop: [%d,%d,%d,%d] dst:[%d,%d,%d,%d]",
+                     crop_x, crop_y, crop_w, crop_h,dst_x, dst_y, dst_w, dst_h);
+}
 // Returns true if external panel is connected
 static inline bool isExternalConnected(const hwc_context_t* ctx) {
 #if defined HDMI_DUAL_DISPLAY
@@ -190,6 +279,11 @@ static inline bool isYuvBuffer(const private_handle_t* hnd) {
 //Return true if buffer is marked locked
 static inline bool isBufferLocked(const private_handle_t* hnd) {
     return (hnd && (private_handle_t::PRIV_FLAGS_HWC_LOCK & hnd->flags));
+}
+
+//Return true if buffer is marked as secure
+static inline bool isSecureBuffer(const private_handle_t* hnd) {
+    return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER));
 }
 
 static int getLayerS3DFormat (hwc_layer_t &layer) {
@@ -310,6 +404,23 @@ static int prepareOverlay(hwc_context_t *ctx,
         }
 
         hwc_rect_t sourceCrop = layer->sourceCrop;
+        hwc_rect_t displayFrame = layer->displayFrame;
+        if(!isValidDestination(hwcModule->fbDevice, layer->displayFrame)) {
+            if(layer->transform & HWC_TRANSFORM_ROT_90) {
+                swap(layer->sourceCrop.left,layer->sourceCrop.top);
+                swap(layer->sourceCrop.right,layer->sourceCrop.bottom);
+                calculate_crop_rects(layer->sourceCrop,layer->displayFrame,
+                                        hwcModule->fbDevice->width,
+                                        hwcModule->fbDevice->height);
+                swap(layer->sourceCrop.left,layer->sourceCrop.top);
+                swap(layer->sourceCrop.right,layer->sourceCrop.bottom);
+            } else {
+                calculate_crop_rects(layer->sourceCrop,layer->displayFrame,
+                                        hwcModule->fbDevice->width,
+                                        hwcModule->fbDevice->height);
+            }
+        }
+
         ret = ovLibObject->setCrop(sourceCrop.left, sourceCrop.top,
                                   (sourceCrop.right - sourceCrop.left),
                                   (sourceCrop.bottom - sourceCrop.top));
@@ -331,7 +442,7 @@ static int prepareOverlay(hwc_context_t *ctx,
             }
         }
 #endif
-        hwc_rect_t displayFrame = layer->displayFrame;
+
         ret = ovLibObject->setPosition(displayFrame.left, displayFrame.top,
                             (displayFrame.right - displayFrame.left),
                             (displayFrame.bottom - displayFrame.top));
@@ -561,31 +672,7 @@ static void hwc_perform(hwc_composer_device_t *dev, int event, int value) {
     }
     return;
 }
-static bool isValidDestination(const framebuffer_device_t* fbDev, const hwc_rect_t& rect)
-{
-    if (!fbDev) {
-        LOGE("%s: fbDev is null", __FUNCTION__);
-        return false;
-    }
 
-    int dest_width = (rect.right - rect.left);
-    int dest_height = (rect.bottom - rect.top);
-
-    if (rect.left < 0 || rect.right < 0 || rect.top < 0 || rect.bottom < 0
-        || dest_width <= 0 || dest_height <= 0) {
-        LOGE("%s: destination: left=%d right=%d top=%d bottom=%d width=%d"
-             "height=%d", __FUNCTION__, rect.left, rect.right, rect.top,
-             rect.bottom, dest_width, dest_height);
-        return false;
-    }
-
-    if ((rect.left+dest_width) > fbDev->width || (rect.top+dest_height) > fbDev->height) {
-        LOGE("%s: destination out of bound params", __FUNCTION__);
-        return false;
-    }
-
-    return true;
-}
 
 static bool isS3DCompositionRequired() {
 #ifdef HDMI_AS_PRIMARY
@@ -716,32 +803,19 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 markForGPUComp(ctx, list, i);
             } else if (hnd && (hnd->bufferType == BUFFER_TYPE_VIDEO) && (ctx->yuvBufferCount == 1)) {
                 int flags = skipComposition ? WAIT_FOR_VSYNC : 0;
-                flags |= (hnd->flags &
-                       private_handle_t::PRIV_FLAGS_SECURE_BUFFER)?
-                       SECURE_OVERLAY_SESSION : 0;
+                flags |= isSecureBuffer(hnd) ? SECURE_OVERLAY_SESSION : 0;
                 flags |= (1 == list->numHwLayers) ? DISABLE_FRAMEBUFFER_FETCH : 0;
                 int videoStarted = (ctx->s3dLayerFormat && overlay::is3DTV()) ?
                             VIDEO_3D_OVERLAY_STARTED : VIDEO_2D_OVERLAY_STARTED;
                 setVideoOverlayStatusInGralloc(ctx, videoStarted);
-                if (!isValidDestination(hwcModule->fbDevice, list->hwLayers[i].displayFrame)) {
-                    list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
-                    list->hwLayers[i].hints &= ~HWC_HINT_CLEAR_FB;
-                    //Even though there are no skip layers, animation is still
-                    //ON and in its final stages.
-                    //Reset count, so that we end up composing once after animation
-                    //is done, if overlay is used.
-                    ctx->previousLayerCount = -1;
-                    skipComposition = false;
-                    if (ctx->hwcOverlayStatus == HWC_OVERLAY_OPEN)
-                        ctx->hwcOverlayStatus = HWC_OVERLAY_PREPARE_TO_CLOSE;
 #ifdef USE_OVERLAY
-                } else if(prepareOverlay(ctx, &(list->hwLayers[i]), flags) == 0) {
+                if(prepareOverlay(ctx, &(list->hwLayers[i]), flags) == 0) {
                     list->hwLayers[i].compositionType = HWC_USE_OVERLAY;
                     list->hwLayers[i].hints |= HWC_HINT_CLEAR_FB;
                     // We've opened the channel. Set the state to open.
                     ctx->hwcOverlayStatus = HWC_OVERLAY_OPEN;
 #else
-                } else if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
+                if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
                     //dynamic composition for non-overlay targets(8x25/7x27a)
                     list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
 #endif
@@ -761,9 +835,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
             } else if (getLayerS3DFormat(list->hwLayers[i])) {
                 int flags = skipComposition ? WAIT_FOR_VSYNC : 0;
                 flags |= (1 == list->numHwLayers) ? DISABLE_FRAMEBUFFER_FETCH : 0;
-                flags |= (hnd->flags &
-                       private_handle_t::PRIV_FLAGS_SECURE_BUFFER)?
-                       SECURE_OVERLAY_SESSION : 0;
+                flags |= isSecureBuffer(hnd) ? SECURE_OVERLAY_SESSION : 0;
+
                 int videoStarted = overlay::is3DTV() ? VIDEO_3D_OVERLAY_STARTED
                                                     : VIDEO_2D_OVERLAY_STARTED;
                 setVideoOverlayStatusInGralloc(ctx, videoStarted);
