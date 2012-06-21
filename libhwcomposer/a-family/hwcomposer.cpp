@@ -1168,9 +1168,15 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                     // We've opened the channel. Set the state to open.
                     ctx->hwcOverlayStatus = HWC_OVERLAY_OPEN;
 #else
-                } else if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
-                    //dynamic composition for non-overlay targets(8x25/7x27a)
-                    list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
+               }else if ( ((list->hwLayers[i].transform & HAL_TRANSFORM_FLIP_H) ||
+                           (list->hwLayers[i].transform & HAL_TRANSFORM_FLIP_V))   &&
+                          ((list->hwLayers[i].transform &  HAL_TRANSFORM_ROT_90) ||
+                           (list->hwLayers[i].transform &  HAL_TRANSFORM_ROT_270))){
+                     //Sending video layer with flip & rotation to gpu transformation
+                     list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
+               }else if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
+                     //dynamic composition for non-overlay targets(8x25/7x27a)
+                     list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
 #endif
                 } else if (hwcModule->compositionType & (COMPOSITION_TYPE_C2D|
                             COMPOSITION_TYPE_MDP)) {
