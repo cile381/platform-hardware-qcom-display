@@ -49,7 +49,7 @@ LOCAL_SRC_FILES :=  gpu.cpp         \
 
 ifeq ($(call is-board-platform-in-list,copper),true)
     LOCAL_SRC_FILES += badger/framebuffer.cpp
-    LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/badger/src
+    LOCAL_C_INCLUDES += hardware/qcom/display/liboverlay/badger
     LOCAL_CFLAGS += -DUSE_OVERLAY2 #XXX: Remove later
 else
     LOCAL_SRC_FILES += a-family/framebuffer.cpp
