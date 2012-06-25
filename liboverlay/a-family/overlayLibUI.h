@@ -127,7 +127,7 @@ public:
     void setPosition(int x, int y, int w, int h);
     void setCrop(int x, int y, int w, int h);
     void setDisplayParams(int fbNum, bool waitForVsync, bool isFg, int zorder,
-            bool isVGPipe, bool isFBMem = false);
+            bool isVGPipe,bool premultipliedAlpha = false ,bool isFBMem = false);
     status_t commit();
     status_t resetVsyncWait();
     status_t closeChannel(bool reset_wait_before_close = false);
