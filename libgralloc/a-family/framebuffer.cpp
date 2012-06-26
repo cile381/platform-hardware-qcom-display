@@ -814,16 +814,24 @@ int mapFrameBufferLocked(struct private_module_t* module)
         fd = open(name, O_RDWR, 0);
         i++;
     }
-    if (fd < 0)
+    if (fd < 0) {
+        LOGE("%s: %d: unable to open device fb0",__FUNCTION__,__LINE__);
         return -errno;
+    }
 
     struct fb_fix_screeninfo finfo;
-    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
+    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        LOGE("%s: %d: fb icotl fail %s",__FUNCTION__,__LINE__,strerror(errno));
+        close(fd);
         return -errno;
+    }
 
     struct fb_var_screeninfo info;
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1)
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        LOGE("%s: %d: fb icotl fail %s",__FUNCTION__,__LINE__,strerror(errno));
+        close(fd);
         return -errno;
+    }
 
     info.reserved[0] = 0;
     info.reserved[1] = 0;
@@ -927,8 +935,11 @@ int mapFrameBufferLocked(struct private_module_t* module)
                 info.yres_virtual, info.yres*2);
     }
 
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1)
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        LOGE("%s: %d: fb icotl fail %s",__FUNCTION__,__LINE__,strerror(errno));
+        close(fd);
         return -errno;
+    }
 
     if (int(info.width) <= 0 || int(info.height) <= 0) {
         // the driver doesn't return that information
@@ -973,11 +984,17 @@ int mapFrameBufferLocked(struct private_module_t* module)
     );
 
 
-    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
+    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        LOGE("%s: %d: fb icotl fail %s",__FUNCTION__,__LINE__,strerror(errno));
+        close(fd);
         return -errno;
+    }
 
-    if (finfo.smem_len <= 0)
+    if (finfo.smem_len <= 0) {
+        LOGE("%s: %d: not a valid FB mem size",__FUNCTION__,__LINE__);
+        close(fd);
         return -errno;
+    }
 
     module->flags = flags;
     module->info = info;
@@ -1018,7 +1035,9 @@ int mapFrameBufferLocked(struct private_module_t* module)
     /* create display update thread */
     pthread_t thread1;
     if (pthread_create(&thread1, NULL, &disp_loop, (void *) module)) {
-         return -errno;
+        LOGE("%s: %d: failed to create display loop thread",__FUNCTION__,__LINE__);
+        close(fd);
+        return -errno;
     }
 
     /*
@@ -1036,6 +1055,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
     void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
     if (vaddr == MAP_FAILED) {
         LOGE("Error mapping the framebuffer (%s)", strerror(errno));
+        close(fd);
         return -errno;
     }
     module->framebuffer->base = intptr_t(vaddr);
@@ -1064,7 +1084,8 @@ int mapFrameBufferLocked(struct private_module_t* module)
         module->pBorderFill = new OverlayUI();
 
         if(setup_borderfill_pipe(module, info) < 0) {
-            LOGE("FATAL: setup_borderfill_pipe failed.");
+            LOGE("%s: FATAL: setup_borderfill_pipe failed.",__FUNCTION__);
+            close(fd);
             return -1;
         }
 
