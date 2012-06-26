@@ -60,6 +60,7 @@ struct copybit_context_t {
     int     mFD;
     uint8_t mAlpha;
     int     mFlags;
+    bool    mBlitToFB;
 };
 
 /**
@@ -210,6 +211,10 @@ static void set_infos(struct copybit_context_t *dev, struct mdp_blit_req *req, i
     req->alpha = dev->mAlpha;
     req->transp_mask = MDP_TRANSP_NOP;
     req->flags = dev->mFlags | flags;
+    // check if we are blitting to f/b
+    if (COPYBIT_ENABLE == dev->mBlitToFB) {
+        req->flags |= MDP_MEMORY_ID_TYPE_FB;
+    }
 #if defined(COPYBIT_QSD8K)
     req->flags |= MDP_BLEND_FG_PREMULT;
 #endif
@@ -318,6 +323,16 @@ static int set_parameter_copybit(
         case COPYBIT_TRANSFORM:
             ctx->mFlags &= ~0x7;
             ctx->mFlags |= value & 0x7;
+            break;
+        case COPYBIT_BLIT_TO_FRAMEBUFFER:
+            if (COPYBIT_ENABLE == value) {
+                ctx->mBlitToFB = value;
+            } else if (COPYBIT_DISABLE == value) {
+                ctx->mBlitToFB = value;
+            } else {
+                LOGE ("%s:Invalid input for COPYBIT_BLIT_TO_FRAMEBUFFER : %d",
+                       __FUNCTION__, value);
+            }
             break;
         default:
             status = -EINVAL;
