@@ -30,7 +30,8 @@
 
 struct hwc_context_t;
 void getLayerResolution(const hwc_layer_t* layer, int& width, int& height);
-
+void calculate_scaled_destination(private_hwc_module_t* hwcModule, int &left,
+                                  int &top, int &width, int& height);
 // pipe status
 enum {
     PIPE_UNASSIGNED = 0,
@@ -559,6 +560,7 @@ int Bypass::prepare(hwc_context_t *ctx, hwc_layer_t *layer, mdp_pipe_info& mdp_i
         ovUI->setSource(info, orientation);
         ovUI->setCrop(crop.left, crop.top, crop_w, crop_h);
         ovUI->setDisplayParams(fbnum, waitForVsync, isFg, zorder, useVGPipe);
+        calculate_scaled_destination(hwcModule, dst.left, dst.top, dst_w, dst_h);
         ovUI->setPosition(dst.left, dst.top, dst_w, dst_h);
 
         LOGE_IF(BYPASS_DEBUG,"%s: Bypass set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] waitforVsync: %d \

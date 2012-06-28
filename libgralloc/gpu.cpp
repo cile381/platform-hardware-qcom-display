@@ -70,6 +70,14 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
     const uint32_t numBuffers = m->numBuffers;
     size_t bufferSize = m->finfo.line_length * m->info.yres;
 
+    if (m->isDynamicResolutionEnabled) {
+        // We are using the dynamic fb resolution change,
+        // allocate memory based on the required w & h.
+        int bpp = (m->fbFormat == HAL_PIXEL_FORMAT_RGB_565) ? 2 : 4;
+        int aligned_w = ALIGN(m->framebuffer->width, 32);
+        bufferSize = aligned_w * m->framebuffer->height * bpp;
+    }
+
     //adreno needs FB size to be page aligned
     bufferSize = roundUpToPageSize(bufferSize);
 
@@ -92,10 +100,9 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
     // treats the FB memory as pmem
     intptr_t vaddr = intptr_t(m->framebuffer->base);
     private_handle_t* hnd = new private_handle_t(dup(m->framebuffer->fd), bufferSize,
-                                                 private_handle_t::PRIV_FLAGS_USES_PMEM |
-                                                 private_handle_t::PRIV_FLAGS_FRAMEBUFFER,
-                                                 BUFFER_TYPE_UI, m->fbFormat, m->info.xres,
-                                                 m->info.yres);
+                                                 m->framebuffer->flags,
+                                                 BUFFER_TYPE_UI, m->fbFormat, m->framebuffer->width,
+                                                 m->framebuffer->height);
 
     // find a free slot
     for (uint32_t i=0 ; i<numBuffers ; i++) {
@@ -243,8 +250,7 @@ int gpu_context_t::free_impl(private_handle_t const* hnd) {
     private_module_t* m = reinterpret_cast<private_module_t*>(common.module);
     if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
         // free this buffer
-        const size_t bufferSize = m->finfo.line_length * m->info.yres;
-        int index = (hnd->base - m->framebuffer->base) / bufferSize;
+        int index = (hnd->base - m->framebuffer->base) / hnd->size;
         m->bufferMask &= ~(1<<index);
     } else {
         terminateBuffer(&m->base, const_cast<private_handle_t*>(hnd));

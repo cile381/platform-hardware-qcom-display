@@ -33,7 +33,7 @@ using namespace overlay;
 #define NUM_FRAMEBUFFERS_MIN  2
 #define NUM_FRAMEBUFFERS_MAX  3
 #define NUM_DEF_FRAME_BUFFERS 2
-
+#define MAX_SUPPORTED_RESOLUTION 2048
 #define NO_SURFACEFLINGER_SWAPINTERVAL
 #define COLOR_FORMAT(x) (x & 0xFFF) // Max range for colorFormats is 0 - FFF
 
@@ -161,6 +161,7 @@ struct private_module_t {
     float ydpi;
     float fps;
     int swapInterval;
+    bool isDynamicResolutionEnabled;
 #ifdef __cplusplus
     Queue<struct qbuf_t> disp; // non-empty when buffer is ready for display
 #endif
