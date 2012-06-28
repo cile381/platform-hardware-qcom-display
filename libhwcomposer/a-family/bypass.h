@@ -369,7 +369,7 @@ void Bypass::unlock_prev_frame_buffers() {
            continue;
        }
 
-	   // Check if the handle was locked previously
+       // Check if the handle was locked previously
        if (!(private_handle_t::PRIV_FLAGS_HWC_LOCK & hnd->flags)) {
            LOGE("%s: bypass buffer handle is not locked by HWC", __FUNCTION__);
            continue;
@@ -385,12 +385,12 @@ void Bypass::unlock_prev_frame_buffers() {
        }
     }
 
-	// clean up previous frame data
+    // clean up previous frame data
     sPreviousFrame.count = 0;
     free(sPreviousFrame.pipe_layer);
     sPreviousFrame.pipe_layer = NULL;
 
-	// update prev frame with current frame data
+    // update prev frame with current frame data
     update_previous_frame_info();
 #endif
 }
@@ -720,13 +720,22 @@ int Bypass::mark_layers_for_bypass(hwc_layer_list_t* list, bypass_layer_info* la
             return BYPASS_ABORT;
         }
 
-        //Reques for MDP pipes
+        //Request for MDP pipes
         int pipe_pref = PIPE_REQ_VG;
 
+#ifdef COMPOSITION_BYPASS
         if((layer_prop & BYPASS_LAYER_DOWNSCALE) &&
-                        (layer_prop & BYPASS_LAYER_BLEND)) {
-            pipe_pref = PIPE_REQ_RGB;
-         }
+                (layer_prop & BYPASS_LAYER_BLEND)) {
+            /* Round-about way of identifying if the mdp target version is
+             * 4.2 and above, since RGB pipe in 4.1 and less cannot handle
+             * downscaling with alpha*/
+            if ( FrameBufferInfo::getInstance()->canSupportTrueMirroring()) {
+                pipe_pref = PIPE_REQ_RGB;
+            } else {
+                return BYPASS_ABORT;
+            }
+        }
+#endif
 
         int allocated_pipe = sPipeMgr.req_for_pipe( pipe_pref);
         if(allocated_pipe) {
@@ -794,7 +803,7 @@ bool Bypass::parse_and_allocate(hwc_context_t* ctx, hwc_layer_list_t* list,
 
     int layer_count = list->numHwLayers;
 
-	/* clear pipe status */
+    /* clear pipe status */
     sPipeMgr.reset();
 
     bypass_layer_info* bp_layer_info = (bypass_layer_info*)
