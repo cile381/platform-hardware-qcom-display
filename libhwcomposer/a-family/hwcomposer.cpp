@@ -258,6 +258,27 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst, int hw_w, int hw_h)
     LOGD(" crop: [%d,%d,%d,%d] dst:[%d,%d,%d,%d]",
                      crop_x, crop_y, crop_w, crop_h,dst_x, dst_y, dst_w, dst_h);
 }
+
+//If displayframe is out of screen bounds, calculates
+//valid displayFrame & source crop corresponding to it.
+static void correct_crop_rects(const framebuffer_device_t* fbDev,
+                        hwc_rect_t& sourceCrop, hwc_rect_t& displayFrame,
+                        int transform) {
+    if(!isValidDestination(fbDev,displayFrame)) {
+        if(transform & HWC_TRANSFORM_ROT_90) {
+            swap(sourceCrop.left,sourceCrop.top);
+            swap(sourceCrop.right,sourceCrop.bottom);
+            calculate_crop_rects(sourceCrop,displayFrame,
+                                    fbDev->width,fbDev->height);
+            swap(sourceCrop.left,sourceCrop.top);
+            swap(sourceCrop.right,sourceCrop.bottom);
+        } else {
+            calculate_crop_rects(sourceCrop,displayFrame,
+                                    fbDev->width,fbDev->height);
+        }
+    }
+}
+
 // Returns true if external panel is connected
 static inline bool isExternalConnected(const hwc_context_t* ctx) {
 #if defined HDMI_DUAL_DISPLAY
@@ -405,21 +426,6 @@ static int prepareOverlay(hwc_context_t *ctx,
 
         hwc_rect_t sourceCrop = layer->sourceCrop;
         hwc_rect_t displayFrame = layer->displayFrame;
-        if(!isValidDestination(hwcModule->fbDevice, layer->displayFrame)) {
-            if(layer->transform & HWC_TRANSFORM_ROT_90) {
-                swap(layer->sourceCrop.left,layer->sourceCrop.top);
-                swap(layer->sourceCrop.right,layer->sourceCrop.bottom);
-                calculate_crop_rects(layer->sourceCrop,layer->displayFrame,
-                                        hwcModule->fbDevice->width,
-                                        hwcModule->fbDevice->height);
-                swap(layer->sourceCrop.left,layer->sourceCrop.top);
-                swap(layer->sourceCrop.right,layer->sourceCrop.bottom);
-            } else {
-                calculate_crop_rects(layer->sourceCrop,layer->displayFrame,
-                                        hwcModule->fbDevice->width,
-                                        hwcModule->fbDevice->height);
-            }
-        }
 
         ret = ovLibObject->setCrop(sourceCrop.left, sourceCrop.top,
                                   (sourceCrop.right - sourceCrop.left),
@@ -808,6 +814,10 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 int videoStarted = (ctx->s3dLayerFormat && overlay::is3DTV()) ?
                             VIDEO_3D_OVERLAY_STARTED : VIDEO_2D_OVERLAY_STARTED;
                 setVideoOverlayStatusInGralloc(ctx, videoStarted);
+                correct_crop_rects(hwcModule->fbDevice,
+                                        list->hwLayers[i].sourceCrop,
+                                        list->hwLayers[i].displayFrame,
+                                        list->hwLayers[i].transform);
 #ifdef USE_OVERLAY
                 if(prepareOverlay(ctx, &(list->hwLayers[i]), flags) == 0) {
                     list->hwLayers[i].compositionType = HWC_USE_OVERLAY;
@@ -819,8 +829,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                     //dynamic composition for non-overlay targets(8x25/7x27a)
                     list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
 #endif
-                } else if (hwcModule->compositionType & (COMPOSITION_TYPE_C2D|
-                            COMPOSITION_TYPE_MDP)) {
+                } else if (hwcModule->compositionType & (COMPOSITION_TYPE_C2D |
+                                            COMPOSITION_TYPE_MDP)) {
                     //Fail safe path: If drawing with overlay fails,
 
                     //Use C2D if available.
