@@ -48,7 +48,7 @@ class QCCompositionType :public Singleton<QCCompositionType> {
 ANDROID_SINGLETON_STATIC_INSTANCE(QCCompositionType);
 inline QCCompositionType::QCCompositionType()
 {
-    char property[PROPERTY_VALUE_MAX];
+    char property[PROPERTY_VALUE_MAX], mdp_property[PROPERTY_VALUE_MAX];
     mCompositionType = 0;
     if (property_get("debug.sf.hw", property, NULL) > 0) {
         if(atoi(property) == 0) {
@@ -62,11 +62,13 @@ inline QCCompositionType::QCCompositionType()
             } else if ((strncmp(property, "c2d", 3)) == 0) {
                 mCompositionType = COMPOSITION_TYPE_C2D;
             } else if ((strncmp(property, "dyn", 3)) == 0) {
-#ifdef USE_MDP3
-                mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_MDP;
-#else
-                mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_C2D;
-#endif
+                if (property_get("debug.mdpversion", mdp_property, NULL) > 0) {
+                    if ((strncmp(mdp_property, "mdp3", 4)) == 0) {
+                        mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_MDP;
+                    } else {
+                        mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_C2D;
+                    }
+                }
             } else {
                 mCompositionType = COMPOSITION_TYPE_GPU;
             }
