@@ -132,6 +132,7 @@ enum {
     EVENT_GET_VAR_PIPE,         // Read variable pipe
     EVENT_SET_VAR_PIPE_MODE,    // Set variable pipe mode
     EVENT_GET_VAR_PIPE_MODE,    // Query variable pipe mode
+    EVENT_FORCE_COMPOSITION,    // On/Off event for avoiding skip composition
 };
 
 enum {
