@@ -280,6 +280,37 @@ static void correct_crop_rects(const framebuffer_device_t* fbDev,
     }
 }
 
+void calculate_scaled_destination(private_hwc_module_t* hwcModule, int &left,
+                                  int &top, int &width, int &height)
+{
+    if (!hwcModule) {
+        LOGE("%s: hwcModule is NULL", __FUNCTION__);
+        return;
+    }
+
+    // scale the positiion
+    framebuffer_device_t *fbDev = hwcModule->fbDevice;
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+                                           fbDev->common.module);
+    if (!m->isDynamicResolutionEnabled)
+        return; // Return if we are not in the resolution change mode
+
+    // If dyn. fb resolution is enabled, we need to scale the layer
+    // display rectangle to fit into the panel resolution.
+    float panel_w = (float)m->info.xres;
+    float panel_h = (float)m->info.yres;
+    int fb_w      = fbDev->width;
+    int fb_h      = fbDev->height;
+
+    float scale_w = panel_w/fb_w;
+    float scale_h = panel_h/fb_h;
+
+    left     = (int)(left*scale_w);
+    top      = (int)(top*scale_h);
+    width    = (int)(width*scale_w);
+    height   = (int)(height*scale_h);
+}
+
 // Returns true if external panel is connected
 static inline bool isExternalConnected(const hwc_context_t* ctx) {
 #if defined HDMI_DUAL_DISPLAY

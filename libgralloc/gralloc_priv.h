@@ -160,6 +160,7 @@ struct private_handle_t {
         PRIV_FLAGS_NOT_MAPPED     = 0x00001000, // Not mapped in userspace
         PRIV_FLAGS_EXTERNAL_ONLY  = 0x00002000, // Display on external only
         PRIV_FLAGS_EXTERNAL_BLOCK = 0x00004000, // Display only this buffer on external
+        PRIV_FLAGS_EXTERNAL_FB    = 0x00008000, // The FB is allocated externally. Not the regular FB memory
     };
 
     // file-descriptors

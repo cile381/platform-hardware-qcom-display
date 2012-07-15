@@ -921,6 +921,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
     module->xdpi = xdpi;
     module->ydpi = ydpi;
     module->fps = fps;
+    module->isDynamicResolutionEnabled = false;
 
 #ifdef NO_SURFACEFLINGER_SWAPINTERVAL
     char pval[PROPERTY_VALUE_MAX];

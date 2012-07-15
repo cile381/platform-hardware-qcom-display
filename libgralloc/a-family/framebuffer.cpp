@@ -42,6 +42,7 @@
 
 #include <GLES/gl.h>
 
+#include "alloc_controller.h"
 #include "gralloc_priv.h"
 #include "fb_priv.h"
 #include "gr.h"
@@ -51,6 +52,12 @@
 
 #include <utils/profiler.h>
 #include <qcom_ui.h>
+
+using gralloc::IAllocController;
+using gralloc::IMemAlloc;
+using gralloc::IonController;
+using gralloc::alloc_data;
+using android::sp;
 
 #define FB_DEBUG 0
 
@@ -97,6 +104,9 @@ msm_copy_buffer(buffer_handle_t handle, int fd,
                 int width, int height, int format,
                 int x, int y, int w, int h);
 static int setup_borderfill_pipe(struct private_module_t* module, struct fb_var_screeninfo info);
+
+static int allocate_fb_memory(int width, int height, int format, int numBuffers,
+                               alloc_data &data);
 
 static int setup_postbuffer_pipe(struct private_module_t* module);
 
@@ -670,7 +680,8 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
 #endif
 
 
-    if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
+    if (hnd->flags & (private_handle_t::PRIV_FLAGS_FRAMEBUFFER|
+                      private_handle_t::PRIV_FLAGS_EXTERNAL_FB)) {
 
         reuse = false;
         nxtIdx = (m->currentIdx + 1) % m->numBuffers;
@@ -1049,15 +1060,61 @@ int mapFrameBufferLocked(struct private_module_t* module)
     module->bufferMask = 0;
     //adreno needs page aligned offsets. Align the fbsize to pagesize.
     size_t fbSize = roundUpToPageSize(finfo.line_length * info.yres) * module->numBuffers;
-    module->framebuffer = new private_handle_t(fd, fbSize,
-                            private_handle_t::PRIV_FLAGS_USES_PMEM, BUFFER_TYPE_UI,
-                            module->fbFormat, info.xres, info.yres);
-    void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    void *vaddr;
+
+    // Check if we are using dynamic framebuffer resolution. In order to enable
+    // this feature, both the width and height should be set by the property and
+    // should be non-zero.
+    int reqDisplayWidth = info.xres;
+    int reqDisplayHeight = info.yres;
+    module->isDynamicResolutionEnabled = false;
+    int hndFlags = private_handle_t::PRIV_FLAGS_USES_PMEM |
+                   private_handle_t::PRIV_FLAGS_FRAMEBUFFER;
+#ifdef USE_OVERLAY_TO_POST
+    property_get("debug.fb.width", pval, "0");
+    reqDisplayWidth = atoi(pval);
+    property_get("debug.fb.height", pval, "0");
+    reqDisplayHeight = atoi(pval);
+
+    if (reqDisplayHeight && reqDisplayWidth &&
+        reqDisplayHeight < MAX_SUPPORTED_RESOLUTION &&
+        reqDisplayWidth < MAX_SUPPORTED_RESOLUTION) {
+        LOGW("dynamic Framebuffer resolution set fbWidth=%d and fbHeight=%d",
+                reqDisplayWidth, reqDisplayHeight);
+        alloc_data data;
+        // Allocate the framebuffer memory from a separate heap.
+        int ret = allocate_fb_memory(reqDisplayWidth, reqDisplayHeight, module->fbFormat,
+                                      module->numBuffers, data);
+        if (ret) {
+            LOGE("Failed to allocate memory for dynamic FB resolution");
+            reqDisplayWidth = info.xres;
+            reqDisplayHeight = info.yres;
+            // Allocation from the heap failed, fallback to fbmem
+            vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+        } else {
+            // We are not using the fbmem allocated by the display driver
+            module->isDynamicResolutionEnabled = true;
+            fd = data.fd;
+            fbSize = data.size;
+            vaddr = data.base;
+            hndFlags = data.allocType | private_handle_t::PRIV_FLAGS_EXTERNAL_FB;
+        }
+    } else
+#endif
+    {
+        reqDisplayWidth = info.xres;
+        reqDisplayHeight = info.yres;
+        vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    }
+
     if (vaddr == MAP_FAILED) {
         LOGE("Error mapping the framebuffer (%s)", strerror(errno));
         close(fd);
         return -errno;
     }
+    module->framebuffer = new private_handle_t(fd, fbSize,
+                            hndFlags, BUFFER_TYPE_UI,
+                            module->fbFormat, reqDisplayWidth, reqDisplayHeight);
     module->framebuffer->base = intptr_t(vaddr);
     memset(vaddr, 0, fbSize);
 
@@ -1108,6 +1165,35 @@ int mapFrameBufferLocked(struct private_module_t* module)
 }
 
 #ifdef USE_OVERLAY_TO_POST
+static int allocate_fb_memory(int width, int height, int format, int numBuffers,
+                               alloc_data &data) {
+
+    data.base = 0;
+    data.fd = -1;
+    data.offset = 0;
+    // Allocate memory for all the 3 buffers which will be used as the framebuffer.
+    int bpp = 4;
+    if (format == HAL_PIXEL_FORMAT_RGB_565) {
+        bpp = 2;
+    }
+
+    int aligned_w = ALIGN(width, 32);
+    data.size = ALIGN(aligned_w*height*bpp, getpagesize()) * numBuffers;
+    data.align = getpagesize();
+    data.uncached = true;
+
+    // TODO: Change this heap based on requirements later.
+    int allocFlags = GRALLOC_USAGE_PRIVATE_MM_HEAP |
+                     GRALLOC_USAGE_PRIVATE_IOMMU_HEAP;
+
+    android::sp<gralloc::IAllocController> allocController =
+                                 gralloc::IAllocController::getInstance(false);
+    int err = allocController->allocate(data, allocFlags, 0);
+
+    return err;
+
+}
+
 static int setup_borderfill_pipe(struct private_module_t* module, struct fb_var_screeninfo info) {
 
     OverlayUI* pipe = module->pBorderFill;
@@ -1163,10 +1249,10 @@ static int setup_postbuffer_pipe(struct private_module_t* module) {
                             false, //isFG - N/A
                             0,     //zorder 0
                             false, //NOT VG pipe
-                            true); //FB Memory
+                            module->isDynamicResolutionEnabled? false : true); //FB Memory
 
     pipe->setCrop(0,0, fb_hnd->width, fb_hnd->height);
-    pipe->setPosition(0,0, fb_hnd->width, fb_hnd->height);
+    pipe->setPosition(0,0, module->info.xres, module->info.yres);
 
     if(pipe->commit() != overlay::NO_ERROR) {
        LOGE("setup_postbuffer_pipe: failed in commit");
@@ -1189,13 +1275,23 @@ static int mapFrameBuffer(struct private_module_t* module)
 static int fb_close(struct hw_device_t *dev)
 {
     fb_context_t* ctx = (fb_context_t*)dev;
-#if defined(HDMI_DUAL_DISPLAY)
     private_module_t* m = reinterpret_cast<private_module_t*>(
             ctx->device.common.module);
+#if defined(HDMI_DUAL_DISPLAY)
     pthread_mutex_lock(&m->overlayLock);
     m->exitHDMIUILoop = true;
     pthread_cond_signal(&(m->overlayPost));
     pthread_mutex_unlock(&m->overlayLock);
+#endif
+
+#ifdef USE_OVERLAY_TO_POST
+    if (m->isDynamicResolutionEnabled) {
+        android::sp<gralloc::IAllocController> allocController =
+                                 gralloc::IAllocController::getInstance(false);
+        sp<IMemAlloc> memalloc = allocController->getAllocator(private_handle_t::PRIV_FLAGS_USES_ION);
+        private_handle_t *hnd = (private_handle_t*)m->framebuffer;
+        memalloc->free_buffer((void*)hnd->base, hnd->size, hnd->offset, hnd->fd);
+    }
 #endif
     if (ctx) {
         free(ctx);
@@ -1236,8 +1332,10 @@ int fb_device_open(hw_module_t const* module, const char* name,
         if (status >= 0) {
             int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
             const_cast<uint32_t&>(dev->device.flags) = 0;
-            const_cast<uint32_t&>(dev->device.width) = m->info.xres;
-            const_cast<uint32_t&>(dev->device.height) = m->info.yres;
+            private_handle_t const* hnd =
+                reinterpret_cast<private_handle_t const*>(m->framebuffer);
+            const_cast<uint32_t&>(dev->device.width) = hnd->width;
+            const_cast<uint32_t&>(dev->device.height) = hnd->height;
             const_cast<int&>(dev->device.stride) = stride;
             const_cast<int&>(dev->device.format) = m->fbFormat;
             const_cast<float&>(dev->device.xdpi) = m->xdpi;

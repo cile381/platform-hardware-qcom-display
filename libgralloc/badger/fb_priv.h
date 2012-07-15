@@ -157,6 +157,7 @@ struct private_module_t {
     float ydpi;
     float fps;
     uint32_t swapInterval;
+    bool isDynamicResolutionEnabled;
 #ifdef __cplusplus
     Queue<struct qbuf_t> disp; // non-empty when buffer is ready for display
 #endif
