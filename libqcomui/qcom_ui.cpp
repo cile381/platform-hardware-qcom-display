@@ -40,6 +40,7 @@
 #include <SkBitmap.h>
 #include <SkImageEncoder.h>
 #include <Transform.h>
+#include <genlock.h>
 
 using gralloc::IMemAlloc;
 using gralloc::IonController;
@@ -875,4 +876,10 @@ void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int maxWidt
     }
 }
 
+
+void unlock_lastGpuSupportedBuffer(void *handle) {
+#ifndef NON_QCOM_TARGET
+    genlock_unlock_buffer((native_handle_t*)handle);
+#endif
+}
 
