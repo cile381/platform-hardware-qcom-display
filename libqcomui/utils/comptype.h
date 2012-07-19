@@ -62,12 +62,11 @@ inline QCCompositionType::QCCompositionType()
             } else if ((strncmp(property, "c2d", 3)) == 0) {
                 mCompositionType = COMPOSITION_TYPE_C2D;
             } else if ((strncmp(property, "dyn", 3)) == 0) {
-                if (property_get("debug.mdpversion", mdp_property, NULL) > 0) {
-                    if ((strncmp(mdp_property, "mdp3", 4)) == 0) {
+                if ( (property_get("debug.mdpversion", mdp_property, NULL) > 0)
+                        and (strncmp(mdp_property,"mdp3",4) == 0)) {
                         mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_MDP;
-                    } else {
-                        mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_C2D;
-                    }
+                } else {
+                    mCompositionType = COMPOSITION_TYPE_DYN | COMPOSITION_TYPE_C2D;
                 }
             } else {
                 mCompositionType = COMPOSITION_TYPE_GPU;
