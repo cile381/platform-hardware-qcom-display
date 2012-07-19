@@ -87,6 +87,7 @@ struct hwc_context_t {
     eHWCOverlayStatus hwcOverlayStatus;
     int swapInterval;
     bool isPrimary;
+    bool premultipliedAlpha;
 };
 
 
@@ -411,7 +412,7 @@ static int hwc_closeOverlayChannels(hwc_context_t* ctx) {
  */
 static int prepareOverlay(hwc_context_t *ctx,
                           hwc_layer_t *layer,
-                          const int flags) {
+                          int flags) {
     int ret = 0;
 
      if(ctx && Bypass::get_state() != Bypass::BYPASS_OFF) {
@@ -441,6 +442,10 @@ static int prepareOverlay(hwc_context_t *ctx,
         if(!ctx->pendingHDMI) //makes sure the UI channel is opened first
             hdmiConnected = (int)ctx->mHDMIEnabled;
 #endif
+        if(ctx->premultipliedAlpha)
+             flags |= OVERLAY_BLENDING_PREMULT;
+        else
+             flags &= ~OVERLAY_BLENDING_PREMULT;
 
         ret = ovLibObject->setSource(info, layer->transform,
                             hdmiConnected, flags);
@@ -747,6 +752,7 @@ static void statCount(hwc_context_t *ctx, hwc_layer_list_t* list) {
     int yuvBufCount = 0;
     int layersNotUpdatingCount = 0;
     int s3dLayerFormat = 0;
+    ctx->premultipliedAlpha = false;
     if (list) {
         for (size_t i=0 ; i<list->numHwLayers; i++) {
             private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
@@ -757,6 +763,8 @@ static void statCount(hwc_context_t *ctx, hwc_layer_list_t* list) {
                         layersNotUpdatingCount++;
                 s3dLayerFormat = s3dLayerFormat ? s3dLayerFormat : FORMAT_3D_INPUT(hnd->format);
             }
+            if(list->hwLayers[i].blending == HWC_BLENDING_PREMULT)
+                ctx->premultipliedAlpha = true;
         }
     }
     // Number of video/camera layers drawable with overlay
@@ -1435,7 +1443,7 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
         if (property_get("debug.egl.swapinterval", value, "1") > 0) {
             dev->swapInterval = atoi(value);
         }
-
+        dev->premultipliedAlpha = false;
         /* initialize the procs */
         dev->device.common.tag = HARDWARE_DEVICE_TAG;
         dev->device.common.version = 0;
