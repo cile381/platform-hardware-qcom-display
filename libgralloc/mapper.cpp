@@ -134,15 +134,16 @@ int gralloc_register_buffer(gralloc_module_t const* module,
     private_handle_t* hnd = (private_handle_t*)handle;
     if (hnd->pid != getpid()) {
         hnd->base = 0;
+
+        // Reset the genlock private fd flag in the handle
+        hnd->genlockPrivFd = -1;
+
         void *vaddr;
         int err = gralloc_map(module, handle, &vaddr);
         if (err) {
             LOGE("%s: gralloc_map failed", __FUNCTION__);
             return err;
         }
-
-        // Reset the genlock private fd flag in the handle
-        hnd->genlockPrivFd = -1;
 
         // Check if there is a valid lock attached to the handle.
         if (-1 == hnd->genlockHandle) {
