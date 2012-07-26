@@ -57,6 +57,7 @@ public:
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
+    bool setVisualParams(const MetaData_t& data);
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -87,6 +88,7 @@ public:
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
+    bool setVisualParams(const MetaData_t& data);
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -117,6 +119,7 @@ public:
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
+    bool setVisualParams(const MetaData_t& data);
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -147,6 +150,7 @@ public:
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
+    bool setVisualParams(const MetaData_t& data);
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -218,6 +222,10 @@ inline bool M3DExtPipe<CHAN>::setTransform(const utils::eTransform& param) {
     return mM3d.setTransform(param);
 }
 template <int CHAN>
+inline bool M3DExtPipe<CHAN>::setVisualParams(const MetaData_t& data) {
+    return mM3d.setVisualParams(data);
+}
+template <int CHAN>
 inline bool M3DExtPipe<CHAN>::setSource(const utils::PipeArgs& args)
 {
     // extract 3D fmt
@@ -272,6 +280,10 @@ inline bool M3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d) {
 template <int CHAN>
 inline bool M3DPrimaryPipe<CHAN>::setTransform(const utils::eTransform& param) {
     return mM3d.setTransform(param);
+}
+template <int CHAN>
+inline bool M3DPrimaryPipe<CHAN>::setVisualParams(const MetaData_t& data) {
+    return mM3d.setVisualParams(data);
 }
 template <int CHAN>
 inline bool M3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)
@@ -339,6 +351,10 @@ inline bool S3DExtPipe<CHAN>::setPosition(const utils::Dim& d)
 template <int CHAN>
 inline bool S3DExtPipe<CHAN>::setTransform(const utils::eTransform& param) {
     return mS3d.setTransform(param);
+}
+template <int CHAN>
+inline bool S3DExtPipe<CHAN>::setVisualParams(const MetaData_t& data) {
+    return mS3d.setVisualParams(data);
 }
 template <int CHAN>
 inline bool S3DExtPipe<CHAN>::setSource(const utils::PipeArgs& args) {
@@ -447,6 +463,10 @@ inline bool S3DPrimaryPipe<utils::OV_PIPE0>::setTransform(
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::setTransform(const utils::eTransform& param) {
     return mS3d.setTransform(param);
+}
+template <int CHAN>
+inline bool S3DPrimaryPipe<CHAN>::setVisualParams(const MetaData_t& data) {
+    return mS3d.setVisualParams(data);
 }
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)

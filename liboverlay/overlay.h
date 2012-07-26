@@ -53,6 +53,8 @@ public:
             utils::eDest dest = utils::OV_PIPE_ALL);
     bool setPosition(const utils::Dim& dim,
             utils::eDest dest = utils::OV_PIPE_ALL);
+    bool setVisualParams(const MetaData_t& data,
+            utils::eDest deat = utils::OV_PIPE_ALL);
     bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
 
     bool queueBuffer(int fd, uint32_t offset,

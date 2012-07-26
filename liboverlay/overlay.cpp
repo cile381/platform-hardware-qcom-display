@@ -169,6 +169,20 @@ bool Overlay::setSource(const utils::PipeArgs args[utils::MAX_PIPES],
     return true;
 }
 
+bool Overlay::setVisualParams(const MetaData_t& data, utils::eDest dest) {
+    OVASSERT(mOv,
+            "%s Overlay and Rotator should be init at this point",
+            __FUNCTION__);
+    utils::eOverlayState st = mState.state();
+    if (isStateValid(st)) {
+        if(!mOv->setVisualParams(data, dest)) {
+            ALOGE("Overlay %s failed", __FUNCTION__);
+            return false;
+        }
+    }
+    return true;
+}
+
 void Overlay::dump() const
 {
     OVASSERT(mOv,

@@ -57,6 +57,8 @@ public:
     bool setTransform(const utils::eTransform& param);
     /* set mdp posision using dim */
     bool setPosition(const utils::Dim& dim);
+    /* set visual params*/
+    bool setVisualParams(const MetaData_t& data);
     /* commit changes to the overlay "set"*/
     bool commit();
 
@@ -218,6 +220,11 @@ template <int PANEL>
 inline bool GenericPipe<PANEL>::setPosition(const utils::Dim& d)
 {
     return mCtrlData.ctrl.setPosition(d);
+}
+
+template <int PANEL>
+inline bool GenericPipe<PANEL>::setVisualParams(const MetaData_t& data) {
+    return mCtrlData.ctrl.setVisualParams(data);
 }
 
 template <int PANEL>
