@@ -73,18 +73,15 @@ enum {
      * WARNING - flag is outside the standard PRIVATE region
      * and may need to be moved if the gralloc API changes
      */
-    GRALLOC_USAGE_PRIVATE_UNSYNCHRONIZED  =       0X00400000,
-
-    /* Set this flag when you need to avoid mapping the memory in userspace */
-    GRALLOC_USAGE_PRIVATE_DO_NOT_MAP      =       0X00800000,
+    GRALLOC_USAGE_PRIVATE_UNSYNCHRONIZED  =       0x00400000,
 
     /* Buffer content should be displayed on an external display only */
-    GRALLOC_USAGE_EXTERNAL_ONLY           =       0x00010000,
+    GRALLOC_USAGE_EXTERNAL_ONLY           =       0x00800000,
 
     /* Only this buffer content should be displayed on external, even if
      * other EXTERNAL_ONLY buffers are available. Used during suspend.
      */
-    GRALLOC_USAGE_EXTERNAL_BLOCK          =       0x00020000,
+    GRALLOC_USAGE_EXTERNAL_BLOCK          =       0x00010000,
 
     /* Use this flag to request content protected buffers. Please note
      * that this flag is different from the GRALLOC_USAGE_PROTECTED flag
@@ -92,7 +89,7 @@ enum {
      * but still need to be protected from screen captures
      * 0x00040000 is reserved and these values are subject to change.
      */
-    GRALLOC_USAGE_PRIVATE_CP_BUFFER       =       0x00080000,
+    GRALLOC_USAGE_PRIVATE_CP_BUFFER       =       0x00020000,
 };
 
 enum {
