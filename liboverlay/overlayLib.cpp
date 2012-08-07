@@ -1859,35 +1859,24 @@ bool OverlayDataChannel::mapRotatorMemory(int num_buffers, bool uiChannel, int r
     data.align = getpagesize();
     data.uncached = true;
 
-    int allocFlags = 0;
+    int allocFlags = GRALLOC_USAGE_PRIVATE_MM_HEAP       |
+                     GRALLOC_USAGE_PRIVATE_WRITEBACK_HEAP|
+                     GRALLOC_USAGE_PRIVATE_DO_NOT_MAP;
 
     if(mSecure) {
-        allocFlags |= GRALLOC_USAGE_PRIVATE_CP_BUFFER        |
-                      GRALLOC_USAGE_PRIVATE_MM_HEAP;
+        allocFlags |= GRALLOC_USAGE_PRIVATE_CP_BUFFER;
     } else {
-        // If HDMI is connected, allocation should be from
-        // IOMMU Heap. It should not happen from MMHeap as it
-        // will break secure video playback.
-        if(isHDMIConnected()) {
-            allocFlags |= GRALLOC_USAGE_PRIVATE_IOMMU_HEAP;
-        } else {
-            allocFlags |= GRALLOC_USAGE_PRIVATE_IOMMU_HEAP |
-                          GRALLOC_USAGE_PRIVATE_MM_HEAP;
-        }
+        allocFlags |= GRALLOC_USAGE_PRIVATE_ADSP_HEAP        |
+                      GRALLOC_USAGE_PRIVATE_IOMMU_HEAP;
+        if((requestType == NEW_REQUEST) && !uiChannel)
+            allocFlags |= GRALLOC_USAGE_PRIVATE_SMI_HEAP;
     }
-
     //XXX: getInstance(false) implies that it should only
     // use the kernel allocator. Change it to something
     // more descriptive later.
     android::sp<gralloc::IAllocController> allocController =
                                  gralloc::IAllocController::getInstance(false);
     int err = allocController->allocate(data, allocFlags, 0);
-    if (err == -ENODEV) {
-        // fall back to MM_HEAP or WRITEBACK_HEAP for Legacy targets
-        allocFlags |= GRALLOC_USAGE_PRIVATE_MM_HEAP |
-                      GRALLOC_USAGE_PRIVATE_WRITEBACK_HEAP;
-        err = allocController->allocate(data, allocFlags, 0);
-    }
     if(err) {
         reportError("Cant allocate rotatory memory");
         close(mFD);
