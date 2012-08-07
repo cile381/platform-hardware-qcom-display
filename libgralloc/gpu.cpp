@@ -249,6 +249,11 @@ int gpu_context_t::free_impl(private_handle_t const* hnd) {
     } else {
         terminateBuffer(&m->base, const_cast<private_handle_t*>(hnd));
         sp<IMemAlloc> memalloc = mAllocCtrl->getAllocator(hnd->flags);
+        if (memalloc == NULL) {
+            LOGE("%s: Invalid handle", __FUNCTION__);
+            return -EINVAL;
+        }
+
         int err = memalloc->free_buffer((void*)hnd->base, (size_t) hnd->size,
                 hnd->offset, hnd->fd);
         if(err)
