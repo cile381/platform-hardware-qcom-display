@@ -798,6 +798,27 @@ static int prepareOverlay(hwc_context_t *ctx,
                           hwc_layer_t *layer,
                           int flags) {
     int ret = 0;
+    // Check whether Overlay has downscale capabilities
+    hwc_rect_t displayFrame = layer->displayFrame;
+    hwc_rect_t srcCrop = layer->sourceCrop;
+
+    int srcWidth = srcCrop.right - srcCrop.left;
+    int srcHeight = srcCrop.bottom - srcCrop.top;
+
+    int destWidth = displayFrame.right - displayFrame.left;
+    int destHeight = displayFrame.bottom - displayFrame.top;
+
+    if( ((destWidth  * HW_OVERLAY_MINIFICATION_LIMIT) < srcWidth) ||
+            ((destHeight * HW_OVERLAY_MINIFICATION_LIMIT) < srcHeight)) {
+        LOGE("%s:Overlay 8x Downscale Limitation", __FUNCTION__);
+        return -1;
+    }
+
+    if( ((destWidth  * HW_OVERLAY_MINIFICATION_LIMIT) < srcHeight) ||
+            ((destHeight * HW_OVERLAY_MINIFICATION_LIMIT) < srcWidth)) {
+        LOGE("%s:Overlay 8x Downscale Limitation", __FUNCTION__);
+        return -1;
+    }
 
 #ifdef COMPOSITION_BYPASS
     if (ctx && (ctx->bypassState != BYPASS_OFF)) {
