@@ -118,7 +118,8 @@ void Display::closeDisplay() {
     mFD = NO_INIT;
 }
 
-Rotator::Rotator() : mFD(NO_INIT), mSessionID(NO_INIT), mPmemFD(NO_INIT)
+Rotator::Rotator() : mFD(NO_INIT), mSessionID(NO_INIT), mPmemFD(NO_INIT),
+    mSize(0)
 {
     mAlloc = gralloc::IAllocController::getInstance(false);
 }
@@ -131,6 +132,7 @@ Rotator::~Rotator()
 status_t Rotator::startRotSession(msm_rotator_img_info& rotInfo,
                                    int size, int numBuffers) {
     status_t ret = NO_ERROR;
+    mSize = size;
     if (mSessionID == NO_INIT && mFD == NO_INIT) {
         mNumBuffers = numBuffers;
         mFD = open("/dev/msm_rotator", O_RDWR, 0);
@@ -191,7 +193,7 @@ status_t Rotator::closeRotSession() {
             close(mPmemFD);
         }
     }
-
+    mSize = 0;
     mFD = NO_INIT;
     mSessionID = NO_INIT;
     mPmemFD = NO_INIT;
