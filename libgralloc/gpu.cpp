@@ -67,6 +67,17 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
     const uint32_t numBuffers = m->numBuffers;
     size_t bufferSize = m->finfo.line_length * m->info.yres;
 
+    int fd = m->framebuffer->fd;
+    if (m->isDynamicResolutionEnabled && m->dynResBuffer != 0) {
+        // We are using the dynamic fb resolution change,
+        // allocate memory based on the required w & h.
+        int bpp = (m->fbFormat == HAL_PIXEL_FORMAT_RGB_565) ? 2 : 4;
+        private_handle_t* dynResHnd = m->dynResBuffer;
+        int aligned_w = ALIGN(dynResHnd->width, 32);
+        bufferSize = aligned_w * dynResHnd->height * bpp;
+        fd = dynResHnd->fd;
+    }
+
     //adreno needs FB size to be page aligned
     bufferSize = roundUpToPageSize(bufferSize);
 
@@ -88,11 +99,21 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
     // Set the PMEM flag as well, since adreno
     // treats the FB memory as pmem
     intptr_t vaddr = intptr_t(m->framebuffer->base);
-    private_handle_t* hnd = new private_handle_t(dup(m->framebuffer->fd), bufferSize,
-                                                 private_handle_t::PRIV_FLAGS_USES_PMEM |
+    intptr_t base = intptr_t(m->framebuffer->base);
+    private_handle_t* hnd = new private_handle_t(dup(fd), bufferSize,
+                                                 private_handle_t::PRIV_FLAGS_USES_PMEM|
                                                  private_handle_t::PRIV_FLAGS_FRAMEBUFFER,
                                                  BUFFER_TYPE_UI, m->fbFormat, m->info.xres,
                                                  m->info.yres);
+
+    if (m->isDynamicResolutionEnabled && m->dynResBuffer != 0) {
+        private_handle_t* dynResHnd = m->dynResBuffer;
+        vaddr = intptr_t(dynResHnd->base);
+        base = intptr_t(dynResHnd->base);
+        hnd->flags = dynResHnd->flags;
+        hnd->width = dynResHnd->width;
+        hnd->height = dynResHnd->height;
+    }
 
     // find a free slot
     for (uint32_t i=0 ; i<numBuffers ; i++) {
@@ -104,7 +125,7 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
     }
 
     hnd->base = vaddr;
-    hnd->offset = vaddr - intptr_t(m->framebuffer->base);
+    hnd->offset = vaddr - base;
     *pHandle = hnd;
     return 0;
 }

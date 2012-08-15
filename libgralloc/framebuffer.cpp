@@ -36,6 +36,7 @@
 
 #include <GLES/gl.h>
 
+#include "alloc_controller.h"
 #include "gralloc_priv.h"
 #include "fb_priv.h"
 #include "gr.h"
@@ -43,6 +44,11 @@
 #include <cutils/properties.h>
 #include <profiler.h>
 #include <overlay.h>
+
+using gralloc::IAllocController;
+using gralloc::IMemAlloc;
+using gralloc::IonController;
+using gralloc::alloc_data;
 
 #define EVEN_OUT(x) if (x & 0x0001) {x--;}
 /** min of int a, b */
@@ -64,7 +70,9 @@ struct fb_context_t {
 };
 static void update_framebuffer(struct private_module_t* m);
 static int setupFloatingPipe(struct private_module_t* module);
+static int allocate_dynamic_resolution_framebuffer(struct private_module_t* module);
 
+static gralloc::IAllocController* sAlloc = 0;
 static int fb_setSwapInterval(struct framebuffer_device_t* dev,
                               int interval)
 {
@@ -114,13 +122,25 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         reinterpret_cast<private_module_t*>(dev->common.module);
 
 
-    if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
+    if (hnd->flags & (private_handle_t::PRIV_FLAGS_FRAMEBUFFER|
+                      private_handle_t::PRIV_FLAGS_EXTERNAL_FB)) {
         genlock_lock_buffer(hnd, GENLOCK_READ_LOCK, GENLOCK_MAX_TIMEOUT);
 
-        const size_t offset = hnd->base - m->framebuffer->base;
+        size_t offset = 0;
         // frame ready to be posted, signal so that hwc can update External
         // display
         pthread_mutex_lock(&m->fbPostLock);
+
+        if (m->isDynamicResolutionEnabled) {
+            offset = hnd->base - m->dynResBuffer->base;
+            int buf_idx = offset/(m->dynResBuffer->size/m->numBuffers);
+            size_t actual_fbSize = m->framebuffer->size/m->numBuffers;
+            m->info.yoffset = buf_idx * actual_fbSize/m->finfo.line_length;
+        } else {
+            offset = hnd->base - m->framebuffer->base;
+            m->info.yoffset = offset / m->finfo.line_length;
+        }
+
         m->currentOffset = offset;
         m->fbPostDone = true;
         pthread_cond_signal(&m->fbPostCond);
@@ -130,7 +150,6 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         update_framebuffer(m);
 
         m->info.activate = FB_ACTIVATE_VBL;
-        m->info.yoffset = offset / m->finfo.line_length;
         if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
             ALOGE("FBIOPUT_VSCREENINFO failed");
             genlock_unlock_buffer(hnd);
@@ -178,7 +197,12 @@ static void update_framebuffer(struct private_module_t* m) {
             return;
         }
 
-        if(!m->overlay->queueBuffer(m->framebuffer->fd, m->currentOffset,
+        int fd = m->framebuffer->fd;
+        if (m->isDynamicResolutionEnabled) {
+            fd = m->dynResBuffer->fd;
+        }
+
+        if(!m->overlay->queueBuffer(fd, m->currentOffset,
                                 ovutils::OV_PIPE3)) {
             ALOGE("%s: Failed to Queue", __FUNCTION__);
             return;
@@ -420,6 +444,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
         module->overlay = overlay::Overlay::getInstance();
         module->overlay->setState(ovutils::OV_FB);
     }
+    err = allocate_dynamic_resolution_framebuffer(module);
 
     return 0;
 }
@@ -431,18 +456,25 @@ static int setupFloatingPipe(struct private_module_t* module) {
         ovutils::eZorder zOrder = ovutils::ZORDER_0;
         ovutils::eTransform orient = ovutils::OVERLAY_TRANSFORM_0;
 
-        private_handle_t const* fb_hnd =
-             reinterpret_cast<private_handle_t const*> (module->framebuffer);
-
         int fb_stride =  module->finfo.line_length/
                                 (module->info.bits_per_pixel >> 3);
-        ovutils::Whf info(fb_stride, fb_hnd->height,
-                                fb_hnd->format, fb_hnd->size);
         ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_MEMORY_ID_TYPE_FB;
         ovutils::eIsFg isFG = ovutils::IS_FG_OFF;
-        ovutils::PipeArgs parg(mdpFlags, info, zOrder, isFG,
-                                            ovutils::ROT_FLAGS_NONE);
 
+        private_handle_t *fb_hnd;
+        if (module->isDynamicResolutionEnabled) {
+            fb_hnd = reinterpret_cast<private_handle_t *> (module->dynResBuffer);
+            isFG = ovutils::IS_FG_SET;
+            mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
+            fb_stride = ALIGN(fb_hnd->width, 32);
+        } else {
+            fb_hnd = reinterpret_cast<private_handle_t *> (module->framebuffer);
+        }
+
+        ovutils::Whf info(fb_stride, fb_hnd->height, fb_hnd->format,
+                          fb_hnd->size);
+        ovutils::PipeArgs parg(mdpFlags, info, zOrder, isFG,
+                               ovutils::ROT_FLAGS_NONE);
 
         module->overlay->setTransform(orient, dest);
         module->overlay->setSource(parg, dest);
@@ -450,7 +482,7 @@ static int setupFloatingPipe(struct private_module_t* module) {
         ovutils::Dim dcrop(0,0,fb_hnd->width, fb_hnd->height);
         module->overlay->setCrop(dcrop, dest);
 
-        ovutils::Dim dim(0,0,fb_hnd->width, fb_hnd->height);
+        ovutils::Dim dim(0,0,module->info.xres, module->info.yres);
         if (!module->overlay->setPosition(dim, dest)) {
             ALOGE("%s: setPosition failed", __FUNCTION__);
             return -1;
@@ -460,6 +492,76 @@ static int setupFloatingPipe(struct private_module_t* module) {
             return -1;
         }
         return 0;
+}
+
+static int allocate_dynamic_resolution_framebuffer(struct private_module_t* module) {
+
+    int reqDisplayWidth, reqDisplayHeight;
+
+    module->isDynamicResolutionEnabled = false;
+    module->dynResBuffer = 0;
+
+    char property[PROPERTY_VALUE_MAX];
+    property_get("debug.fb.width", property, "0");
+    reqDisplayWidth = atoi(property);
+    property_get("debug.fb.height", property, "0");
+    reqDisplayHeight = atoi(property);
+
+    // Check if we are using dynamic framebuffer resolution. In order to enable
+    // this feature, both the width and height should be set by the property and
+    // should be non-zero.
+    if ((reqDisplayHeight == 0) || (reqDisplayWidth == 0) ||
+        (reqDisplayHeight >= MAX_SUPPORTED_RESOLUTION) ||
+        (reqDisplayWidth >= MAX_SUPPORTED_RESOLUTION)) {
+        ALOGW("Dynamic Framebuffer resolution is not enabled");
+        return 0;
+    }
+
+    ALOGD("dynamic Framebuffer resolution set fbWidth=%d and fbHeight=%d",
+             reqDisplayWidth, reqDisplayHeight);
+    alloc_data data;
+    data.base = 0;
+    data.fd = -1;
+    data.offset = 0;
+    // Allocate memory for all the 3 buffers which will be used as the framebuffer.
+    int bpp = (module->fbFormat == HAL_PIXEL_FORMAT_RGB_565) ? 2 : 4;
+
+    int aligned_w = ALIGN(reqDisplayWidth, 32);
+    data.size = ALIGN(aligned_w*reqDisplayHeight*bpp, getpagesize()) *
+                     module->numBuffers;
+    data.align = getpagesize();
+    data.uncached = true;
+
+    // TODO: Change this heap based on requirements later.
+    int allocFlags = GRALLOC_USAGE_PRIVATE_IOMMU_HEAP;
+
+    if (sAlloc == 0) {
+        sAlloc = gralloc::IAllocController::getInstance();
+    }
+
+    if (sAlloc == 0) {
+        ALOGE("%s: sAlloc is NULL", __FUNCTION__);
+        return -1;
+    }
+    int err = sAlloc->allocate(data, allocFlags);
+    if (err) {
+        ALOGE("Failed to allocate memory for dynamic FB resolution");
+        return -1;
+    } else {
+        // We are not using the fbmem allocated by the display driver
+        module->isDynamicResolutionEnabled = true;
+        int fd = data.fd;
+        size_t fbSize = data.size;
+        void *vaddr = data.base;
+        int hndFlags = data.allocType | private_handle_t::PRIV_FLAGS_EXTERNAL_FB;
+        memset(vaddr, 0, fbSize);
+        module->dynResBuffer = new private_handle_t(fd, fbSize, hndFlags,
+                                            BUFFER_TYPE_UI, module->fbFormat,
+                                            reqDisplayWidth, reqDisplayHeight);
+        module->dynResBuffer->base = intptr_t(vaddr);
+    }
+    return err;
+
 }
 
 static int mapFrameBuffer(struct private_module_t* module)
@@ -475,6 +577,18 @@ static int mapFrameBuffer(struct private_module_t* module)
 static int fb_close(struct hw_device_t *dev)
 {
     fb_context_t* ctx = (fb_context_t*)dev;
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+        ctx->device.common.module);
+
+    if (m->isDynamicResolutionEnabled) {
+        if (sAlloc != 0 && m->dynResBuffer != 0) {
+            private_handle_t *hnd = m->dynResBuffer;
+            IMemAlloc* memalloc = sAlloc->getAllocator(hnd->flags);
+            memalloc->free_buffer((void*)hnd->base, hnd->size,
+                                   hnd->offset, hnd->fd);
+            m->dynResBuffer = 0;
+        }
+    }
     if (ctx) {
         free(ctx);
     }
@@ -510,8 +624,14 @@ int fb_device_open(hw_module_t const* module, const char* name,
         if (status >= 0) {
             int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
             const_cast<uint32_t&>(dev->device.flags) = 0;
-            const_cast<uint32_t&>(dev->device.width) = m->info.xres;
-            const_cast<uint32_t&>(dev->device.height) = m->info.yres;
+            int width  = m->info.xres;
+            int height = m->info.yres;
+            if (m->isDynamicResolutionEnabled) {
+                width  = m->dynResBuffer->width;
+                height = m->dynResBuffer->height;
+            }
+            const_cast<uint32_t&>(dev->device.width) = width;
+            const_cast<uint32_t&>(dev->device.height) = height;
             const_cast<int&>(dev->device.stride) = stride;
             const_cast<int&>(dev->device.format) = m->fbFormat;
             const_cast<float&>(dev->device.xdpi) = m->xdpi;

@@ -58,10 +58,6 @@ private:
     bool setupBorderfillPipe();
     bool mSessionOpen;
     int mBorderFillId;
-    int mBorderFill_rect_w;
-    int mBorderFill_rect_h;
-    int mBorderFill_src_w;
-    int mBorderFill_src_h;
     overlay::GenericPipe<ovutils::PRIMARY> mFloating;
 };
 
@@ -83,13 +79,17 @@ inline bool FloatingPipe::setupBorderfillPipe() {
     overlay::utils::memset0(ovInfo);
     overlay::utils::memset0(ovData);
 
+    int fb_width  = utils::FrameBufferInfo::getInstance()->getWidth();
+    int fb_height = utils::FrameBufferInfo::getInstance()->getHeight();
+    int fb_stride = utils::FrameBufferInfo::getInstance()->getStride();
+
     ovInfo.src.format = MDP_RGB_BORDERFILL;
-    ovInfo.src.width = mBorderFill_src_w;
-    ovInfo.src.height = mBorderFill_src_h;
-    ovInfo.src_rect.w = mBorderFill_rect_w;
-    ovInfo.src_rect.h = mBorderFill_rect_h;
-    ovInfo.dst_rect.w = mBorderFill_rect_w;
-    ovInfo.dst_rect.h = mBorderFill_rect_h;
+    ovInfo.src.width  = fb_stride;
+    ovInfo.src.height = fb_height;
+    ovInfo.src_rect.w = fb_width;
+    ovInfo.src_rect.h = fb_height;
+    ovInfo.dst_rect.w = fb_width;
+    ovInfo.dst_rect.h = fb_height;
     ovInfo.id = MSMFB_NEW_REQUEST;
 
     // FD ini
@@ -162,8 +162,6 @@ inline bool FloatingPipe::queueBuffer(int fd, uint32_t offset) {
     return mFloating.queueBuffer(fd, offset);
 }
 inline bool FloatingPipe::setCrop(const utils::Dim& dim) {
-    mBorderFill_rect_w = dim.w;
-    mBorderFill_rect_h = dim.h;
     return mFloating.setCrop(dim);
 }
 inline bool FloatingPipe::setPosition(const utils::Dim& dim) {
@@ -174,11 +172,6 @@ inline bool FloatingPipe::setTransform(const utils::eTransform& param) {
 }
 inline bool FloatingPipe::setSource(const utils::PipeArgs& args) {
     utils::PipeArgs arg(args);
-    //Cache unaligned values for
-    //setting up BoarderFill pipe
-    mBorderFill_src_w = arg.whf.w;
-    mBorderFill_src_h = arg.whf.h;
-
     return mFloating.setSource(arg);
 }
 inline void FloatingPipe::dump() const {

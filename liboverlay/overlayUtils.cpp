@@ -88,6 +88,7 @@ namespace utils {
 FrameBufferInfo::FrameBufferInfo() {
     mFBWidth = 0;
     mFBHeight = 0;
+    mFBStride = 0;
     mBorderFillSupported = false;
 
     OvFD mFd;
@@ -106,6 +107,13 @@ FrameBufferInfo::FrameBufferInfo() {
     fb_var_screeninfo vinfo;
     if (!mdp_wrapper::getVScreenInfo(mFd.getFD(), vinfo)) {
         ALOGE("FrameBufferInfo: failed getVScreenInfo on fb0");
+        mFd.close();
+        return;
+    }
+
+    struct fb_fix_screeninfo finfo;
+    if (!mdp_wrapper::getFScreenInfo(mFd.getFD(), finfo)) {
+        ALOGE("FrameBufferInfo: failed getFScreenInfo on fb0");
         mFd.close();
         return;
     }
@@ -130,6 +138,7 @@ FrameBufferInfo::FrameBufferInfo() {
     mFd.close();
     mFBWidth = vinfo.xres;
     mFBHeight = vinfo.yres;
+    mFBStride = finfo.line_length/(vinfo.bits_per_pixel >> 3);
 }
 
 FrameBufferInfo* FrameBufferInfo::getInstance() {
@@ -145,6 +154,10 @@ int FrameBufferInfo::getWidth() const {
 
 int FrameBufferInfo::getHeight() const {
     return mFBHeight;
+}
+
+int FrameBufferInfo::getStride() const {
+    return mFBStride;
 }
 
 bool FrameBufferInfo::supportTrueMirroring() const {

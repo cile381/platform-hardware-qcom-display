@@ -22,6 +22,7 @@
 #define NUM_FRAMEBUFFERS_MIN  2
 #define NUM_FRAMEBUFFERS_MAX  3
 
+#define MAX_SUPPORTED_RESOLUTION 2048
 #define NO_SURFACEFLINGER_SWAPINTERVAL
 #define COLOR_FORMAT(x) (x & 0xFFF) // Max range for colorFormats is 0 - FFF
 
@@ -47,12 +48,14 @@ struct private_module_t {
     uint32_t bufferMask;
     pthread_mutex_t lock;
     private_handle_t *currentBuffer;
+    private_handle_t *dynResBuffer;
     struct fb_var_screeninfo info;
     struct fb_fix_screeninfo finfo;
     float xdpi;
     float ydpi;
     float fps;
     uint32_t swapInterval;
+    bool isDynamicResolutionEnabled;
     uint32_t currentOffset;
     bool fbPostDone;
     overlay::Overlay *overlay;
