@@ -816,7 +816,7 @@ void applyPixelAspectRatio (int wRatio, int hRatio, int orientation, int maxWidt
             aspectRatio = (old_height * wRatio) / (old_width * hRatio);
             displayRatio = (float)maxHeight / (float)maxWidth;
 
-            if (aspectRatio >= displayRatio) {
+            if (displayRatio > aspectRatio) {
                 new_height = old_width * aspectRatio;
                 if (new_height > maxHeight) {
                     new_height = maxHeight;
