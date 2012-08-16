@@ -1080,9 +1080,9 @@ static void hwc_enableHDMIOutput(hwc_composer_device_t *dev, int externaltype) {
     ctx->mHDMIEnabled = (external_display_type)externaltype;
     if(ctx->mHDMIEnabled) { //On connect, allow bypass to draw once to FB
         ctx->pendingHDMI = true;
-    } else { //On disconnect, close immediately (there will be no bypass)
-        handleHDMIStateChange(dev, ctx->mHDMIEnabled);
+        ctx->forceComposition = true;
     }
+        handleHDMIStateChange(dev, ctx->mHDMIEnabled);
 #endif
 }
 
