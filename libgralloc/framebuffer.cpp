@@ -441,7 +441,7 @@ static int setupFloatingPipe(struct private_module_t* module) {
         ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_MEMORY_ID_TYPE_FB;
         ovutils::eIsFg isFG = ovutils::IS_FG_OFF;
         ovutils::PipeArgs parg(mdpFlags, info, zOrder, isFG,
-                                            ovutils::ROT_FLAG_DISABLED);
+                                            ovutils::ROT_FLAGS_NONE);
 
 
         module->overlay->setTransform(orient, dest);
