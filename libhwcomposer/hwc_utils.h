@@ -108,6 +108,12 @@ void wait4fbPost(hwc_context_t* ctx);
 // Waits for the fb_post to finish PAN (primary commit)
 void wait4Pan(hwc_context_t* ctx);
 
+// Waits for signal from hwc_set to commit on ext display
+void wait4CommitSignal(hwc_context_t* ctx);
+
+// Waits for the commit to finish on ext display
+void wait4ExtCommitDone(hwc_context_t* ctx);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
@@ -207,6 +213,16 @@ struct hwc_context_t {
     // Post-processing parameters
     overlay::PPMetaData mPpParams[PP_MAX_VG_PIPES];
 
+    // used for signalling the commit Ext Disp thread
+    bool mExtCommit;
+    pthread_mutex_t mExtCommitLock;
+    pthread_cond_t mExtCommitCond;
+
+    // used for signalling the composition thread
+    // from the       extDispCommit thread
+    bool mExtCommitDone;
+    pthread_mutex_t mExtCommitDoneLock;
+    pthread_cond_t mExtCommitDoneCond;
 };
 
 #endif //HWC_UTILS_H
