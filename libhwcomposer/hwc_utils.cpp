@@ -287,4 +287,29 @@ void wait4Pan(hwc_context_t* ctx) {
         pthread_mutex_unlock(&m->fbPanLock);
     }
 }
+
+// Used in ExtCommit thread to wait for the signal from hwc_set
+void wait4CommitSignal(hwc_context_t* ctx) {
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtCommitLock);
+        while(ctx->mExtCommit == false) {
+            pthread_cond_wait(&(ctx->mExtCommitCond), &(ctx->mExtCommitLock));
+        }
+        ctx->mExtCommit = false;
+        pthread_mutex_unlock(&ctx->mExtCommitLock);
+    }
+}
+
+// Used in hwc_set to wait for External commit to finish
+void wait4ExtCommitDone(hwc_context_t* ctx) {
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtCommitDoneLock);
+        while(ctx->mExtCommitDone  == false) {
+            pthread_cond_wait(&(ctx->mExtCommitDoneCond),
+                              &(ctx->mExtCommitDoneLock));
+        }
+        ctx->mExtCommitDone = false;
+        pthread_mutex_unlock(&ctx->mExtCommitDoneLock);
+    }
+}
 };//namespace
