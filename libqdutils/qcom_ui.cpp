@@ -143,7 +143,8 @@ bool isGPUSupportedFormat(int format) {
         return true;
     } else if ((format == HAL_PIXEL_FORMAT_RGB_888) ||
                (format == HAL_PIXEL_FORMAT_YCrCb_422_SP) ||
-               (format == HAL_PIXEL_FORMAT_YCbCr_422_SP)){
+               (format == HAL_PIXEL_FORMAT_YCbCr_422_SP) ||
+               (format == HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS)) {
         return false;
     } else if (format & INTERLACE_MASK) {
         // Interlaced content
@@ -589,6 +590,9 @@ inline void getHalPixelFormatStr(int format, char pixelformatstr[])
             break;
         case HAL_PIXEL_FORMAT_INTERLACE:
             strcpy(pixelformatstr, "INTERLACE");
+            break;
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
+            strcpy(pixelformatstr, "YCbCr_420_SP_VENUS");
             break;
         default:
             sprintf(pixelformatstr, "Unknown0x%X", format);
