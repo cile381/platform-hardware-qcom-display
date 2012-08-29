@@ -58,9 +58,9 @@ void eglHandles::updateEglHandles(void* egl_lib){
 
 void eglHandles::openEglLibAndGethandle(){
 
-    egl_lib = ::dlopen("libEGL_adreno200.so", RTLD_GLOBAL | RTLD_LAZY);
+    egl_lib = ::dlopen("libEGL_adreno.so", RTLD_GLOBAL | RTLD_LAZY);
     if (!egl_lib) {
-        ALOGE(" %s::Unable to open libEGL_adreno200",__FUNCTION__) ;
+        ALOGE(" %s::Unable to open libEGL_adreno",__FUNCTION__) ;
     }
 }
 
