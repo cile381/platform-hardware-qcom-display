@@ -1287,13 +1287,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                     // We've opened the channel. Set the state to open.
                     ctx->hwcOverlayStatus = HWC_OVERLAY_OPEN;
 #else
-                if (((list->hwLayers[i].transform & HAL_TRANSFORM_FLIP_H) ||
-                    (list->hwLayers[i].transform & HAL_TRANSFORM_FLIP_V)) &&
-                    ((list->hwLayers[i].transform &  HAL_TRANSFORM_ROT_90) ||
-                    (list->hwLayers[i].transform &  HAL_TRANSFORM_ROT_270))){
-                    //Sending video layer with flip & rotation to gpu transformation
-                        list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
-                } else if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
+                if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
                     //dynamic composition for non-overlay targets(8x25/7x27a)
                     list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
 #endif
@@ -1485,6 +1479,26 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     // this needs to change to accomodate vertical stride
     // if needed in the future
     src.vert_padding = 0;
+
+    int layerTransform = layer->transform ;
+    // When flip and rotation(90 or 270) are present alter the flip,
+    // as GPU is doing the flip and rotation in opposite order
+    // to that of MDP3.0
+#ifdef USE_MDP3
+    if (((layer->transform& HAL_TRANSFORM_FLIP_H) ||
+       (layer->transform & HAL_TRANSFORM_FLIP_V)) &&
+       (layer->transform &  HAL_TRANSFORM_ROT_90)){
+        if(layer->transform & HAL_TRANSFORM_FLIP_H){
+            layerTransform ^= HAL_TRANSFORM_FLIP_H;
+            layerTransform |= HAL_TRANSFORM_FLIP_V;
+        }
+        if(layer->transform & HAL_TRANSFORM_FLIP_V){
+            layerTransform ^= HAL_TRANSFORM_FLIP_V;
+            layerTransform |= HAL_TRANSFORM_FLIP_H;
+        }
+    }
+#endif
+
     // Remove the srcBufferTransform if any
     layer->transform = (layer->transform & FINAL_TRANSFORM_MASK);
 
@@ -1628,7 +1642,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     }
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_WIDTH, renderBuffer->width);
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT, renderBuffer->height);
-    copybit->set_parameter(copybit, COPYBIT_TRANSFORM, layer->transform);
+    copybit->set_parameter(copybit, COPYBIT_TRANSFORM, layerTransform);
     copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA,
                            (layer->blending == HWC_BLENDING_NONE) ? -1 : layer->alpha);
     copybit->set_parameter(copybit, COPYBIT_PREMULTIPLIED_ALPHA,
