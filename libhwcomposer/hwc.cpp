@@ -93,6 +93,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         VideoOverlay::reset();
         VideoPIP::reset();
         ExtOnly::reset();
+        UIMirrorOverlay::reset();
 
         getLayerStats(ctx, list);
         // Mark all layers to COPYBIT initially
