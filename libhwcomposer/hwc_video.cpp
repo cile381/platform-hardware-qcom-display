@@ -20,6 +20,7 @@
 #include "hwc_qbuf.h"
 #include "hwc_video.h"
 #include "hwc_external.h"
+#include "hwc_uimirror.h"
 #include "qdMetaData.h"
 
 namespace qhwc {
@@ -88,14 +89,17 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
 
     //Support 1 video layer
     if(sYuvCount == 1) {
+        bool trueMirrorSupported = overlay::utils::FrameBufferInfo::
+                                          getInstance()->supportTrueMirroring();
         //Skip on primary, display on ext.
         if(sIsYuvLayerSkip && ctx->mExtDisplay->getExternalDisplay()) {
-            newState = ovutils::OV_2D_VIDEO_ON_TV;
+            if(trueMirrorSupported && sCCLayerIndex == -1)
+                newState = ovutils::OV_UI_MIRROR;
+            else
+                newState = ovutils::OV_2D_VIDEO_ON_TV;
         } else if(sIsYuvLayerSkip) { //skip on primary, no ext
             newState = ovutils::OV_CLOSED;
         } else if(ctx->mExtDisplay->getExternalDisplay()) {
-            //display on both primary and secondary
-            newState = ovutils::OV_2D_VIDEO_ON_PANEL_TV;
             if(sLayerS3DFormat) {
                 // Initialize to the default state
                 newState = ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV;
@@ -103,6 +107,15 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
                     // Change the state if the device is connected to 3DTV.
                     newState = ovutils::OV_3D_VIDEO_ON_3D_TV;
                 }
+            } else if(trueMirrorSupported && (sCCLayerIndex == -1)) {
+                ALOGD_IF(VIDEO_DEBUG,"In %s: setting state to "
+                                          "OV_2D_TRUE_UI_MIRROR", __FUNCTION__);
+                newState = ovutils::OV_2D_TRUE_UI_MIRROR;
+            } else {
+                ALOGD_IF(VIDEO_DEBUG,"In %s: setting state to "
+                                      "OV_2D_VIDEO_ON_PANEL_TV", __FUNCTION__);
+                //display on both primary and secondary
+                newState = ovutils::OV_2D_VIDEO_ON_PANEL_TV;
             }
         } else { //display on primary only
             newState = ovutils::OV_2D_VIDEO_ON_PANEL;
@@ -129,6 +142,7 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
         case ovutils::OV_3D_VIDEO_ON_3D_PANEL:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
+        case ovutils::OV_2D_TRUE_UI_MIRROR:
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
             break;
@@ -284,11 +298,16 @@ bool VideoOverlay::configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     else
         ov.setVisualParams(*metadata, ovutils::OV_PIPE1);
 
+    // z_order should be 1 for TRUE MIRRORING
+    ovutils::eZorder zorder = (overlay::utils::FrameBufferInfo::
+                                  getInstance()->supportTrueMirroring()) ?
+                                  ovutils::ZORDER_1: ovutils::ZORDER_0;
+
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_0,
+            zorder,
             isFgFlag,
-            ovutils::ROT_FLAGS_NONE);
+            ovutils::ROT_DOWNSCALE_ENABLED);
     ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
     ov.setSource(pargs, ovutils::OV_PIPE1);
 
@@ -309,6 +328,7 @@ bool VideoOverlay::configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     dpos.y = displayFrame.top;
     dpos.w = (displayFrame.right - displayFrame.left);
     dpos.h = (displayFrame.bottom - displayFrame.top);
+    dpos.o = ctx->deviceOrientation;
 
     //Only for External
     ov.setPosition(dpos, ovutils::OV_PIPE1);
@@ -539,6 +559,11 @@ bool VideoOverlay::configure(hwc_context_t *ctx, hwc_layer_t *yuvLayer,
             case ovutils::OV_3D_VIDEO_ON_3D_TV:
                 ret &= configExtVidS3D(ctx, yuvLayer);
                 break;
+            case ovutils::OV_2D_TRUE_UI_MIRROR:
+                UIMirrorOverlay::prepare(ctx, NULL);
+                ret &= configExtVid(ctx, yuvLayer);
+                ret &= configPrimVid(ctx, yuvLayer);
+                break;
             default:
                 return false;
         }
@@ -638,6 +663,17 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
             if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
                 ALOGE("%s: queueBuffer failed for right view external",
                                                             __FUNCTION__);
+            }
+            break;
+        case ovutils::OV_2D_TRUE_UI_MIRROR:
+            // Play external
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+                ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
+                ret = false;
+            }
+            // Play primary
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+                ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
                 ret = false;
             }
             break;
