@@ -189,6 +189,11 @@ struct hwc_context_t {
     bool mExtCommitDone;
     pthread_mutex_t mExtCommitDoneLock;
     pthread_cond_t mExtCommitDoneCond;
+    // flag that indicate secure session status
+    bool mSecure;
+
+    // flag that indicate whether secure/desecure session in progress
+    bool mSecureConfig;
 };
 
 #endif //HWC_UTILS_H
