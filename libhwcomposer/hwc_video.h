@@ -34,6 +34,8 @@ public:
             int ccLayerIndex, int layerS3DFormat);
     //resets values
     static void reset();
+    //returns yuv count
+    static int getYuvCount();
 private:
     //Choose an appropriate overlay state based on conditions
     static void chooseState(hwc_context_t *ctx);
@@ -52,9 +54,6 @@ private:
     static bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer);
     //Marks layer flags if this feature is used
     static void markFlags(hwc_layer_t *layer);
-    //returns yuv count
-    static int getYuvCount();
-
     //The chosen overlay state.
     static ovutils::eOverlayState sState;
     //Number of yuv layers in this drawing round
