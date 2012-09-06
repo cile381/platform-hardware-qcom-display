@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2012, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -10,7 +10,7 @@
  *       copyright notice, this list of conditions and the following
  *       disclaimer in the documentation and/or other materials provided
  *       with the distribution.
- *     * Neither the name of The Linux Foundation nor the names of its
+ *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -78,6 +78,63 @@ status_t HWComposerService::setActionSafeDimension(int w, int h) {
         externalDisplay->setActionSafeDimension(w, h);
     } else {
         ALOGE("External Display not connected");
+    }
+    return NO_ERROR;
+}
+status_t HWComposerService::setOpenSecureStart( ) {
+    mHwcContext->mSecureConfig = true;
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::setOpenSecureEnd( ) {
+    mHwcContext->mSecure = true;
+    mHwcContext->mSecureConfig = false;
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::setCloseSecureStart( ) {
+    mHwcContext->mSecureConfig = true;
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::setCloseSecureEnd( ) {
+    mHwcContext->mSecure = false;
+    mHwcContext->mSecureConfig = false;
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
     }
     return NO_ERROR;
 }
