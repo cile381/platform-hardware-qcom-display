@@ -503,6 +503,7 @@ void Overlay::closeExternalChannel() {
     if (objOvCtrlChannel[VG1_PIPE].isChannelUP()) {
         objOvCtrlChannel[VG1_PIPE].closeControlChannel();
         objOvDataChannel[VG1_PIPE].closeDataChannel();
+        mExternalDisplay = 0;
     }
 }
 
