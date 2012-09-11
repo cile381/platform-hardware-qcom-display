@@ -289,10 +289,19 @@ int mapFrameBufferLocked(struct private_module_t* module)
         return -errno;
 
     if (int(info.width) <= 0 || int(info.height) <= 0) {
-        // the driver doesn't return that information
-        // default to 160 dpi
-        info.width  = ((info.xres * 25.4f)/160.0f + 0.5f);
-        info.height = ((info.yres * 25.4f)/160.0f + 0.5f);
+        // driver did't return width & height
+        // read ro.sf.lcd_density to set these
+        float property_dpi = 0;
+        char pval[PROPERTY_VALUE_MAX];
+        property_get("ro.sf.lcd_density", pval, "-1");
+        property_dpi = atoi(pval);
+        if (0 == property_dpi) {
+            ALOGE("%s:DPI property must be defined, set default to 160",
+                                                           __FUNCTION__);
+            property_dpi = 160;
+        }
+        info.width  = ((info.xres * 25.4f)/property_dpi + 0.5f);
+        info.height = ((info.yres * 25.4f)/property_dpi + 0.5f);
     }
 
     float xdpi = (info.xres * 25.4f) / info.width;
