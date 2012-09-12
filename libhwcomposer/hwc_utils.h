@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, Code Aurora Forum. All rights reserved.
+ * Copyright (C) 2013, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,6 +116,9 @@ static inline bool isExtCC(const private_handle_t* hnd) {
 
 // Initialize uevent thread
 void init_uevent_thread(hwc_context_t* ctx);
+
+// Initialize vsync thread
+void init_vsync_thread(hwc_context_t* ctx);
 
 inline void getLayerResolution(const hwc_layer_t* layer,
                                          int& width, int& height)
