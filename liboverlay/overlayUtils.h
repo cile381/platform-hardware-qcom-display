@@ -556,6 +556,7 @@ inline bool isYuv(uint32_t format) {
         case MDP_Y_CBCR_H2V2_TILE:
         case MDP_Y_CR_CB_H2V2:
         case MDP_Y_CBCR_H2V2_VENUS:
+        case MDP_Y_CR_CB_GH2V2:
             return true;
         default:
             return false;
@@ -705,6 +706,8 @@ inline int getRotOutFmt(uint32_t format) {
             return MDP_Y_CBCR_H2V2;
         case MDP_Y_CB_CR_H2V2:
             return MDP_Y_CBCR_H2V2;
+        case MDP_Y_CR_CB_GH2V2:
+            return MDP_Y_CRCB_H2V2;
         default:
             return format;
     }
