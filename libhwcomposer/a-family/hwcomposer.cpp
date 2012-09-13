@@ -1067,18 +1067,23 @@ static void updateExtDispDevFbIndex()
     FILE *displayDeviceFP = NULL;
     char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
     char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
-    for(int i = 0, j = 1; j < MAX_DISPLAY_DEVICES; j++) {
-        sprintf (msmFbTypePath, "/sys/class/graphics/fb%d/msm_fb_type", j);
-        displayDeviceFP = fopen(msmFbTypePath, "r");
-        if(displayDeviceFP){
-            fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
-                  displayDeviceFP);
-            if(strncmp(fbType, extFrameBufferName[i],
-                       strlen(extFrameBufferName[i])) == 0){
-                // this is the framebuffer index that we want to send it further
-                extDeviceFbIndex[i++] = j;
+    for(int i = 0; i < MAX_DISPLAY_EXTERNAL_DEVICES; i++) {
+        for(int j = 1; j < MAX_DISPLAY_DEVICES; j++) {
+            sprintf (msmFbTypePath, "/sys/class/graphics/fb%d/msm_fb_type", j);
+            displayDeviceFP = fopen(msmFbTypePath, "r");
+            if(displayDeviceFP){
+                fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                        displayDeviceFP);
+                if(strncmp(fbType, extFrameBufferName[i],
+                            strlen(extFrameBufferName[i])) == 0){
+                    // this is the framebuffer index that we want to 
+                    // send it further
+                    extDeviceFbIndex[i++] = j;
+                    fclose(displayDeviceFP);
+                    continue;
+                }
+                fclose(displayDeviceFP);
             }
-            fclose(displayDeviceFP);
         }
     }
 }
