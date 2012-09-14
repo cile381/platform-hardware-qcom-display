@@ -22,6 +22,8 @@
 #include "hwc_external.h"
 #include "qdMetaData.h"
 
+#define SUPPORT_4LAYER 0
+
 namespace qhwc {
 
 /****** Class PipeMgr ***********/
@@ -294,6 +296,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
         // commit - commit changes to mdp driver
         // queueBuffer - not here, happens when draw is called
 
+        ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0 ;
         ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
         ovutils::eMdpFlags mdpFlags = mdp_info.isVG ? ovutils::OV_MDP_PIPE_SHARE
                                                    : ovutils::OV_MDP_FLAGS_NONE;
@@ -306,30 +309,27 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
                     ovutils::OV_MDP_BLEND_FG_PREMULT);
         }
 
-        ovutils::eRotFlags rot = ovutils::ROT_FLAGS_NONE;
-
-        if(isYuvBuffer(hnd)) {
-            SetVidInfo(layer, mdpFlags);
-            rot  = ovutils::ROT_DOWNSCALE_ENABLED;
-        }
-
-        ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0 ;
         if(!(layer->transform & HWC_TRANSFORM_ROT_90)) {
             if(layer->transform & HWC_TRANSFORM_FLIP_H) {
-                ovutils::setMdpFlags(mdpFlags,ovutils::OV_MDP_FLIP_H);
+                ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_FLIP_H);
             }
+
             if(layer->transform & HWC_TRANSFORM_FLIP_V) {
-                ovutils::setMdpFlags(mdpFlags,ovutils::OV_MDP_FLIP_V);
+                ovutils::setMdpFlags(mdpFlags,  ovutils::OV_MDP_FLIP_V);
             }
-        }else {
+        } else {
             orient = static_cast<ovutils::eTransform>(layer->transform);
+        }
+
+        if(isYuvBuffer(hnd)){
+            SetVidInfo(layer, mdpFlags);
         }
 
         ovutils::PipeArgs parg(mdpFlags,
                                info,
                                zOrder,
                                isFG,
-                               rot);
+                               ovutils::ROT_FLAGS_NONE);
 
         if (!ov.setSource(parg, dest)) {
             ALOGE("%s: setSource failed", __FUNCTION__);
@@ -348,6 +348,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
             ALOGE("%s: setPosition failed", __FUNCTION__);
             return -1;
         }
+
+        ov.setTransform(orient, dest);
 
         ALOGE_IF(isDebug(),"%s: MDP set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] \
                        nPipe: %d isFG: %d isVG: %d zorder: %d",__FUNCTION__,
@@ -405,13 +407,15 @@ bool MDPComp::is_doable(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
         return false;
     }
 
-    //MDP composition is not efficient if rotation is needed for RGB buffers
+    /* As MDP h/w supports flip operation, use MDP comp for flips.
+     * MDP composition is not efficient if rotation is needed for RGB buffers
+     * Fail for any transform involving 90 (90, 270) for RGB.
+     */
+
     for(unsigned int i = 0; i < list->numHwLayers; ++i) {
         private_handle_t* hnd = (private_handle_t*)list->hwLayers[i].handle;
-        // As MDP h/w supports flip operation, use MDP comp only for
-        // 180 transforms. Fail for any transform involving 90 (90, 270).
         if(((list->hwLayers[i].transform & HWC_TRANSFORM_ROT_90) &&
-                                    !isYuvBuffer(hnd))|| isSecureBuffer(hnd)) {
+                    !isYuvBuffer(hnd))|| isSecureBuffer(hnd)) {
 
            ALOGD_IF(isDebug(), "%s: orientation needed for RGB",__FUNCTION__);
            return false;

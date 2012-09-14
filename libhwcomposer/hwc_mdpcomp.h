@@ -223,7 +223,9 @@ private:
 
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
-
+    /* Calculate the scaled destination rectangle for dynamic FB resolution */
+    static void calculate_scaled_destination(hwc_context_t* ctx, int &top,
+                                           int &left, int &width, int &height);
     /* set video buffer specific datat */
     static void SetVidInfo(hwc_layer_t *layer, ovutils::eMdpFlags &mdpFlags);
 };
