@@ -122,8 +122,10 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         return 0;
     }
 
-    if(ctx->mExtDisplay->getExternalDisplay())
-        ovutils::setExtType(ctx->mExtDisplay->getExternalDisplay());
+    ctx->externalDisplay = ctx->mExtDisplay->getExternalDisplay();
+
+    if(ctx->externalDisplay)
+        ovutils::setExtType(ctx->externalDisplay);
     if (ctx->hdmi_pending == true) {
         if ((qdutils::MDPVersion::getInstance().getMDPVersion() >=
             qdutils::MDP_V4_2) || (ctx->mOverlay->getState() !=
@@ -180,11 +182,11 @@ static int hwc_eventControl(struct hwc_composer_device* dev,
                 ret = -errno;
 
             if(ctx->mExtDisplay->isHDMIConfigured() &&
-                 (ctx->mExtDisplay->getExternalDisplay()==EXTERN_DISPLAY_FB1)) {
+                    (ctx->externalDisplay == EXTERN_DISPLAY_FB1)) {
                 // enableHDMIVsync will return -errno on error
                 ret = ctx->mExtDisplay->enableHDMIVsync(value);
             }
-           break;
+            break;
        case HWC_EVENT_ORIENTATION:
              ctx->deviceOrientation = value;
            break;
@@ -234,7 +236,7 @@ static int hwc_set(hwc_composer_device_t *dev,
         }
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
         if(ctx->mMDP.hasOverlay) {
-            if(ctx->mExtDisplay->getExternalDisplay()) {
+            if(ctx->externalDisplay) {
                 wait4fbPost(ctx);
                 //Can draw to Ext Disp only when fb_post is reached
                 //Ext Display Rotate + ov_play and primary commit (PAN)
