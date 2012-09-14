@@ -137,7 +137,10 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         getLayerStats(ctx, list);
         // Mark all layers to COPYBIT initially
         CopyBit::prepare(ctx, list);
-        if(VideoOverlay::prepare(ctx, list)) {
+
+        if(MDPComp::configure(dev, list)) {
+            ctx->overlayInUse = true;
+        } else if(VideoOverlay::prepare(ctx, list)) {
             ctx->overlayInUse = true;
             //Nothing here
         } else if(VideoPIP::prepare(ctx, list)) {
@@ -145,8 +148,6 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         } else if(ExtOnly::prepare(ctx, list)) {
             ctx->overlayInUse = true;
         } else if(UIMirrorOverlay::prepare(ctx, list)) {
-            ctx->overlayInUse = true;
-        } else if(MDPComp::configure(dev, list)) {
             ctx->overlayInUse = true;
         } else if (0) {
             //Other features
@@ -157,7 +158,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
             ctx->mOverlay->setState(ovutils::OV_FB);
         }
 
-        qdutils::CBUtils::checkforGPULayer(list);
+        qdutils::CBUtils::updateStat(list, MDPComp::isUsed());
     }
 
     return 0;

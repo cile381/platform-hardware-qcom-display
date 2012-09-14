@@ -265,7 +265,7 @@ template <> struct StateTraits<utils::OV_BYPASS_1_LAYER>
     typedef overlay::NullPipe pipe2;   // place holder
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
+    typedef Rotator rot0;
     typedef NullRotator rot1;
     typedef NullRotator rot2;
     typedef NullRotator rot3;
@@ -280,8 +280,8 @@ template <> struct StateTraits<utils::OV_BYPASS_2_LAYER>
     typedef overlay::NullPipe pipe2;   // place holder
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
     typedef NullRotator rot2;
     typedef NullRotator rot3;
 
@@ -295,9 +295,9 @@ template <> struct StateTraits<utils::OV_BYPASS_3_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe2;
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
-    typedef NullRotator rot2;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
+    typedef Rotator rot2;
     typedef NullRotator rot3;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2, pipe3> ovimpl;
@@ -310,9 +310,9 @@ template <> struct StateTraits<utils::OV_BYPASS_4_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe2;
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
-    typedef NullRotator rot2;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
+    typedef Rotator rot2;
     typedef NullRotator rot3;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2, pipe3> ovimpl;
