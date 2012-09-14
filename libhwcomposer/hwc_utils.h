@@ -156,7 +156,7 @@ struct hwc_context_t {
     int deviceOrientation;
     int swapInterval;
     double dynThreshold;
-
+    int externalDisplay;
     //Framebuffer device
     framebuffer_device_t *mFbDev;
 

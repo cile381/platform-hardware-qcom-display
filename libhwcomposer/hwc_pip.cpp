@@ -77,7 +77,7 @@ void VideoPIP::chooseState(hwc_context_t *ctx) {
     ovutils::eOverlayState newState = ovutils::OV_CLOSED;
 
     //Support 1 video layer
-    if(sYuvCount == 2 && !ctx->mExtDisplay->getExternalDisplay()) {
+    if(sYuvCount == 2 && !ctx->externalDisplay) {
         /* PIP: Picture in picture
            If HDMI is not connected as secondary and there are two videos
            we can use two VG pipes for video playback. */

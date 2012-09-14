@@ -119,9 +119,10 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         return 0;
     }
 
-    if(ctx->mExtDisplay->getExternalDisplay())
-        ovutils::setExtType(ctx->mExtDisplay->getExternalDisplay());
+    ctx->externalDisplay = ctx->mExtDisplay->getExternalDisplay();
 
+    if(ctx->externalDisplay)
+        ovutils::setExtType(ctx->externalDisplay);
     if (LIKELY(list)) {
         //reset for this draw round
         VideoOverlay::reset();
@@ -175,6 +176,11 @@ static int hwc_eventControl(struct hwc_composer_device* dev,
             ALOGD_IF (VSYNC_DEBUG, "VSYNC state changed to %s",
                                            (value)?"ENABLED":"DISABLED");
             pthread_mutex_unlock(&ctx->vstate.lock);
+            if(ctx->mExtDisplay->isHDMIConfigured() &&
+                    (ctx->externalDisplay == EXTERN_DISPLAY_FB1)) {
+                // enableHDMIVsync will return -errno on error
+                ret = ctx->mExtDisplay->enableHDMIVsync(value);
+            }
             break;
        case HWC_EVENT_ORIENTATION:
              ctx->deviceOrientation = value;
@@ -224,7 +230,7 @@ static int hwc_set(hwc_composer_device_t *dev,
         }
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
         if(ctx->mMDP.hasOverlay) {
-            if(ctx->mExtDisplay->getExternalDisplay()) {
+            if(ctx->externalDisplay) {
                 wait4fbPost(ctx);
                 //Can draw to Ext Disp only when fb_post is reached
                 //Ext Display Rotate + ov_play and primary commit (PAN)
