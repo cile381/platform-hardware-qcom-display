@@ -20,6 +20,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_qbuf.h"
 #include "hwc_external.h"
+#include "qdMetaData.h"
 
 #define SUPPORT_4LAYER 0
 
@@ -93,14 +94,16 @@ int PipeMgr::assign_pipe(int pipe_pref) {
 
 /****** Class MDPComp ***********/
 
-MDPComp::State MDPComp::sMDPCompState = MDPCOMP_OFF;
+State MDPComp::sMDPCompState = MDPCOMP_OFF;
 struct MDPComp::frame_info MDPComp::sCurrentFrame;
 PipeMgr MDPComp::sPipeMgr;
 IdleInvalidator *MDPComp::idleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
 bool MDPComp::sDebugLogs = false;
-int MDPComp::sSkipCount = 0;
+bool MDPComp::sUnsupportedLayersPresent = 0;
 int MDPComp::sMaxLayers = 0;
+int MDPComp::sYUVLayerIndex = -1;
+bool MDPComp::sSecuredVidPresent = false;
 
 bool MDPComp::deinit() {
     //XXX: Tear down MDP comp state
@@ -180,6 +183,20 @@ void MDPComp::print_info(hwc_layer_t* layer)
                              s_l, s_t, s_r, s_b, (s_r - s_l), (s_b - s_t),
                              d_l, d_t, d_r, d_b, (d_r - d_l), (d_b - d_t));
 }
+
+void MDPComp::SetVidInfo(hwc_layer_t *layer, ovutils::eMdpFlags &mdpFlags) {
+     private_handle_t *hnd = (private_handle_t *)layer->handle;
+
+     if(hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+     }
+
+     MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+     if((metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
+    }
+}
+
 /*
  * Configures pipe(s) for MDP composition
  */
@@ -287,15 +304,23 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
                     ovutils::OV_MDP_BLEND_FG_PREMULT);
         }
 
-        if(layer->transform != HWC_TRANSFORM_ROT_180) {
-           ovutils::eTransform orient =
-               static_cast<ovutils::eTransform>(layer->transform);
-           ov.setTransform(orient, dest);
-        } else  {
-            ovutils::setMdpFlags(mdpFlags,
-                    ovutils::OV_MDP_180_FLIP);
+        ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0;
+
+        if(!(layer->transform & HWC_TRANSFORM_ROT_90)) {
+            if(layer->transform & HWC_TRANSFORM_FLIP_H) {
+                ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_FLIP_H);
+            }
+
+            if(layer->transform & HWC_TRANSFORM_FLIP_V) {
+                ovutils::setMdpFlags(mdpFlags,  ovutils::OV_MDP_FLIP_V);
+            }
+        } else {
+            orient = static_cast<ovutils::eTransform>(layer->transform);
         }
 
+        if(isYuvBuffer(hnd)){
+            SetVidInfo(layer, mdpFlags);
+        }
 
         ovutils::PipeArgs parg(mdpFlags,
                                info,
@@ -321,10 +346,13 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
             return -1;
         }
 
-        ALOGD_IF(isDebug(),"%s: MDP set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] \
-                       nPipe: %d isFG: %d zorder: %d",__FUNCTION__, dcrop.x,
-                       dcrop.y,dcrop.w, dcrop.h, dim.x, dim.y, dim.w, dim.h,
-                       nPipeIndex,mdp_info.isFG, mdp_info.z_order);
+        ov.setTransform(orient, dest);
+
+        ALOGE_IF(isDebug(),"%s: MDP set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] \
+                       nPipe: %d isFG: %d isVG: %d zorder: %d",__FUNCTION__,
+                       dcrop.x, dcrop.y,dcrop.w, dcrop.h, dim.x, dim.y,
+                       dim.w, dim.h, nPipeIndex,mdp_info.isFG,
+                       mdp_info.isVG, mdp_info.z_order);
 
         if (!ov.commit(dest)) {
             ALOGE("%s: commit failed", __FUNCTION__);
@@ -370,14 +398,24 @@ bool MDPComp::is_doable(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
         return false;
     }
 
-    //MDP composition is not efficient if layer neeeds
-    //MDP rotator
+    //Skip layer present
+    if(sUnsupportedLayersPresent) {
+        ALOGD_IF(isDebug(), "%s: UnSupported layer(s) are present",__FUNCTION__);
+        return false;
+    }
+
+    /* As MDP h/w supports flip operation, use MDP comp for flips.
+     * MDP composition is not efficient if rotation is needed for RGB buffers
+     * Fail for any transform involving 90 (90, 270) for RGB.
+     */
+
     for(unsigned int i = 0; i < list->numHwLayers; ++i) {
-        // As MDP h/w supports flip operation, use MDP comp only for
-        // 180 transforms. Fail for any transform involving 90 (90, 270).
-        if(list->hwLayers[i].transform & HWC_TRANSFORM_ROT_90) {
-                ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
-                return false;
+        private_handle_t* hnd = (private_handle_t*)list->hwLayers[i].handle;
+        if(((list->hwLayers[i].transform & HWC_TRANSFORM_ROT_90) &&
+                    !isYuvBuffer(hnd))|| isSecureBuffer(hnd)) {
+
+           ALOGD_IF(isDebug(), "%s: orientation needed for RGB",__FUNCTION__);
+           return false;
         }
     }
 
@@ -403,9 +441,7 @@ void MDPComp::get_layer_info(hwc_layer_t* layer, int& flags) {
 
     private_handle_t* hnd = (private_handle_t*)layer->handle;
 
-    if(layer->flags & HWC_SKIP_LAYER) {
-        flags |= MDPCOMP_LAYER_SKIP;
-    } else if(hnd != NULL &&
+    if(hnd != NULL &&
         (hnd->flags & private_handle_t::PRIV_FLAGS_NONCONTIGUOUS_MEM )) {
         flags |= MDPCOMP_LAYER_UNSUPPORTED_MEM;
     }
@@ -436,9 +472,19 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
         }
     }
 
+    if(sYUVLayerIndex != -1) {
+       layer_info[sYUVLayerIndex].can_use_mdp = true;
+       layer_info[sYUVLayerIndex].pipe_pref =
+                        sPipeMgr.req_for_pipe(PIPE_REQ_VG);
+       current_frame.count++;
+    }
+
     //Parse layers from higher z-order
-    for(int index = layer_count - 1 ; index >= 0; index-- ) {
+    for(int index = 0; index < layer_count; index++ ) {
         hwc_layer_t* layer = &list->hwLayers[index];
+
+        if(index == sYUVLayerIndex)
+            continue;
 
         int layer_prop = 0;
         get_layer_info(layer, layer_prop);
@@ -446,18 +492,12 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
         ALOGD_IF(isDebug(),"%s: prop for layer [%d]: %x", __FUNCTION__,
                                                              index, layer_prop);
 
-        //Both in cases of NON-CONTIGUOUS memory or SKIP layer,
-        //current version of mdp composition falls back completely to FB
-        //composition.
+        //In case of NON-CONTIGUOUS memory, current version of mdp composition
+        //falls back completely to FB composition.
         //TO DO: Support dual mode composition
 
         if(layer_prop & MDPCOMP_LAYER_UNSUPPORTED_MEM) {
             ALOGD_IF(isDebug(), "%s: Non contigous memory",__FUNCTION__);
-            return MDPCOMP_ABORT;
-        }
-
-        if(layer_prop & MDPCOMP_LAYER_SKIP) {
-            ALOGD_IF(isDebug(), "%s:skip layer",__FUNCTION__);
             return MDPCOMP_ABORT;
         }
 
@@ -655,7 +695,7 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
                                     index, cur_pipe.index);
            return false;
          } else {
-            setLayerIndex(layer, index);
+           setLayerIndex(layer, index);
          }
     }
     return true;
@@ -680,8 +720,8 @@ void MDPComp::unsetMDPCompLayerFlags(hwc_context_t* ctx, hwc_layer_list_t* list)
 
 int MDPComp::draw(hwc_context_t *ctx, hwc_layer_list_t* list) {
 
-    if(!isEnabled()) {
-        ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled",__FUNCTION__);
+    if(!isEnabled() || !isUsed()) {
+        ALOGD_IF(isDebug(),"%s: MDP Comp not configured",__FUNCTION__);
         return 0;
      }
 
@@ -713,7 +753,7 @@ int MDPComp::draw(hwc_context_t *ctx, hwc_layer_list_t* list) {
         }
 
         /* reset Invalidator */
-        if(idleInvalidator)
+        if(idleInvalidator && !sSecuredVidPresent)
            idleInvalidator->markForSleep();
 
         ovutils::eDest dest;
@@ -828,7 +868,6 @@ bool MDPComp::configure(hwc_composer_device_t *dev,  hwc_layer_list_t* list) {
 
         if(setup(ctx, list)) {
             setMDPCompLayerFlags(list);
-            sMDPCompState = MDPCOMP_ON;
         } else {
             ALOGD_IF(isDebug(),"%s: MDP Comp Failed",__FUNCTION__);
             isMDPCompUsed = false;
@@ -844,6 +883,8 @@ bool MDPComp::configure(hwc_composer_device_t *dev,  hwc_layer_list_t* list) {
         //Reset current frame
          reset(ctx, list);
      }
+
+     sMDPCompState = isMDPCompUsed ? MDPCOMP_ON : MDPCOMP_OFF;
 
      sIdleFallBack = false;
 
