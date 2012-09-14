@@ -58,7 +58,7 @@ static void *vsync_loop(void *param)
 
     do {
 
-       int hdmiconnected = ctx->mExtDisplay->getExternalDisplay();
+       int hdmiconnected = ctx->externalDisplay;
 
        // vsync for primary OR HDMI ?
        if(ctx->mExtDisplay->isHDMIConfigured() &&
