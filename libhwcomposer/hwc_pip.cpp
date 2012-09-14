@@ -146,12 +146,12 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     ov.setSource(parg, ovutils::OV_PIPE0);
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
         /* Done with setting HSIC values. Clear the
          * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
          * from metadata operation if present.
          */
         metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_0].ops);
-        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
@@ -269,7 +269,6 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
          * from metadata operation if present.
          */
         metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_1].ops);
-        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;

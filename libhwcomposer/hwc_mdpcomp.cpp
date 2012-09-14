@@ -21,6 +21,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_qbuf.h"
 #include "hwc_external.h"
+#include "qdMetaData.h"
 
 namespace qhwc {
 
@@ -92,15 +93,19 @@ int PipeMgr::assign_pipe(int pipe_pref) {
 
 /****** Class MDPComp ***********/
 
-MDPComp::State MDPComp::sMDPCompState = MDPCOMP_OFF;
+State MDPComp::sMDPCompState = MDPCOMP_OFF;
 struct MDPComp::frame_info MDPComp::sCurrentFrame;
 PipeMgr MDPComp::sPipeMgr;
 IdleInvalidator *MDPComp::idleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
 bool MDPComp::sDebugLogs = false;
-int MDPComp::sSkipCount = 0;
+bool MDPComp::sUnsupportedLayersPresent = 0;
 int MDPComp::sMaxLayers = 0;
 ovutils::eOverlayState MDPComp::ov_state = ovutils::OV_FB;
+int MDPComp::sYUVLayerIndex = -1;
+int MDPComp::sPIPLayerIndex = -1;
+int MDPComp::slayerS3DFormat = 0;
+bool MDPComp::sSecuredVidPresent = false;
 
 bool MDPComp::deinit() {
     //XXX: Tear down MDP comp state
@@ -140,8 +145,6 @@ void MDPComp::reset( hwc_context_t *ctx, hwc_layer_list_t* list ) {
     //Reset MDP pipes
     sPipeMgr.reset();
     sPipeMgr.setStatus(VAR_INDEX, PIPE_IN_FB_MODE);
-
-    ov.setState(ovutils::OV_FB);
 }
 
 void MDPComp::setLayerIndex(hwc_layer_t* layer, const int pipe_index)
@@ -181,13 +184,52 @@ void MDPComp::print_info(hwc_layer_t* layer)
                              s_l, s_t, s_r, s_b, (s_r - s_l), (s_b - s_t),
                              d_l, d_t, d_r, d_b, (d_r - d_l), (d_b - d_t));
 }
+
+void MDPComp::SetVidInfo(hwc_context_t *ctx, hwc_layer_t *layer,
+        ovutils::eMdpFlags &mdpFlags, MetaData_t &m, int numVideoLayer) {
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
+    overlay::Overlay& ov = *(ctx->mOverlay);
+
+    if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
+        ovutils::setMdpFlags(mdpFlags,
+                ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+    }
+
+    MetaData_t *metadata = &m;
+    if (metadata && (metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
+    }
+
+    if(metadata && ctx->mPpParams[numVideoLayer].isValid){
+        /* Preference will be for the HSIC & QSEED values
+         * set through binder */
+        metadata->operation |= ctx->mPpParams[numVideoLayer].ops;
+        if(metadata->operation & PP_PARAM_HSIC) {
+            metadata->hsicData.hue = ctx->mPpParams[numVideoLayer].hue;
+            metadata->hsicData.saturation = ctx->mPpParams[numVideoLayer].saturation;
+            metadata->hsicData.intensity = ctx->mPpParams[numVideoLayer].intensity;
+            metadata->hsicData.contrast = ctx->mPpParams[numVideoLayer].contrast;
+        }
+        if(metadata->operation & PP_PARAM_SHARPNESS) {
+            metadata->sharpness = ctx->mPpParams[numVideoLayer].sharpness;
+        }
+    }
+}
+
 /*
  * Configures pipe(s) for MDP composition
  */
 int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
-                                            mdp_pipe_info& mdp_info) {
+        mdp_pipe_info& mdp_info,int layer_index) {
 
     int nPipeIndex = mdp_info.index;
+    /*Indicates 0 for main_video and 1 for pip_video */
+    int numVideoLayer = -1;
+
+    if(layer_index == sYUVLayerIndex)
+        numVideoLayer = VIDEO_LAYER_0;
+    if(layer_index == sPIPLayerIndex)
+        numVideoLayer = VIDEO_LAYER_1;
 
     if (ctx) {
 
@@ -207,6 +249,9 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
 
         hwc_rect_t sourceCrop = layer->sourceCrop;
         hwc_rect_t displayFrame = layer->displayFrame;
+        if(isYuvBuffer(hnd)) {
+            set_ov_dimensions(ctx,numVideoLayer,sourceCrop,displayFrame);
+        }
 
         const int src_w = sourceCrop.right - sourceCrop.left;
         const int src_h = sourceCrop.bottom - sourceCrop.top;
@@ -292,26 +337,42 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
                     ovutils::OV_MDP_BLEND_FG_PREMULT);
         }
 
-        if(layer->transform != HWC_TRANSFORM_ROT_180) {
-           ovutils::eTransform orient =
-               static_cast<ovutils::eTransform>(layer->transform);
-           ov.setTransform(orient, dest);
-        } else  {
-            ovutils::setMdpFlags(mdpFlags,
-                    ovutils::OV_MDP_180_FLIP);
+        ovutils::eRotFlags rot = ovutils::ROT_FLAGS_NONE;
+
+        if(isYuvBuffer(hnd)) {
+            MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+            SetVidInfo(ctx,layer,mdpFlags,*metadata,numVideoLayer);
+            if(metadata && ctx->mPpParams[numVideoLayer].isValid){
+                if(ov.setVisualParams(*metadata, dest))
+                    ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+            }
+            rot  = ovutils::ROT_DOWNSCALE_ENABLED;
         }
 
+        ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0 ;
+        if(!(layer->transform & HWC_TRANSFORM_ROT_90)) {
+            if(layer->transform & HWC_TRANSFORM_FLIP_H) {
+                ovutils::setMdpFlags(mdpFlags,ovutils::OV_MDP_FLIP_H);
+            }
+            if(layer->transform & HWC_TRANSFORM_FLIP_V) {
+                ovutils::setMdpFlags(mdpFlags,ovutils::OV_MDP_FLIP_V);
+            }
+        }else {
+            orient = static_cast<ovutils::eTransform>(layer->transform);
+        }
 
         ovutils::PipeArgs parg(mdpFlags,
                                info,
                                zOrder,
                                isFG,
-                               ovutils::ROT_FLAGS_NONE);
+                               rot);
 
         if (!ov.setSource(parg, dest)) {
             ALOGE("%s: setSource failed", __FUNCTION__);
             return -1;
         }
+
+        ov.setTransform(orient, dest);
 
         ovutils::Dim dcrop(crop.left, crop.top, crop_w, crop_h);
         if (!ov.setCrop(dcrop, dest)) {
@@ -323,6 +384,17 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
         if (!ov.setPosition(dim, dest)) {
             ALOGE("%s: setPosition failed", __FUNCTION__);
             return -1;
+        }
+
+        if(isYuvBuffer(hnd)) {
+            MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+            if(metadata && ctx->mPpParams[numVideoLayer].isValid){
+                /* Done with setting HSIC values. Clear the
+                 * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
+                 * from metadata operation.
+                 */
+                metadata->operation &= ~(ctx->mPpParams[numVideoLayer].ops);
+            }
         }
 
         ALOGD_IF(isDebug(),"%s: MDP set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] \
@@ -375,14 +447,22 @@ bool MDPComp::is_doable(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
         return false;
     }
 
-    //MDP composition is not efficient if layer neeeds
-    //MDP rotator
+    //Skip layer present
+    if(sUnsupportedLayersPresent) {
+        ALOGD_IF(isDebug(), "%s: UnSupported layer(s) are present",__FUNCTION__);
+        return false;
+    }
+
+    //MDP composition is not efficient if rotation is needed for RGB buffers
     for(unsigned int i = 0; i < list->numHwLayers; ++i) {
+        private_handle_t* hnd = (private_handle_t*)list->hwLayers[i].handle;
         // As MDP h/w supports flip operation, use MDP comp only for
         // 180 transforms. Fail for any transform involving 90 (90, 270).
-        if(list->hwLayers[i].transform & HWC_TRANSFORM_ROT_90) {
-                ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
-                return false;
+        if(((list->hwLayers[i].transform & HWC_TRANSFORM_ROT_90) &&
+                                    !isYuvBuffer(hnd))|| isSecureBuffer(hnd)) {
+
+           ALOGD_IF(isDebug(), "%s: orientation needed for RGB",__FUNCTION__);
+           return false;
         }
     }
 
@@ -408,9 +488,7 @@ void MDPComp::get_layer_info(hwc_layer_t* layer, int& flags) {
 
     private_handle_t* hnd = (private_handle_t*)layer->handle;
 
-    if(layer->flags & HWC_SKIP_LAYER) {
-        flags |= MDPCOMP_LAYER_SKIP;
-    } else if(hnd != NULL &&
+    if(hnd != NULL &&
         (hnd->flags & private_handle_t::PRIV_FLAGS_NONCONTIGUOUS_MEM )) {
         flags |= MDPCOMP_LAYER_UNSUPPORTED_MEM;
     }
@@ -441,9 +519,26 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
         }
     }
 
+    if(sYUVLayerIndex != -1) {
+       layer_info[sYUVLayerIndex].can_use_mdp = true;
+       layer_info[sYUVLayerIndex].pipe_pref =
+                        sPipeMgr.req_for_pipe(PIPE_REQ_VG);
+       current_frame.count++;
+    }
+
+    if(sPIPLayerIndex != -1) {
+       layer_info[sPIPLayerIndex].can_use_mdp = true;
+       layer_info[sPIPLayerIndex].pipe_pref =
+                        sPipeMgr.req_for_pipe(PIPE_REQ_VG);
+       current_frame.count++;
+    }
+
     //Parse layers from higher z-order
-    for(int index = layer_count - 1 ; index >= 0; index-- ) {
+    for(int index = 0; index < layer_count; index++ ) {
         hwc_layer_t* layer = &list->hwLayers[index];
+
+        if(index == sYUVLayerIndex or index == sPIPLayerIndex)
+            continue;
 
         int layer_prop = 0;
         get_layer_info(layer, layer_prop);
@@ -451,18 +546,12 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
         ALOGD_IF(isDebug(),"%s: prop for layer [%d]: %x", __FUNCTION__,
                                                              index, layer_prop);
 
-        //Both in cases of NON-CONTIGUOUS memory or SKIP layer,
-        //current version of mdp composition falls back completely to FB
-        //composition.
+        //In case of NON-CONTIGUOUS memory, current version of mdp composition
+        //falls back completely to FB composition.
         //TO DO: Support dual mode composition
 
         if(layer_prop & MDPCOMP_LAYER_UNSUPPORTED_MEM) {
             ALOGD_IF(isDebug(), "%s: Non contigous memory",__FUNCTION__);
-            return MDPCOMP_ABORT;
-        }
-
-        if(layer_prop & MDPCOMP_LAYER_SKIP) {
-            ALOGD_IF(isDebug(), "%s:skip layer",__FUNCTION__);
             return MDPCOMP_ABORT;
         }
 
@@ -597,7 +686,6 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
     }
 
     if(!parse_and_allocate(ctx, list, current_frame)) {
-       ov.setState(ovutils::OV_FB);
        ALOGD_IF(isDebug(), "%s: Falling back to FB", __FUNCTION__);
        return false;
     }
@@ -616,14 +704,6 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
          state = ovutils::OV_FB;
     }
 
-    //Fallback to framebuffer when bypass state changes
-    //but not FROM OV_FB
-    if(ov_state != state && ov_state != ovutils::OV_FB) {
-        ov.setState(ovutils::OV_FB);
-        ov_state = state;
-        return false;
-    }
-
     ov_state = state;
 
     ov.setState(state);
@@ -633,13 +713,13 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
         hwc_layer_t* layer = &list->hwLayers[layer_index];
         mdp_pipe_info& cur_pipe = current_frame.pipe_layer[index].pipe_index;
 
-        if( prepare(ctx, layer, cur_pipe) != 0 ) {
+        if( prepare(ctx, layer, cur_pipe,layer_index) != 0 ) {
            ALOGD_IF(isDebug(), "%s: MDPComp failed to configure overlay for \
                                     layer %d with pipe index:%d",__FUNCTION__,
                                     index, cur_pipe.index);
            return false;
          } else {
-            setLayerIndex(layer, index);
+           setLayerIndex(layer, index);
          }
     }
     return true;
@@ -664,8 +744,8 @@ void MDPComp::unsetMDPCompLayerFlags(hwc_context_t* ctx, hwc_layer_list_t* list)
 
 int MDPComp::draw(hwc_context_t *ctx, hwc_layer_list_t* list) {
 
-    if(!isEnabled()) {
-        ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled",__FUNCTION__);
+    if(!isEnabled() || !isUsed()) {
+        ALOGD_IF(isDebug(),"%s: MDP Comp not configured",__FUNCTION__);
         return 0;
      }
 
@@ -697,7 +777,7 @@ int MDPComp::draw(hwc_context_t *ctx, hwc_layer_list_t* list) {
         }
 
         /* reset Invalidator */
-        if(idleInvalidator)
+        if(idleInvalidator && !sSecuredVidPresent)
            idleInvalidator->markForSleep();
 
         ovutils::eDest dest = ovutils::OV_PIPE0;
@@ -798,7 +878,6 @@ bool MDPComp::configure(hwc_composer_device_t *dev,  hwc_layer_list_t* list) {
 
         if(setup(ctx, list)) {
             setMDPCompLayerFlags(list);
-            sMDPCompState = MDPCOMP_ON;
         } else {
             ALOGD_IF(isDebug(),"%s: MDP Comp Failed",__FUNCTION__);
             isMDPCompUsed = false;
@@ -814,6 +893,8 @@ bool MDPComp::configure(hwc_composer_device_t *dev,  hwc_layer_list_t* list) {
         //Reset current frame
          reset(ctx, list);
      }
+
+     sMDPCompState = isMDPCompUsed ? MDPCOMP_ON : MDPCOMP_OFF;
 
      sIdleFallBack = false;
 

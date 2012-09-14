@@ -85,7 +85,7 @@ utils::OverScanCompensation* utils::OverScanCompensation::sOverScanCompensation 
 bool Ctrl::setVisualParams(const MetaData_t& data)
 {
     if(!mMdp.setVisualParams(data)) {
-        ALOGE("setVisualParam failed in MDP setVisualParam");
+        ALOGD("setVisualParam failed in MDP setVisualParam");
         return false;
     }
     return true;

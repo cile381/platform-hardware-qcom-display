@@ -61,6 +61,12 @@ enum {
     MDPCOMP_ABORT,
 };
 
+// MDP Comp per frame status
+enum State {
+    MDPCOMP_ON = 0,
+    MDPCOMP_OFF,
+};
+
 //This class manages the status of 4 MDP pipes and keeps
 //track of Variable pipe mode.
 class PipeMgr {
@@ -98,16 +104,10 @@ private:
 
 
 class MDPComp {
-    enum State {
-        MDPCOMP_ON = 0,
-        MDPCOMP_OFF,
-    };
-
     enum {
         MDPCOMP_LAYER_BLEND = 1,
         MDPCOMP_LAYER_DOWNSCALE = 2,
-        MDPCOMP_LAYER_SKIP = 4,
-        MDPCOMP_LAYER_UNSUPPORTED_MEM = 8,
+        MDPCOMP_LAYER_UNSUPPORTED_MEM = 4,
     };
 
     struct mdp_pipe_info {
@@ -139,11 +139,15 @@ class MDPComp {
     static IdleInvalidator *idleInvalidator;
     static struct frame_info sCurrentFrame;
     static PipeMgr sPipeMgr;
-    static int sSkipCount;
+    static bool sUnsupportedLayersPresent;
     static int sMaxLayers;
     static bool sDebugLogs;
     static bool sIdleFallBack;
     static ovutils::eOverlayState ov_state;
+    static int sYUVLayerIndex;
+    static int sPIPLayerIndex;
+    static int slayerS3DFormat;
+    static bool sSecuredVidPresent;
 
 public:
     /* Handler to invoke frame redraw on Idle Timer expiry */
@@ -159,8 +163,20 @@ public:
     /* draw */
     static int draw(hwc_context_t *ctx, hwc_layer_list_t *list);
 
+    /* get mdpcomp status */
+    static bool isUsed() { return (sMDPCompState == MDPCOMP_ON); };
+
     /* store frame stats */
-    static void setStats(int skipCt) { sSkipCount  = skipCt;};
+    static inline void setStats(int skipCt, int extCt, int extCC,
+        int YUVLayerIndex, bool securedVideo, int PIPLayerIndex,
+        int layerS3DFormat) {
+        sUnsupportedLayersPresent  = (skipCt | extCt | extCC | (layerS3DFormat)) ?
+            true : false;
+        sYUVLayerIndex = YUVLayerIndex;
+        sPIPLayerIndex = PIPLayerIndex;
+        sSecuredVidPresent = securedVideo;
+        slayerS3DFormat = layerS3DFormat;
+    };
 
 private:
 
@@ -177,7 +193,7 @@ private:
 
     /* configure's overlay pipes for the frame */
     static int  prepare(hwc_context_t *ctx, hwc_layer_t *layer,
-                        mdp_pipe_info& mdp_info);
+        mdp_pipe_info& mdp_info,int layer_index);
 
     /* checks for conditions where mdpcomp is not possible */
     static bool is_doable(hwc_composer_device_t *dev,
@@ -201,8 +217,7 @@ private:
     static bool alloc_layer_pipes(hwc_layer_list_t* list,
                                   layer_mdp_info* layer_info,
                                   frame_info& current_frame);
-    /* get/set states */
-    static State get_state() { return sMDPCompState; };
+    /* set mdpcomp states */
     static void set_state(State state) { sMDPCompState = state; };
 
     /* reset state */
@@ -210,8 +225,13 @@ private:
 
     /* Is feature enabled */
     static bool isEnabled() { return sMaxLayers ? true : false; };
+
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
+
+    /* set video buffer specific datat */
+    static void SetVidInfo(hwc_context_t *ctx, hwc_layer_t *layer,
+        ovutils::eMdpFlags &mdpFlags, MetaData_t &m, int numVideoLayer);
 };
 }; //namespace
 #endif

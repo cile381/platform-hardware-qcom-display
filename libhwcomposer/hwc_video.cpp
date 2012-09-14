@@ -180,9 +180,11 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
 }
 
 bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
-    overlay::Overlay& ov = *(ctx->mOverlay);
     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
+    bool isSecured = hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER;
+
+    overlay::Overlay& ov = *(ctx->mOverlay);
     ovutils::Whf info(hnd->width, hnd->height,
                       hnd->format, sLayerS3DFormat, hnd->size);
 
@@ -240,7 +242,7 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
         /* Done with setting HSIC values. Clear the
          * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
-         * from metadata operation if present.
+         * from metadata operation
          */
         metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_0].ops);
     }

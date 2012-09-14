@@ -29,14 +29,17 @@
 #include "stdio.h"
 #include <comptype.h>
 #include "hwc_utils.h"
+#include "hwc_mdpcomp.h"
 #include "qcom_ui.h"
 #include <cutils/memory.h>
 
 namespace qdutils {
 
 bool CBUtils::sGPUlayerpresent = 0;
+bool CBUtils::sIsMDPComp = 0;
 
-void CBUtils::checkforGPULayer(const hwc_layer_list_t* list) {
+void CBUtils::updateStat(const hwc_layer_list_t* list, bool mdp_comp_used) {
+    sIsMDPComp = mdp_comp_used;
     sGPUlayerpresent =  false;
     for(uint32_t index = 0; index < list->numHwLayers; index++) {
         const hwc_layer_t* layer = &list->hwLayers[index];
@@ -83,12 +86,13 @@ bool CBUtils::isUpdatingFB(int Type)
 int CBUtils::qcomuiClearRegion(Region region, EGLDisplay dpy){
 
     int ret = 0;
-    if (sGPUlayerpresent) {
-        //return ERROR when any layer is flagged for GPU composition.
+    int compositionType = QCCompositionType::getInstance().getCompositionType();
+    if (((compositionType == COMPOSITION_TYPE_GPU) || sGPUlayerpresent) &&
+                                                             (!sIsMDPComp)) {
+        //return ERROR when GPU composition is used or any layer is flagged
+        //for GPU composition.
         return -1;
     }
-
-
 
     android_native_buffer_t *renderBuffer =
           qdutils::eglHandles::getInstance().getAndroidNativeRenderBuffer(dpy);

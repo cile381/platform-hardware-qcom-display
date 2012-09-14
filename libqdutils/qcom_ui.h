@@ -39,6 +39,7 @@ class CBUtils {
 
 private:
   static bool sGPUlayerpresent;
+  static bool sIsMDPComp;
 
 public:
   enum { // S3D formats
@@ -46,6 +47,7 @@ public:
       eS3D_TOP_BOTTOM     = 0x20000
   };
   static void checkforGPULayer(const hwc_layer_list_t* list);
+  static void updateStat(const hwc_layer_list_t* list, bool mdp_comp_used);
   static bool isUpdatingFB(int compositionType);
   static int qcomuiClearRegion(Region region, EGLDisplay dpy);
   static int getS3DCompositionFormat(int hints);

@@ -535,28 +535,28 @@ bool OverlayImpl<P0, P1, P2,P3>::setVisualParams(const MetaData_t& data,
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->setVisualParams(data)) {
-            ALOGE("OverlayImpl p0 failed to crop");
+            ALOGD("OverlayImpl p0 failed to setVisualParams");
             return false;
         }
     }
 
     if (utils::OV_PIPE1 & dest) {
         if(!mPipe1->setVisualParams(data)) {
-            ALOGE("OverlayImpl p1 failed to crop");
+            ALOGD("OverlayImpl p1 failed to setVisualParams");
             return false;
         }
     }
 
     if (utils::OV_PIPE2 & dest) {
         if(!mPipe2->setVisualParams(data)) {
-            ALOGE("OverlayImpl p2 failed to crop");
+            ALOGD("OverlayImpl p2 failed to setVisualParams");
             return false;
         }
     }
 
     if (utils::OV_PIPE3 & dest) {
         if(!mPipe3->setVisualParams(data)) {
-            ALOGE("OverlayImpl p3 failed to crop");
+            ALOGD("OverlayImpl p3 failed to setVisualParams");
             return false;
         }
     }
