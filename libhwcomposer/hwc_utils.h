@@ -151,6 +151,12 @@ inline void getLayerResolution(const hwc_layer_t* layer,
 }
 }; //qhwc namespace
 
+struct vsync_state {
+    pthread_mutex_t lock;
+    pthread_cond_t  cond;
+    bool enable;
+};
+
 // -----------------------------------------------------------------------------
 // HWC context
 // This structure contains overall state
@@ -187,6 +193,7 @@ struct hwc_context_t {
 
     // flag that indicate whether secure/desecure session in progress
     bool mSecureConfig;
+
     bool hdmi_pending;
     char  mHDMIEvent[512];
 
@@ -203,6 +210,10 @@ struct hwc_context_t {
     bool mExtCommitDone;
     pthread_mutex_t mExtCommitDoneLock;
     pthread_cond_t mExtCommitDoneCond;
+
+    //Vsync
+    struct vsync_state vstate;
+
 };
 
 #endif //HWC_UTILS_H
