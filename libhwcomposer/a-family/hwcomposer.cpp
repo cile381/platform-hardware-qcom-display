@@ -1307,6 +1307,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                 }
                 if (HWC_USE_OVERLAY != list->hwLayers[i].compositionType) {
                     skipComposition = false;
+                    // Inform the video overlay status to Gralloc
+                    setVideoOverlayStatusInGralloc(ctx, VIDEO_OVERLAY_ENDED);
                 }
             } else if (getLayerS3DFormat(list->hwLayers[i])) {
                 int flags = skipComposition ? WAIT_FOR_VSYNC : 0;
