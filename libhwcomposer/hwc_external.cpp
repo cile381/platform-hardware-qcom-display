@@ -266,9 +266,12 @@ const char* msmFbDevicePath[2] = {  "/dev/graphics/fb1",
 bool ExternalDisplay::openFrameBuffer(int fbNum)
 {
     if (mFd == -1) {
+        ALOGD_IF(DEBUG, "In %s: opening the framebuffer device = %d",
+                                                  __FUNCTION__, fbNum);
         mFd = open(msmFbDevicePath[fbNum-1], O_RDWR);
         if (mFd < 0)
-            ALOGE("%s: %s not available", __FUNCTION__, msmFbDevicePath[fbNum-1]);
+            ALOGE("%s: %s not available", __FUNCTION__,
+                                                    msmFbDevicePath[fbNum-1]);
     }
     return (mFd > 0);
 }
@@ -504,6 +507,8 @@ void ExternalDisplay::setExternalDisplay(int connected)
     // Store the external display
     mExternalDisplay = connected;
 
+    ALOGD_IF(DEBUG, "In %s: mExternalDisplay = %d", __FUNCTION__,
+                            mExternalDisplay);
     return;
 }
 
@@ -534,28 +539,39 @@ bool ExternalDisplay::writeHPDOption(int userOption) const
     return ret;
 }
 
+/*
+ * commits the changes to the external display
+ * mExternalDisplay has the mixer number(1-> HDMI 2-> WFD)
+ */
 bool ExternalDisplay::commit()
 {
     if(mFd == -1) {
         return false;
-    } else if(ioctl(mFd, FBIOPUT_VSCREENINFO, &mVInfo) == -1) {
-         ALOGE("%s: FBIOPUT_VSCREENINFO failed, str: %s", __FUNCTION__,
-                                                          strerror(errno));
+    } else if(ioctl(mFd, MSMFB_OVERLAY_COMMIT, &mExternalDisplay) == -1) {
+         ALOGE("%s: MSMFB_OVERLAY_COMMIT failed errno: %d , str: %s",
+                                       __FUNCTION__, errno, strerror(errno));
          return false;
     }
     return true;
 }
 
+/*
+ * return 0 on success
+ * return -errno on ioctl failure as the hwc_eventControl need
+ * to return -errno.
+ */
 int ExternalDisplay::enableHDMIVsync(int enable)
 {
+    int ret = 0;
     if(mFd > 0) {
         int ret = ioctl(mFd, MSMFB_OVERLAY_VSYNC_CTRL, &enable);
         if (ret<0) {
             ALOGE("%s: enabling HDMI vsync failed, str: %s", __FUNCTION__,
                                                             strerror(errno));
+            ret = -errno;
         }
     }
-    return -errno;
+    return ret;
 }
 
 };
