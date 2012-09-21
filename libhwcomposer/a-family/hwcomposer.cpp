@@ -1485,13 +1485,16 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     src.vert_padding = 0;
 
     int layerTransform = layer->transform ;
-    // When flip and rotation(90 or 270) are present alter the flip,
+    // When flip and rotation(90) are present alter the flip,
     // as GPU is doing the flip and rotation in opposite order
     // to that of MDP3.0
+    // For 270 degrees, we get 90 + (H+V) which is same as doing
+    // flip first and then rotation (H+V) + 90
 #ifdef USE_MDP3
     if (((layer->transform& HAL_TRANSFORM_FLIP_H) ||
        (layer->transform & HAL_TRANSFORM_FLIP_V)) &&
-       (layer->transform &  HAL_TRANSFORM_ROT_90)){
+       (layer->transform &  HAL_TRANSFORM_ROT_90) &&
+       !(layer->transform &  HAL_TRANSFORM_ROT_270)){
         if(layer->transform & HAL_TRANSFORM_FLIP_H){
             layerTransform ^= HAL_TRANSFORM_FLIP_H;
             layerTransform |= HAL_TRANSFORM_FLIP_V;
