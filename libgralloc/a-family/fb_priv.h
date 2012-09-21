@@ -175,6 +175,7 @@ struct private_module_t {
     int orientation;
     int videoOverlay; // VIDEO_OVERLAY - 2D or 3D
     int secureVideoOverlay; // VideoOverlay is secure
+    int secureConfig; // secure/unsecure is in progress
     uint32_t currentOffset;
     int enableHDMIOutput; // holds the type of external display
     bool trueMirrorSupport;

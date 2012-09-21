@@ -340,7 +340,8 @@ static void *hdmi_ui_loop(void *ptr)
         int flags = WAIT_FOR_VSYNC;
         const int NO_ERROR = 0;
         Overlay* pTemp = m->pobjOverlay;
-        if(m->hdmiMirroringState == HDMI_UI_MIRRORING) {
+        if( (m->hdmiMirroringState == HDMI_UI_MIRRORING) &&
+            (m->secureConfig == false)) {
             if (startExternalChannel(m) == NO_ERROR) {
                 pTemp->queueBuffer(m->currentOffset);
             }
@@ -396,6 +397,9 @@ static int fb_enableHDMIOutput(struct framebuffer_device_t* dev, int externaltyp
             if(!m->videoOverlay)
                 m->hdmiMirroringState = HDMI_UI_MIRRORING;
         }
+        if(m->secureConfig) {
+            m->hdmiMirroringState = HDMI_NO_MIRRORING;
+        }
     } else if (!externaltype) {
         // Either HDMI is disconnected or suspend occurred
         m->hdmiMirroringState = HDMI_NO_MIRRORING;
@@ -422,6 +426,7 @@ static int handle_open_secure_start(private_module_t* m) {
     pthread_mutex_lock(&m->overlayLock);
     m->hdmiMirroringState = HDMI_NO_MIRRORING;
     m->secureVideoOverlay = true;
+    m->secureConfig = true;
     closeExternalChannel(m);
     pthread_mutex_unlock(&m->overlayLock);
     return 0;
@@ -436,6 +441,7 @@ static int handle_open_secure_end(private_module_t* m) {
             m->hdmiMirroringState = HDMI_UI_MIRRORING;
         }
         m->hdmiStateChanged = true;
+        m->secureConfig = false;
         pthread_cond_signal(&(m->overlayPost));
     }
     pthread_mutex_unlock(&m->overlayLock);
@@ -446,6 +452,7 @@ static int handle_close_secure_start(private_module_t* m) {
     pthread_mutex_lock(&m->overlayLock);
     m->hdmiMirroringState = HDMI_NO_MIRRORING;
     m->secureVideoOverlay = false;
+    m->secureConfig = true;
     closeExternalChannel(m);
     pthread_mutex_unlock(&m->overlayLock);
     return 0;
@@ -460,6 +467,7 @@ static int handle_close_secure_end(private_module_t* m) {
             m->hdmiMirroringState = HDMI_UI_MIRRORING;
         }
         m->hdmiStateChanged = true;
+        m->secureConfig = false;
         pthread_cond_signal(&(m->overlayPost));
     }
     pthread_mutex_unlock(&m->overlayLock);
@@ -958,6 +966,8 @@ int mapFrameBufferLocked(struct private_module_t* module)
     module->currentOffset = 0;
     module->exitHDMIUILoop = false;
     module->hdmiStateChanged = false;
+    module->secureVideoOverlay = false;
+    module->secureConfig = false;
     pthread_t hdmiUIThread;
     pthread_create(&hdmiUIThread, NULL, &hdmi_ui_loop, (void *) module);
     module->hdmiMirroringState = HDMI_NO_MIRRORING;
