@@ -158,6 +158,8 @@ struct hwc_context_t {
 
     qhwc::MDPInfo mMDP;
 
+    bool hdmi_pending;
+    char  mHDMIEvent[512];
 };
 
 #endif //HWC_UTILS_H
