@@ -66,6 +66,8 @@ void initContext(hwc_context_t *ctx)
     property_get("debug.hwc.dynThreshold", value, "3");
     ctx->dynThreshold = atof(value);
 
+    ctx->hdmi_pending = false;
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
     ALOGI("DYN composition threshold : %f", ctx->dynThreshold);
