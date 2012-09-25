@@ -64,9 +64,14 @@ void ExternalDisplay::setEDIDMode(int resMode) {
         Mutex::Autolock lock(mExtDispLock);
         extDispType = mExternalDisplay;
         setExternalDisplay(0);
+    }
+    triggerRefresh();
+    {
+        Mutex::Autolock lock(mExtDispLock);
         setResolution(resMode);
     }
     setExternalDisplay(extDispType);
+    triggerRefresh();
 }
 
 void ExternalDisplay::setHPDStatus(int enabled) {
@@ -79,6 +84,18 @@ void ExternalDisplay::setActionSafeDimension(int w, int h) {
     Mutex::Autolock lock(mExtDispLock);
     overlay::utils::ActionSafe::getInstance()->setDimension(w, h);
     setExternalDisplay(mExternalDisplay);
+}
+
+void ExternalDisplay::triggerRefresh() {
+    hwc_context_t* ctx = mHwcContext;
+    hwc_procs* proc = (hwc_procs*)ctx->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
 }
 
 int ExternalDisplay::getModeCount() const {
@@ -447,6 +464,7 @@ void ExternalDisplay::processUEventOffline(const char *str) {
         closeFrameBuffer();
     }
     setExternalDisplay(EXTERN_DISPLAY_NONE);
+    triggerRefresh();
 }
 
 void ExternalDisplay::configureWFDDisplay(int fbIndex) {
@@ -471,6 +489,7 @@ void ExternalDisplay::processUEventOnline(const char *str) {
             if(mExternalDisplay == EXTERN_DISPLAY_FB2) {
                 closeFrameBuffer();
                 setExternalDisplay(EXTERN_DISPLAY_NONE);
+                triggerRefresh();
             }
             readResolution();
             //Get the best mode and set
@@ -480,6 +499,7 @@ void ExternalDisplay::processUEventOnline(const char *str) {
             configureWFDDisplay(EXTERN_DISPLAY_FB1);
         }
         setExternalDisplay(EXTERN_DISPLAY_FB1);
+        triggerRefresh();
     }
     else if(strncmp(s1, DEVICE_NODE_FB2, strlen(DEVICE_NODE_FB2)) == 0) {
         // WFD connect event
@@ -490,33 +510,19 @@ void ExternalDisplay::processUEventOnline(const char *str) {
             // WFD is connected
             configureWFDDisplay(EXTERN_DISPLAY_FB2);
             setExternalDisplay(EXTERN_DISPLAY_FB2);
+            triggerRefresh();
         }
     }
 }
 
 void ExternalDisplay::setExternalDisplay(int connected)
 {
-    hwc_context_t* ctx = mHwcContext;
-    if(ctx) {
-        ALOGD_IF(DEBUG, "%s: status = %d", __FUNCTION__,
+    ALOGD_IF(DEBUG, "%s: status = %d", __FUNCTION__,
                  connected);
-        // Store the external display
-        mExternalDisplay = connected;
-        ALOGD_IF(DEBUG, "In %s: mExternalDisplay = %d", __FUNCTION__,
-                                                         mExternalDisplay);
-        const char* prop = (connected) ? "1" : "0";
-        // set system property
-        property_set("hw.hdmiON", prop);
-        //Invalidate
-        hwc_procs* proc = (hwc_procs*)ctx->device.reserved_proc[0];
-        if(!proc) {
-            ALOGE("%s: HWC proc not registered", __FUNCTION__);
-        } else {
-            /* Trigger redraw */
-            ALOGD_IF(DEBUG, "%s: Invalidate !!", __FUNCTION__);
-            proc->invalidate(proc);
-        }
-    }
+    // Store the external display
+    mExternalDisplay = connected;
+    ALOGD_IF(DEBUG, "In %s: mExternalDisplay = %d", __FUNCTION__,
+                                                mExternalDisplay);
     return;
 }
 
