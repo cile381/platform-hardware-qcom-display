@@ -55,6 +55,22 @@ void MdpCtrl::reset() {
     mLkgo.id = MSMFB_NEW_REQUEST;
     mOrientation = utils::OVERLAY_TRANSFORM_0;
     mRotUsed = false;
+#ifdef USES_POST_PROCESSING
+    if (!mComputeParams) {
+        mComputeParams = calloc(1, sizeof(struct compute_params));
+        if (!mComputeParams) {
+            ALOGE("Falied to allocate the memory for computeparams!");
+            return;
+        }
+    }
+    struct compute_params *params = (struct compute_params *)mComputeParams;
+    params->params.conv_params.order = hsic_order_hsc_i;
+    params->params.conv_params.ops = 3;
+    params->params.conv_params.interface = interface_rec601;
+    params->params.conv_params.cc_matrix[0][0] =
+        params->params.conv_params.cc_matrix[1][1] =
+        params->params.conv_params.cc_matrix[2][2] = 1;
+#endif
 }
 
 bool MdpCtrl::close() {
@@ -65,6 +81,10 @@ bool MdpCtrl::close() {
         return false;
     }
     reset();
+#ifdef USES_POST_PROCESSING
+    if(mComputeParams)
+        free(mComputeParams);
+#endif
     if(!mFd.close()) {
         return false;
     }
@@ -227,6 +247,53 @@ void MdpCtrl3D::dump() const {
     ALOGE("== Dump MdpCtrl start ==");
     mFd.dump();
     ALOGE("== Dump MdpCtrl end ==");
+}
+
+bool MdpCtrl::setVisualParams(const MetaData_t& data) {
+#ifdef USES_POST_PROCESSING
+    bool needUpdate = false;
+    if (!mComputeParams) {
+        ALOGE("Compute params is NULL!");
+        return false;
+    }
+    struct compute_params *params = (struct compute_params *)mComputeParams;
+    /* calculate the data */
+    if (data.operation & PP_PARAM_HSIC) {
+        params->operation |= PP_OP_HSIC;
+        if (params->params.conv_params.hue != data.hsicData.hue ||
+            params->params.conv_params.sat != data.hsicData.saturation ||
+            params->params.conv_params.intensity !=
+                                                    data.hsicData.intensity ||
+            params->params.conv_params.contrast != data.hsicData.contrast)
+        {
+            params->params.conv_params.hue = data.hsicData.hue;
+            params->params.conv_params.sat = data.hsicData.saturation;
+            params->params.conv_params.intensity =
+                                                        data.hsicData.intensity;
+            params->params.conv_params.contrast = data.hsicData.contrast;
+            needUpdate = true;
+        }
+    }
+    if (data.operation & PP_PARAM_SHARPNESS) {
+        if(params->params.qseed_params.strength != data.sharpness) {
+            params->operation |= PP_OP_QSEED;
+            params->params.qseed_params.strength = data.sharpness;
+            needUpdate = true;
+        }
+    }
+    if (data.operation & PP_PARAM_VID_INTFC) {
+        if(params->params.conv_params.interface !=
+                                    (interface_type) data.video_interface) {
+            params->operation |= PP_OP_HSIC;
+            params->params.conv_params.interface =
+                                    (interface_type) data.video_interface;
+            needUpdate = true;
+        }
+    }
+    if (needUpdate)
+        display_pp_compute_params(mComputeParams, &mOVInfo.overlay_pp_cfg);
+#endif
+    return true;
 }
 
 } // overlay

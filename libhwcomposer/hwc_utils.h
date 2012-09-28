@@ -118,6 +118,14 @@ static inline bool isExtCC(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_CC));
 }
 
+static inline bool hasMetaData(const private_handle_t* hnd) {
+    if(hnd) {
+        MetaData_t *data = (MetaData_t *) hnd->base_metadata;
+        return (data && data->operation);
+    }
+    return false;
+}
+
 // Initialize uevent thread
 void init_uevent_thread(hwc_context_t* ctx);
 

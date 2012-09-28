@@ -65,6 +65,8 @@ public:
     bool setTransform(const utils::eTransform& p, const bool&);
     /* set mdp position using dim */
     bool setPosition(const utils::Dim& dim);
+    /* set visualparams */
+    bool setVisualParams(const MetaData_t& data);
     /* mdp set overlay/commit changes */
     bool commit();
 

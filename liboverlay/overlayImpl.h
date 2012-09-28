@@ -68,6 +68,10 @@ public:
      * */
     virtual bool commit(utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
+    /* Set any buffer specific metaData */
+    virtual bool setVisualParams(const MetaData_t& data,
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
+
     /* Queue buffer with fd from an offset*/
     virtual bool queueBuffer(int fd, uint32_t offset,
             utils::eDest dest = utils::OV_PIPE_ALL) = 0;
@@ -99,6 +103,7 @@ public:
     bool close() { return true; }
     bool start(const utils::PipeArgs& args) { return true; }
     bool commit() { return true; }
+    bool setVisualParams(const MetaData_t& data) { return true; }
     bool setCrop(const utils::Dim& d) { return true; }
     bool setPosition(const utils::Dim& dim) { return true; }
     bool setTransform(const utils::eTransform& param) { return true; }
@@ -136,6 +141,8 @@ public:
             RotatorBase* rot2);
     virtual bool close();
     virtual bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
+    virtual bool setVisualParams(const MetaData_t& data,
+            utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setCrop(const utils::Dim& d,
             utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setPosition(const utils::Dim& dim,
@@ -435,6 +442,38 @@ bool OverlayImpl<P0, P1, P2>::commit(utils::eDest dest)
     if (utils::OV_PIPE2 & dest) {
         if(!mPipe2->commit()) {
             ALOGE("OverlayImpl p2 failed to commit");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::setVisualParams(const MetaData_t& data,
+                                                utils::eDest dest)
+{
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
+
+    if (utils::OV_PIPE0 & dest) {
+        if(!mPipe0->setVisualParams(data)) {
+            ALOGE("OverlayImpl p0 failed to crop");
+            return false;
+        }
+    }
+
+    if (utils::OV_PIPE1 & dest) {
+        if(!mPipe1->setVisualParams(data)) {
+            ALOGE("OverlayImpl p1 failed to crop");
+            return false;
+        }
+    }
+
+    if (utils::OV_PIPE2 & dest) {
+        if(!mPipe2->setVisualParams(data)) {
+            ALOGE("OverlayImpl p2 failed to crop");
             return false;
         }
     }

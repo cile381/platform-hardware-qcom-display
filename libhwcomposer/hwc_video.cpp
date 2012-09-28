@@ -171,6 +171,13 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             displayFrame.bottom - displayFrame.top);
     ov.setPosition(dpos, ovutils::OV_PIPE0);
 
+    //Set the metaData if any
+    MetaData_t *data = (MetaData_t *)hnd->base_metadata;
+    if(!data)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else
+        ov.setVisualParams(*data, ovutils::OV_PIPE0);
+
     if (!ov.commit(ovutils::OV_PIPE0)) {
         ALOGE("%s: commit fails", __FUNCTION__);
         return false;
@@ -225,6 +232,13 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     //Only for External
     ov.setPosition(dpos, ovutils::OV_PIPE1);
+
+    //Set the metaData if any
+    MetaData_t *data = (MetaData_t *)hnd->base_metadata;
+    if(!data)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else
+        ov.setVisualParams(*data, ovutils::OV_PIPE1);
 
     if (!ov.commit(ovutils::OV_PIPE1)) {
         ALOGE("%s: commit fails", __FUNCTION__);

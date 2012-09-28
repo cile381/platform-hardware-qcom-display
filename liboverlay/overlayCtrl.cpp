@@ -77,6 +77,15 @@ bool Ctrl::setCrop(const utils::Dim& d)
 
 utils::ActionSafe* utils::ActionSafe::sActionSafe = NULL;
 
+bool Ctrl::setVisualParams(const MetaData_t& data)
+{
+    if(!mMdp.setVisualParams(data)) {
+        ALOGE("setVisualParam failed in MDP setVisualParam");
+        return false;
+    }
+    return true;
+}
+
 utils::Dim Ctrl::getAspectRatio(const utils::Whf& whf) const
 {
     utils::Whf inWhf(whf.w, whf.h, mMdp.getSrcWhf().format);

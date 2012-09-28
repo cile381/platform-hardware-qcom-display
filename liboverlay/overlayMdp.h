@@ -22,6 +22,11 @@
 
 #include "overlayUtils.h"
 #include "mdpWrapper.h"
+#include "qdMetaData.h"
+
+#ifdef USES_POST_PROCESSING
+#include "lib-postproc.h"
+#endif
 
 namespace overlay{
 
@@ -138,6 +143,9 @@ public:
     /* using user_data, sets/unsets roationvalue in mdp flags */
     void setRotationFlags();
 
+    /* setVisualParam */
+    bool setVisualParams(const MetaData_t& data);
+
     /* dump state of the object */
     void dump() const;
 
@@ -161,6 +169,10 @@ private:
 
     /* FD for the mdp fbnum */
     OvFD          mFd;
+
+    /* PP Compute Params */
+    void         *mComputeParams;
+
 };
 
 

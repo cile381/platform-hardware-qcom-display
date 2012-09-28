@@ -118,6 +118,21 @@ void dumpLayer(hwc_layer_t const* l)
           l->displayFrame.bottom);
 }
 
+void dumpMetaData(const private_handle_t* hnd) {
+    if (hnd) {
+        MetaData_t *data = (MetaData_t *) hnd->base_metadata;
+        if(!data)
+            return;
+        ALOGW("Metadata: operation: 0x%x", data->operation);
+        ALOGW("Metadata: hsic data: %d %f %d %f", data->hsicData.hue,
+                data->hsicData.saturation, data->hsicData.intensity,
+                data->hsicData.contrast);
+        ALOGW("Metadata: sharpness: %d", data->sharpness);
+        ALOGW("Metadata: interlaced: %d", data->interlaced);
+        ALOGW("Metadata: video interface: %d", data->video_interface);
+    }
+}
+
 void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
 {
     //Video specific stats
