@@ -36,6 +36,7 @@
 #include <binder/IServiceManager.h>
 #include <ihwc.h>
 #include <hwc_external.h>
+#include <hwc_utils.h>
 
 
 namespace hwcService {
@@ -59,6 +60,8 @@ public:
     virtual android::status_t setHPDStatus(int enable);
     virtual android::status_t setResolutionMode(int resMode);
     virtual android::status_t setActionSafeDimension(int w, int h);
+    virtual android::status_t setPPParams(qhwc::VideoPPData pPPParams,
+                            qhwc::PP_Video_Layer_Type numVideoLayer);
 
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();

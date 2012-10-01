@@ -20,10 +20,12 @@
 
 #include <hardware/hwcomposer.h>
 #include <gralloc_priv.h>
+#include <overlayUtils.h>
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
+#define PP_MAX_VG_PIPES 2
 
 //Fwrd decls
 struct hwc_context_t;
@@ -48,6 +50,26 @@ struct MDPInfo {
     char panel;
     bool hasOverlay;
 };
+
+enum PP_Video_Layer_Type {
+    VIDEO_LAYER_0,
+    VIDEO_LAYER_1,
+    VIDEO_MAX_LAYER = VIDEO_LAYER_1,
+};
+
+enum PPParamType {
+    PP_PARAM_HSIC = 0x1,
+    PP_PARAM_SHARPNESS = 0x2,
+};
+
+typedef struct {
+    uint32_t ops;
+    int32_t hue;
+    float saturation;
+    int32_t intensity;
+    float contrast;
+    uint32_t sharpness;
+} VideoPPData;
 
 enum external_display_type {
     EXT_TYPE_NONE,
@@ -181,6 +203,10 @@ struct hwc_context_t {
     bool mSecureConfig;
     bool hdmi_pending;
     char  mHDMIEvent[512];
+
+    // Post-processing parameters
+    overlay::PPMetaData mPpParams[PP_MAX_VG_PIPES];
+
 };
 
 #endif //HWC_UTILS_H

@@ -174,10 +174,10 @@ private:
 
     /* FD for the mdp fbnum */
     OvFD          mFd;
-
+#ifdef USES_POST_PROCESSING
     /* PP Compute Params */
-    void         *mComputeParams;
-
+    struct compute_params params;
+#endif
 };
 
 

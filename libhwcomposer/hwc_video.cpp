@@ -118,7 +118,11 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         ovutils::setMdpFlags(mdpFlags,
                 ovutils::OV_MDP_BLEND_FG_PREMULT);
     }
-    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+
+    MetaData_t mData;
+    memset(&mData, 0 , sizeof(MetaData_t));
+    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
+                            (MetaData_t *)hnd->base_metadata : &mData);
     if ((metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
         ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
     }
@@ -128,6 +132,29 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+        /* Preference will be for the HSIC & QSEED values
+         * set through binder */
+        metadata->operation |= ctx->mPpParams[VIDEO_LAYER_0].ops;
+        if(metadata->operation & PP_PARAM_HSIC) {
+            metadata->hsicData.hue = ctx->mPpParams[VIDEO_LAYER_0].hsicData.hue;
+            metadata->hsicData.saturation = ctx->mPpParams[VIDEO_LAYER_0].hsicData.saturation;
+            metadata->hsicData.intensity = ctx->mPpParams[VIDEO_LAYER_0].hsicData.intensity;
+            metadata->hsicData.contrast = ctx->mPpParams[VIDEO_LAYER_0].hsicData.contrast;
+        }
+        if(metadata->operation & PP_PARAM_SHARPNESS) {
+            metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].qseedData.sharpness;
+        }
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+    }
+
+    /* Set the metaData if any */
+    if(!metadata)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else{
+        ov.setVisualParams(*metadata, ovutils::OV_PIPE0);
+    }
+
     ovutils::PipeArgs parg(mdpFlags,
             info,
             ovutils::ZORDER_0,
@@ -135,6 +162,11 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ROT_DOWNSCALE_ENABLED);
     ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
     ov.setSource(pargs, ovutils::OV_PIPE0);
+
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+        ctx->mPpParams[VIDEO_LAYER_0].isValid = false;
+    }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     hwc_rect_t displayFrame = layer->displayFrame;
@@ -171,13 +203,6 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             displayFrame.bottom - displayFrame.top);
     ov.setPosition(dpos, ovutils::OV_PIPE0);
 
-    //Set the metaData if any
-    MetaData_t *data = (MetaData_t *)hnd->base_metadata;
-    if(!data)
-        ALOGE("%s:NULL metadata!", __FUNCTION__);
-    else
-        ov.setVisualParams(*data, ovutils::OV_PIPE0);
-
     if (!ov.commit(ovutils::OV_PIPE0)) {
         ALOGE("%s: commit fails", __FUNCTION__);
         return false;
@@ -203,6 +228,12 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     if (ctx->numHwLayers == 1) {
         isFgFlag = ovutils::IS_FG_SET;
     }
+
+    /* Set the metaData if any */
+    if(!metadata)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else
+        ov.setVisualParams(*metadata, ovutils::OV_PIPE1);
 
     ovutils::PipeArgs parg(mdpFlags,
             info,
@@ -232,13 +263,6 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     //Only for External
     ov.setPosition(dpos, ovutils::OV_PIPE1);
-
-    //Set the metaData if any
-    MetaData_t *data = (MetaData_t *)hnd->base_metadata;
-    if(!data)
-        ALOGE("%s:NULL metadata!", __FUNCTION__);
-    else
-        ov.setVisualParams(*data, ovutils::OV_PIPE1);
 
     if (!ov.commit(ovutils::OV_PIPE1)) {
         ALOGE("%s: commit fails", __FUNCTION__);
