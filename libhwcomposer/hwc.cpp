@@ -38,6 +38,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
 #include "qcom_ui.h"
+#include "hwc_dump_layers.h"
 
 #define VSYNC_DEBUG 0
 using namespace qhwc;
@@ -232,6 +233,7 @@ static int hwc_set(hwc_composer_device_t *dev,
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if (dpy && sur) {
         if (LIKELY(list)) {
+            HwcDebug::dumpLayers(list); // Dump layers for debugging.
             VideoOverlay::draw(ctx, list);
             VideoPIP::draw(ctx,list);
             ExtOnly::draw(ctx, list);
