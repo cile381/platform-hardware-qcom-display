@@ -53,6 +53,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
     ctx->mCopybitEngine = CopybitEngine::getInstance();
     ctx->mExtDisplay = new ExternalDisplay(ctx);
+    ctx->overlayWasInUse = false;
     MDPComp::init(ctx);
 
     char value[PROPERTY_VALUE_MAX];
