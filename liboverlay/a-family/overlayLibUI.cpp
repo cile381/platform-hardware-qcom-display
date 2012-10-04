@@ -420,12 +420,12 @@ status_t OverlayUI::startOVSession() {
         return ret;
 
     if(mParamsChanged) {
-        mParamsChanged = false;
         mdp_overlay ovInfo = mOvInfo;
         if (ioctl(mobjDisplay.getFD(), MSMFB_OVERLAY_SET, &ovInfo)) {
             LOGE("Overlay set failed..");
             ret = BAD_VALUE;
         } else {
+            mParamsChanged = false;
             mSessionID = ovInfo.id;
             mOvInfo = ovInfo;
             ret = NO_ERROR;
