@@ -125,6 +125,8 @@ unsigned int CopyBit::getRGBRenderingArea(const hwc_layer_list_t *list) {
 
 bool CopyBit::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
 
+    if(ctx->mCopybitEngine == NULL)
+        return false;
     sCopyBitDraw = false;
 
     int compositionType =
