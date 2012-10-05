@@ -33,7 +33,9 @@
 #include "hwc_external.h"
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
+#include "qcom_ui.h"
 
+#define VSYNC_DEBUG 0
 using namespace qhwc;
 
 static int hwc_device_open(const struct hw_module_t* module,
@@ -70,6 +72,11 @@ static void hwc_registerProcs(struct hwc_composer_device* dev,
         return;
     }
     ctx->device.reserved_proc[0] = (void*)procs;
+
+    // Now that we have the functions needed, kick off
+    // the uevent & vsync threads
+    init_uevent_thread(ctx);
+    init_vsync_thread(ctx);
 }
 
 static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
@@ -105,6 +112,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
             ctx->overlayInUse = false;
             ctx->mOverlay->setState(ovutils::OV_CLOSED);
         }
+
+        qdutils::CBUtils::checkforGPULayer(list);
     }
 
     return 0;
@@ -114,17 +123,45 @@ static int hwc_eventControl(struct hwc_composer_device* dev,
                              int event, int value)
 {
     int ret = 0;
+    static int prev_value, temp;
+
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     private_module_t* m = reinterpret_cast<private_module_t*>(
                 ctx->mFbDev->common.module);
     switch(event) {
         case HWC_EVENT_VSYNC:
+            if (value == prev_value){
+                //TODO see why HWC gets repeated events
+                ALOGD_IF(VSYNC_DEBUG, "%s - VSYNC is already %s",
+                        __FUNCTION__, (value)?"ENABLED":"DISABLED");
+            }
+            temp = ctx->vstate.enable;
             if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_VSYNC_CTRL, &value) < 0)
                 ret = -errno;
 
-            if(ctx->mExtDisplay->getExternalDisplay()) {
-                ret = ctx->mExtDisplay->enableHDMIVsync(value);
+            /* vsync state change logic */
+            if (value == 1) {
+                //unblock vsync thread
+                pthread_mutex_lock(&ctx->vstate.lock);
+                ctx->vstate.enable = true;
+                pthread_cond_signal(&ctx->vstate.cond);
+                pthread_mutex_unlock(&ctx->vstate.lock);
             }
+            if (value == 0 && temp) {
+                //vsync thread will block
+                pthread_mutex_lock(&ctx->vstate.lock);
+                ctx->vstate.enable = false;
+                pthread_mutex_unlock(&ctx->vstate.lock);
+            }
+            ALOGD_IF (VSYNC_DEBUG, "VSYNC state changed from %s to %s",
+              (prev_value)?"ENABLED":"DISABLED", (value)?"ENABLED":"DISABLED");
+            prev_value = value;
+            /* vsync state change logic - end*/
+
+             if(ctx->mExtDisplay->isHDMIConfigured() &&
+                (ctx->mExtDisplay->getExternalDisplay()==EXTERN_DISPLAY_FB1)) {
+                ret = ctx->mExtDisplay->enableHDMIVsync(value);
+             }
            break;
        case HWC_EVENT_ORIENTATION:
              ctx->deviceOrientation = value;
@@ -225,7 +262,7 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
         dev->device.common.tag     = HARDWARE_DEVICE_TAG;
         //XXX: This disables hardware vsync on 8x55
         // Fix when HW vsync is available on 8x55
-        if(dev->mMDP.version == 400)
+        if(dev->mMDP.version == 400 || (dev->mMDP.version >= 500))
             dev->device.common.version = 0;
         else
             dev->device.common.version = HWC_DEVICE_API_VERSION_0_3;

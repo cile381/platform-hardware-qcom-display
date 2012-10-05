@@ -65,11 +65,10 @@ private:
     mutable range r;
 };
 
-int CopyBit::sYuvCount = 0;
-int CopyBit::sYuvLayerIndex = -1;
 bool CopyBit::sIsModeOn = false;
-bool CopyBit::sIsLayerSkip = false;
+bool CopyBit::sIsSkipLayerPresent = false;
 bool CopyBit::sCopyBitDraw = false;
+
 bool CopyBit::canUseCopybitForYUV(hwc_context_t *ctx) {
     // return true for non-overlay targets
     if(ctx->mMDP.hasOverlay) {
@@ -93,13 +92,6 @@ bool CopyBit::canUseCopybitForRGB(hwc_context_t *ctx, hwc_layer_list_t *list) {
     int compositionType =
         qdutils::QCCompositionType::getInstance().getCompositionType();
 
-    if (compositionType & qdutils::COMPOSITION_TYPE_C2D){
-         if (sYuvCount) {
-             //Overlay up & running. Dont use COPYBIT for RGB layers.
-             // TODO need to implement blending with C2D
-             return false;
-         }
-    }
     if(compositionType & qdutils::COMPOSITION_TYPE_MDP){
         // in MDP composition fall back to gpu if Buffers are not contiguous
         if(! canUseContiguousMemory(list)) {
@@ -152,29 +144,34 @@ unsigned int CopyBit::getRGBRenderingArea(const hwc_layer_list_t *list) {
 
 bool CopyBit::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
 
+    sCopyBitDraw = false;
+
     int compositionType =
         qdutils::QCCompositionType::getInstance().getCompositionType();
 
-    if ((compositionType & qdutils::COMPOSITION_TYPE_GPU) ||
-        (compositionType & qdutils::COMPOSITION_TYPE_CPU))   {
+    if ((compositionType == qdutils::COMPOSITION_TYPE_GPU) ||
+        (compositionType == qdutils::COMPOSITION_TYPE_CPU))   {
         //GPU/CPU composition, don't change layer composition type
         return true;
     }
-
-    bool useCopybitForYUV = canUseCopybitForYUV(ctx);
-    bool useCopybitForRGB = canUseCopybitForRGB(ctx, list);
 
     if(!(validateParams(ctx, list))) {
        ALOGE("%s:Invalid Params", __FUNCTION__);
        return false;
     }
-    sCopyBitDraw = false;
+
+    if(sIsSkipLayerPresent) {
+        //GPU will be anyways used
+        return false;
+    }
+
+    bool useCopybitForYUV = canUseCopybitForYUV(ctx);
+    bool useCopybitForRGB = canUseCopybitForRGB(ctx, list);
+
     for (int i=list->numHwLayers-1; i >= 0 ; i--) {
         private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
 
-        if (isSkipLayer(&list->hwLayers[i])) {
-            return true;
-        } else if (hnd->bufferType == BUFFER_TYPE_VIDEO) {
+        if (hnd->bufferType == BUFFER_TYPE_VIDEO) {
           //YUV layer, check, if copybit can be used
           if (useCopybitForYUV) {
               list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
@@ -343,7 +340,7 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
         dtdy < 1/copybitsMinScale){
         // The requested scale is out of the range the hardware
         // can support.
-       ALOGE("%s:%d::Need to scale twice dsdx=%f, dtdy=%f,copybitsMaxScale=%f,\
+       ALOGD("%s:%d::Need to scale twice dsdx=%f, dtdy=%f,copybitsMaxScale=%f,\
                                  copybitsMinScale=%f,screen_w=%d,screen_h=%d \
                   src_crop_width=%d src_crop_height=%d",__FUNCTION__,__LINE__,
               dsdx,dtdy,copybitsMaxScale,1/copybitsMinScale,screen_w,screen_h,
@@ -368,12 +365,12 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
          tmp_w  = (tmp_w/2)*2;
          tmp_h = (tmp_h/2)*2;
        }
-       ALOGE("%s:%d::tmp_w = %d,tmp_h = %d",__FUNCTION__,__LINE__,tmp_w,tmp_h);
+       ALOGD("%s:%d::tmp_w = %d,tmp_h = %d",__FUNCTION__,__LINE__,tmp_w,tmp_h);
 
-       int usage = GRALLOC_USAGE_PRIVATE_MM_HEAP;
+       int usage = GRALLOC_USAGE_PRIVATE_MM_HEAP|GRALLOC_USAGE_PRIVATE_UNCACHED;
        if(dev->mMDP.version < 400)
-          usage = GRALLOC_USAGE_PRIVATE_CAMERA_HEAP;
-       if (0 == alloc_buffer(&tmpHnd, tmp_w, tmp_h, fbHandle->format, usage)){
+          usage = GRALLOC_USAGE_PRIVATE_CAMERA_HEAP|GRALLOC_USAGE_PRIVATE_UNCACHED;
+       if (0 == alloc_buffer(&tmpHnd, tmp_w, tmp_h, HAL_PIXEL_FORMAT_RGB_565, usage)){
             copybit_image_t tmp_dst;
             copybit_rect_t tmp_rect;
             tmp_dst.w = tmp_w;
