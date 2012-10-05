@@ -67,6 +67,10 @@ void initContext(hwc_context_t *ctx)
     property_get("debug.hwc.dynThreshold", value, "3");
     ctx->dynThreshold = atof(value);
 
+    pthread_mutex_init(&(ctx->vstate.lock), NULL);
+    pthread_cond_init(&(ctx->vstate.cond), NULL);
+    ctx->vstate.enable = false;
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
     ALOGI("DYN composition threshold : %f", ctx->dynThreshold);
@@ -99,6 +103,8 @@ void closeContext(hwc_context_t *ctx)
         ctx->mExtDisplay = NULL;
     }
 
+    pthread_mutex_destroy(&(ctx->vstate.lock));
+    pthread_cond_destroy(&(ctx->vstate.cond));
 
     free(const_cast<hwc_methods_t *>(ctx->device.methods));
 
@@ -153,10 +159,6 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
             //If BLOCK layer present, dont cache index, display BLOCK only.
             if(isExtBlockPresent == false) extLayerIndex = i;
         } else if (isSkipLayer(&list->hwLayers[i])) { //Popups
-            //If video layer is below a skip layer
-            if(yuvLayerIndex != -1 && yuvLayerIndex < (ssize_t)i) {
-                isYuvLayerSkip = true;
-            }
             skipCount++;
         }
     }
@@ -164,7 +166,7 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
     VideoOverlay::setStats(yuvCount, yuvLayerIndex, isYuvLayerSkip,
             ccLayerIndex);
     ExtOnly::setStats(extCount, extLayerIndex, isExtBlockPresent);
-    CopyBit::setStats(yuvCount, yuvLayerIndex, isYuvLayerSkip);
+    CopyBit::setStats(skipCount);
     MDPComp::setStats(skipCount);
 
     ctx->numHwLayers = list->numHwLayers;

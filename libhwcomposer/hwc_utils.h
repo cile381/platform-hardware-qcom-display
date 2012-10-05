@@ -117,6 +117,9 @@ static inline bool isExtCC(const private_handle_t* hnd) {
 // Initialize uevent thread
 void init_uevent_thread(hwc_context_t* ctx);
 
+// Initialize vsync thread
+void init_vsync_thread(hwc_context_t* ctx);
+
 inline void getLayerResolution(const hwc_layer_t* layer,
                                          int& width, int& height)
 {
@@ -125,6 +128,12 @@ inline void getLayerResolution(const hwc_layer_t* layer,
     height = displayFrame.bottom - displayFrame.top;
 }
 }; //qhwc namespace
+
+struct vsync_state {
+    pthread_mutex_t lock;
+    pthread_cond_t  cond;
+    bool enable;
+};
 
 // -----------------------------------------------------------------------------
 // HWC context
@@ -156,6 +165,9 @@ struct hwc_context_t {
     qhwc::ExternalDisplay *mExtDisplay;
 
     qhwc::MDPInfo mMDP;
+
+    //Vsync
+    struct vsync_state vstate;
 
 };
 
