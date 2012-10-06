@@ -126,6 +126,7 @@ private:
     overlay::GenericPipe<utils::EXTERNAL> mS3d;
     // Cache the 3D format
     uint32_t mS3Dfmt;
+    bool mSet3DMode;
 };
 
 /////////////  S3DPrimary Pipe ////////////////////////////
@@ -159,6 +160,7 @@ private:
     overlay::GenericPipe<utils::PRIMARY> mS3d;
     // Cache the 3D format
     uint32_t mS3Dfmt;
+    bool mSet3DMode;
 };
 
 
@@ -209,10 +211,10 @@ inline bool M3DExtPipe<CHAN>::setPosition(const utils::Dim& d) {
     // HAL_3D_OUT_SBS_MASK is 0x1000 >> 12 == 0x1 as the orig
     // code suggets
     utils::Whf _whf(mM3d.getScreenInfo().mFBWidth,
-            mM3d.getScreenInfo().mFBHeight,
-            mM3Dfmt);
+            mM3d.getScreenInfo().mFBHeight, 0,
+            mM3Dfmt, 0);
     if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
-        ALOGE("S3DPrimaryPipe setPosition err in getPositionS3D");
+        ALOGE("M3DExtPipe setPosition err in getPositionS3D");
         _dim = d;
     }
     return mM3d.setPosition(_dim);
@@ -229,7 +231,7 @@ template <int CHAN>
 inline bool M3DExtPipe<CHAN>::setSource(const utils::PipeArgs& args)
 {
     // extract 3D fmt
-    mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format)) |
+    mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format_3d)) |
             utils::HAL_3D_OUT_MONOS_MASK;
     return mM3d.setSource(args);
 }
@@ -289,7 +291,7 @@ template <int CHAN>
 inline bool M3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)
 {
     // extract 3D fmt
-    mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format)) |
+    mM3Dfmt = utils::format3DInput(utils::getS3DFormat(args.whf.format_3d)) |
             utils::HAL_3D_OUT_MONOS_MASK;
     return mM3d.setSource(args);
 }
@@ -301,7 +303,7 @@ inline void M3DPrimaryPipe<CHAN>::dump() const {
 
 /////////////  S3DExt Pipe ////////////////////////////////
 template <int CHAN>
-inline S3DExtPipe<CHAN>::S3DExtPipe() : mS3Dfmt(0) {}
+inline S3DExtPipe<CHAN>::S3DExtPipe() : mS3Dfmt(0), mSet3DMode(0) {}
 template <int CHAN>
 inline S3DExtPipe<CHAN>::~S3DExtPipe() { close(); }
 template <int CHAN>
@@ -318,10 +320,21 @@ inline bool S3DExtPipe<CHAN>::close() {
     if(!utils::send3DInfoPacket(0)) {
         ALOGE("S3DExtPipe close failed send3D info packet");
     }
+    mSet3DMode = false;
     return mS3d.close();
 }
 template <int CHAN>
-inline bool S3DExtPipe<CHAN>::commit() { return mS3d.commit(); }
+inline bool S3DExtPipe<CHAN>::commit() {
+    uint32_t fmt = mS3Dfmt & utils::OUTPUT_3D_MASK;
+    if(!mSet3DMode) {
+        if(!utils::send3DInfoPacket(fmt)){
+            ALOGE("Error S3DExtPipe start error send3DInfoPacket %d", fmt);
+            return false;
+        }
+        mSet3DMode = true;
+    }
+    return mS3d.commit();
+}
 template <int CHAN>
 inline bool S3DExtPipe<CHAN>::queueBuffer(int fd, uint32_t offset) {
     return mS3d.queueBuffer(fd, offset);
@@ -340,8 +353,8 @@ inline bool S3DExtPipe<CHAN>::setPosition(const utils::Dim& d)
 {
     utils::Dim _dim;
     utils::Whf _whf(mS3d.getScreenInfo().mFBWidth,
-            mS3d.getScreenInfo().mFBHeight,
-            mS3Dfmt);
+            mS3d.getScreenInfo().mFBHeight, 0,
+            mS3Dfmt, 0);
     if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
         ALOGE("S3DExtPipe setPosition err in getPositionS3D");
         _dim = d;
@@ -358,7 +371,7 @@ inline bool S3DExtPipe<CHAN>::setVisualParams(const MetaData_t& data) {
 }
 template <int CHAN>
 inline bool S3DExtPipe<CHAN>::setSource(const utils::PipeArgs& args) {
-    mS3Dfmt = utils::getS3DFormat(args.whf.format);
+    mS3Dfmt = utils::getS3DFormat(args.whf.format_3d);
     return mS3d.setSource(args);
 }
 template <int CHAN>
@@ -369,7 +382,7 @@ inline void S3DExtPipe<CHAN>::dump() const {
 
 /////////////  S3DPrimary Pipe ////////////////////////////
 template <int CHAN>
-inline S3DPrimaryPipe<CHAN>::S3DPrimaryPipe() : mS3Dfmt(0) {}
+inline S3DPrimaryPipe<CHAN>::S3DPrimaryPipe() : mS3Dfmt(0), mSet3DMode(0) {}
 template <int CHAN>
 inline S3DPrimaryPipe<CHAN>::~S3DPrimaryPipe() { close(); }
 template <int CHAN>
@@ -386,8 +399,12 @@ inline bool S3DPrimaryPipe<CHAN>::init(RotatorBase* rot) {
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::close() {
     if(!utils::enableBarrier(0)) {
-        ALOGE("S3DExtPipe close failed enable barrier");
+        ALOGE("S3DPrimaryPipe close failed enable barrier");
     }
+    if(!utils::send3DInfoPacket(0)){
+        ALOGE("S3DPrimaryPipe close failed send3DInfoPacket");
+    }
+    mSet3DMode = false;
     mCtrl3D.close();
     return mS3d.close();
 }
@@ -395,9 +412,12 @@ inline bool S3DPrimaryPipe<CHAN>::close() {
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::commit() {
     uint32_t fmt = mS3Dfmt & utils::OUTPUT_3D_MASK;
-    if(!utils::send3DInfoPacket(fmt)){
-        ALOGE("Error S3DExtPipe start error send3DInfoPacket %d", fmt);
-        return false;
+    if(!mSet3DMode) {
+        if(!utils::send3DInfoPacket(fmt)){
+            ALOGE("Error S3DPrimaryPipe start error send3DInfoPacket %d", fmt);
+            return false;
+        }
+        mSet3DMode = true;
     }
     return mS3d.commit();
 }
@@ -430,7 +450,7 @@ inline bool S3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d)
     // which means format is HAL_3D_OUT_SBS_MASK
     // HAL_3D_OUT_SBS_MASK is 0x1000 >> 12 == 0x1 as the orig
     // code suggets
-    utils::Whf _whf(d.w, d.h, utils::HAL_3D_OUT_SBS_MASK);
+    utils::Whf _whf(d.w, d.h, 0,  utils::HAL_3D_OUT_SBS_MASK, 0);
     if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
         ALOGE("S3DPrimaryPipe setPosition err in getPositionS3D");
         _dim = d;
@@ -471,7 +491,7 @@ inline bool S3DPrimaryPipe<CHAN>::setVisualParams(const MetaData_t& data) {
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::setSource(const utils::PipeArgs& args)
 {
-    mS3Dfmt = utils::getS3DFormat(args.whf.format);
+    mS3Dfmt = utils::getS3DFormat(args.whf.format_3d);
     return mS3d.setSource(args);
 }
 template <int CHAN>

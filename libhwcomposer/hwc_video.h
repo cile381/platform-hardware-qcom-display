@@ -31,7 +31,7 @@ public:
     static bool draw(hwc_context_t *ctx, hwc_layer_list_t *list);
     //Receives data from hwc
     static void setStats(int yuvCount, int yuvLayerIndex, bool isYuvLayerSkip,
-            int ccLayerIndex);
+            int ccLayerIndex, int layerS3DFormat);
     //resets values
     static void reset();
 private:
@@ -40,6 +40,14 @@ private:
     //Configures overlay for video prim and ext
     static bool configure(hwc_context_t *ctx, hwc_layer_t *yuvlayer,
             hwc_layer_t *ccLayer);
+    //Configures overlay for primary video
+    static bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer);
+    //Configures overlay for external video
+    static bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer);
+    //Configures overlay for external video 3D
+    static bool configExtVidS3D(hwc_context_t *ctx, hwc_layer_t *layer);
+    //Configures overlay for External video close caption
+    static bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer);
     //Marks layer flags if this feature is used
     static void markFlags(hwc_layer_t *layer);
     //returns yuv count
@@ -53,6 +61,8 @@ private:
     static int sYuvLayerIndex;
     //Flags if a yuv layer is animating or below something that is animating
     static bool sIsYuvLayerSkip;
+    //Flags to indicate layer's format is 3D.
+    static int sLayerS3DFormat;
     //Holds the closed caption layer index, -1 by default
     static int sCCLayerIndex;
     //Flags if this feature is on.
@@ -60,11 +70,12 @@ private:
 };
 
 inline void VideoOverlay::setStats(int yuvCount, int yuvLayerIndex,
-        bool isYuvLayerSkip, int ccLayerIndex) {
+        bool isYuvLayerSkip, int ccLayerIndex, int layerS3DFormat) {
     sYuvCount = yuvCount;
     sYuvLayerIndex = yuvLayerIndex;
     sIsYuvLayerSkip = isYuvLayerSkip;
     sCCLayerIndex = ccLayerIndex;
+    sLayerS3DFormat = layerS3DFormat;
 }
 
 inline int VideoOverlay::getYuvCount() { return sYuvCount; }
@@ -75,6 +86,7 @@ inline void VideoOverlay::reset() {
     sCCLayerIndex = -1;
     sIsModeOn = false;
     sState = ovutils::OV_CLOSED;
+    sLayerS3DFormat = 0;
 }
 }; //namespace qhwc
 

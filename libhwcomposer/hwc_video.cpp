@@ -31,6 +31,7 @@ int VideoOverlay::sYuvLayerIndex = -1;
 bool VideoOverlay::sIsYuvLayerSkip = false;
 int VideoOverlay::sCCLayerIndex = -1;
 bool VideoOverlay::sIsModeOn = false;
+int VideoOverlay::sLayerS3DFormat = 0;
 
 //Cache stats, figure out the state, config overlay
 bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
@@ -78,10 +79,22 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
         } else if(sIsYuvLayerSkip) { //skip on primary, no ext
             newState = ovutils::OV_CLOSED;
         } else if(ctx->mExtDisplay->getExternalDisplay()) {
-            //display on both
+            //display on both primary and secondary
             newState = ovutils::OV_2D_VIDEO_ON_PANEL_TV;
+            if(sLayerS3DFormat) {
+                // Initialize to the default state
+                newState = ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV;
+                if(ovutils::is3DTV()) {
+                    // Change the state if the device is connected to 3DTV.
+                    newState = ovutils::OV_3D_VIDEO_ON_3D_TV;
+                }
+            }
         } else { //display on primary only
             newState = ovutils::OV_2D_VIDEO_ON_PANEL;
+            if(sLayerS3DFormat) {
+                // Initialize to the default state
+                newState = ovutils::OV_3D_VIDEO_ON_2D_PANEL;
+            }
         }
     }
     sState = newState;
@@ -93,6 +106,9 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
     switch(sState) {
         case ovutils::OV_2D_VIDEO_ON_PANEL:
         case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
+        case ovutils::OV_3D_VIDEO_ON_3D_TV:
+        case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
+        case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
             break;
@@ -103,11 +119,12 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
     }
 }
 
-/* Helpers */
-bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
+bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     overlay::Overlay& ov = *(ctx->mOverlay);
     private_handle_t *hnd = (private_handle_t *)layer->handle;
-    ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
+
+    ovutils::Whf info(hnd->width, hnd->height,
+                      hnd->format, sLayerS3DFormat, hnd->size);
 
     ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
     if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
@@ -210,10 +227,12 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     return true;
 }
 
-bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
+bool VideoOverlay::configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     overlay::Overlay& ov = *(ctx->mOverlay);
     private_handle_t *hnd = (private_handle_t *)layer->handle;
-    ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
+
+    ovutils::Whf info(hnd->width, hnd->height,
+                      hnd->format, sLayerS3DFormat, hnd->size);
 
     ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
     if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
@@ -271,7 +290,75 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     return true;
 }
 
-bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer) {
+bool VideoOverlay::configExtVidS3D(hwc_context_t *ctx, hwc_layer_t *layer) {
+    overlay::Overlay& ov = *(ctx->mOverlay);
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
+
+    ovutils::Whf info(hnd->width, hnd->height,
+                      hnd->format, sLayerS3DFormat, hnd->size);
+
+    ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
+    if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
+        ovutils::setMdpFlags(mdpFlags,
+                ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+    }
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    if ((metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
+    }
+    ovutils::eIsFg isFgFlag = ovutils::IS_FG_OFF;
+    if (ctx->numHwLayers == 1) {
+        isFgFlag = ovutils::IS_FG_SET;
+    }
+    // Configure overlay channel 0 for left view
+    ovutils::PipeArgs parg0(mdpFlags,
+            info,
+            ovutils::ZORDER_0,
+            isFgFlag,
+            ovutils::ROT_FLAGS_NONE);
+    ovutils::PipeArgs parg1(mdpFlags,
+            info,
+            ovutils::ZORDER_1,
+            isFgFlag,
+            ovutils::ROT_FLAGS_NONE);
+    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg0, parg1, parg0 };
+
+    ov.setSource(pargs, ovutils::OV_PIPE0);
+    ov.setSource(pargs, ovutils::OV_PIPE1);
+
+    hwc_rect_t sourceCrop = layer->sourceCrop;
+    // x,y,w,h
+    ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
+            sourceCrop.right - sourceCrop.left,
+            sourceCrop.bottom - sourceCrop.top);
+    //Only for External
+    ov.setCrop(dcrop, ovutils::OV_PIPE0);
+    ov.setCrop(dcrop, ovutils::OV_PIPE1);
+
+    // FIXME: Use source orientation for TV when source is portrait
+    //Only for External
+    ov.setTransform(layer->sourceTransform, ovutils::OV_PIPE0);
+    ov.setTransform(layer->sourceTransform, ovutils::OV_PIPE1);
+
+    ovutils::Dim dpos;
+    hwc_rect_t displayFrame = layer->displayFrame;
+    dpos.x = displayFrame.left;
+    dpos.y = displayFrame.top;
+    dpos.w = (displayFrame.right - displayFrame.left);
+    dpos.h = (displayFrame.bottom - displayFrame.top);
+
+    //Only for External
+    ov.setPosition(dpos, ovutils::OV_PIPE0);
+    ov.setPosition(dpos, ovutils::OV_PIPE1);
+
+    if ((!ov.commit(ovutils::OV_PIPE0)) || (!ov.commit(ovutils::OV_PIPE1))) {
+        ALOGE("%s: commit fails", __FUNCTION__);
+        return false;
+    }
+    return true;
+}
+
+bool VideoOverlay::configExtCC(hwc_context_t *ctx, hwc_layer_t *layer) {
     if(layer == NULL)
         return true;
 
@@ -321,9 +408,11 @@ bool VideoOverlay::configure(hwc_context_t *ctx, hwc_layer_t *yuvLayer,
         ov.setState(sState);
         switch(sState) {
             case ovutils::OV_2D_VIDEO_ON_PANEL:
+            case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
                 ret &= configPrimVid(ctx, yuvLayer);
                 break;
             case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
+            case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
                 ret &= configExtVid(ctx, yuvLayer);
                 ret &= configExtCC(ctx, ccLayer);
                 ret &= configPrimVid(ctx, yuvLayer);
@@ -331,6 +420,9 @@ bool VideoOverlay::configure(hwc_context_t *ctx, hwc_layer_t *yuvLayer,
             case ovutils::OV_2D_VIDEO_ON_TV:
                 ret &= configExtVid(ctx, yuvLayer);
                 ret &= configExtCC(ctx, ccLayer);
+                break;
+            case ovutils::OV_3D_VIDEO_ON_3D_TV:
+                ret &= configExtVidS3D(ctx, yuvLayer);
                 break;
             default:
                 return false;
@@ -366,6 +458,7 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
 
     switch (state) {
         case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
+        case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
             // Play external
             if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
                 ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
@@ -384,6 +477,7 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
             }
             break;
         case ovutils::OV_2D_VIDEO_ON_PANEL:
+        case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
             // Play primary
             if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
                 ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
@@ -400,6 +494,20 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
             if (cchnd && !ov.queueBuffer(cchnd->fd, cchnd->offset,
                         ovutils::OV_PIPE2)) {
                 ALOGE("%s: queueBuffer failed for cc external", __FUNCTION__);
+                ret = false;
+            }
+            break;
+        case ovutils::OV_3D_VIDEO_ON_3D_TV:
+            // Play left view on external
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+                ALOGE("%s: queueBuffer failed for left view external",
+                                                            __FUNCTION__);
+                ret = false;
+            }
+            // Play right view on external
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+                ALOGE("%s: queueBuffer failed for right view external",
+                                                            __FUNCTION__);
                 ret = false;
             }
             break;
