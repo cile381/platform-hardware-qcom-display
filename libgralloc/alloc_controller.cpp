@@ -170,6 +170,9 @@ size_t getBufferSizeAndDimensions(int width, int height, int format,
     alignedw = ALIGN(width, 32);
     alignedh = ALIGN(height, 32);
     switch (format) {
+        case HAL_PIXEL_FORMAT_R_8:
+            size = alignedw * alignedh;
+            break;
         case HAL_PIXEL_FORMAT_RGBA_8888:
         case HAL_PIXEL_FORMAT_RGBX_8888:
         case HAL_PIXEL_FORMAT_BGRA_8888:
@@ -181,6 +184,7 @@ size_t getBufferSizeAndDimensions(int width, int height, int format,
         case HAL_PIXEL_FORMAT_RGB_565:
         case HAL_PIXEL_FORMAT_RGBA_5551:
         case HAL_PIXEL_FORMAT_RGBA_4444:
+        case HAL_PIXEL_FORMAT_RG_88:
             size = alignedw * alignedh * 2;
             break;
 
