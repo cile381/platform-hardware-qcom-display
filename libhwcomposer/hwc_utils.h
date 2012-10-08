@@ -150,7 +150,6 @@ struct hwc_context_t {
     hwc_composer_device_t device;
     int numHwLayers;
     int overlayInUse;
-    int overlayWasInUse;
     int deviceOrientation;
     int swapInterval;
     double dynThreshold;
