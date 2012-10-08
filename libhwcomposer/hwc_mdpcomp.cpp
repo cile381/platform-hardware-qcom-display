@@ -613,6 +613,11 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
         current_frame.pipe_layer = NULL;
     }
 
+    if(current_frame.pipe_layer) {
+        free(current_frame.pipe_layer);
+        current_frame.pipe_layer = NULL;
+    }
+
     if(!ctx) {
        ALOGE("%s: invalid context", __FUNCTION__);
        return -1;
