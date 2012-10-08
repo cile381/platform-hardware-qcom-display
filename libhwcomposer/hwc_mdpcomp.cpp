@@ -131,8 +131,10 @@ void MDPComp::reset( hwc_context_t *ctx, hwc_layer_list_t* list ) {
     overlay::Overlay& ov = *(ctx->mOverlay);
 
     sCurrentFrame.count = 0;
-    free(sCurrentFrame.pipe_layer);
-    sCurrentFrame.pipe_layer = NULL;
+    if(sCurrentFrame.pipe_layer) {
+        free(sCurrentFrame.pipe_layer);
+        sCurrentFrame.pipe_layer = NULL;
+    }
 
     //Reset MDP pipes
     sPipeMgr.reset();
@@ -571,7 +573,10 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
     frame_info &current_frame = sCurrentFrame;
     current_frame.count = 0;
 
-    overlay::Overlay& ov = *(ctx->mOverlay);
+    if(current_frame.pipe_layer) {
+        free(current_frame.pipe_layer);
+        current_frame.pipe_layer = NULL;
+    }
 
     if(!ctx) {
        ALOGE("%s: invalid context", __FUNCTION__);
@@ -583,6 +588,8 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
         ALOGE("%s: fbDev is NULL", __FUNCTION__);
         return -1;
     }
+
+    overlay::Overlay& ov = *(ctx->mOverlay);
 
     if(!parse_and_allocate(ctx, list, current_frame)) {
        ov.setState(ovutils::OV_FB);
