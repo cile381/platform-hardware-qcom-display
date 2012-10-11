@@ -133,8 +133,7 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_FLAG_DISABLED);
-    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
-    ov.setSource(pargs, ovutils::OV_PIPE0);
+    ov.setSource(parg, ovutils::OV_PIPE0);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     hwc_rect_t displayFrame = layer->displayFrame;
@@ -202,8 +201,7 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_FLAG_DISABLED);
-    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
-    ov.setSource(pargs, ovutils::OV_PIPE1);
+    ov.setSource(parg, ovutils::OV_PIPE1);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h
@@ -247,8 +245,7 @@ bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_1,
             isFgFlag,
             ovutils::ROT_FLAG_DISABLED);
-    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
-    ov.setSource(pargs, ovutils::OV_PIPE2);
+    ov.setSource(parg, ovutils::OV_PIPE2);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h
