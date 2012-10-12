@@ -475,7 +475,8 @@ bool Overlay::closeChannel() {
         return true;
 
     if(mS3DFormat) {
-        if (mExternalDisplay)
+        // Check whether external display is connected.
+        if (mExternalDisplay != 0 && mExternalDisplay != HDMI_INVALIDATE_STATE)
             overlay::send3DInfoPacket(0);
         else if (mState == OV_3D_VIDEO_3D_PANEL) {
             if (sHDMIAsPrimary)
@@ -503,7 +504,9 @@ void Overlay::closeExternalChannel() {
     if (objOvCtrlChannel[VG1_PIPE].isChannelUP()) {
         objOvCtrlChannel[VG1_PIPE].closeControlChannel();
         objOvDataChannel[VG1_PIPE].closeDataChannel();
-        mExternalDisplay = 0;
+        // Mark the external display state as dirty for making the setSource API to perform
+        // the Overlay state change during its next call.
+        mExternalDisplay = HDMI_INVALIDATE_STATE;
     }
 }
 
