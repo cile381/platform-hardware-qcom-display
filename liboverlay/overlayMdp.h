@@ -149,10 +149,15 @@ public:
     /* dump state of the object */
     void dump() const;
 
+    /* Perform transformation calculations */
+    void doTransform();
+
+    /* Performs downscale calculations */
+    int doDownscale();
+
 private:
 
     /* helper functions for overlayTransform */
-    void doTransform();
     void overlayTransFlipH();
     void overlayTransFlipV();
     void overlayTransRot90();
