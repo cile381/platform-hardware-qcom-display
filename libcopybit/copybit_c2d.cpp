@@ -1114,6 +1114,18 @@ static int stretch_copybit_internal(
     return status;
 }
 
+static int finish_copybit(struct copybit_device_t *dev)
+{
+    struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
+    int status = COPYBIT_SUCCESS;
+
+    if (!ctx) {
+        return COPYBIT_FAILURE;
+    }
+
+    return status;
+}
+
 static int stretch_copybit(
     struct copybit_device_t *dev,
     struct copybit_image_t const *dst,
@@ -1227,6 +1239,7 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->device.get = get;
     ctx->device.blit = blit_copybit;
     ctx->device.stretch = stretch_copybit;
+    ctx->device.finish = finish_copybit;
     ctx->blitState.config_mask = C2D_NO_BILINEAR_BIT | C2D_NO_ANTIALIASING_BIT;
     ctx->trg_transform = C2D_TARGET_ROTATE_0;
 
