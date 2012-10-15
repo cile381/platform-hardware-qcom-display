@@ -1491,7 +1491,8 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
 #ifdef USE_MDP3
     if (((layer->transform& HAL_TRANSFORM_FLIP_H) ||
        (layer->transform & HAL_TRANSFORM_FLIP_V)) &&
-       (layer->transform &  HAL_TRANSFORM_ROT_90)){
+       (layer->transform &  HAL_TRANSFORM_ROT_90) &&
+       !(layer->transform ==  HAL_TRANSFORM_ROT_270)){
         if(layer->transform & HAL_TRANSFORM_FLIP_H){
             layerTransform ^= HAL_TRANSFORM_FLIP_H;
             layerTransform |= HAL_TRANSFORM_FLIP_V;
