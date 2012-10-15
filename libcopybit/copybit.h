@@ -213,6 +213,16 @@ struct copybit_device_t {
                    struct copybit_rect_t const *dst_rect,
                    struct copybit_rect_t const *src_rect,
                    struct copybit_region_t const *region);
+
+  /**
+    * Execute the completion of the copybit draw operation.
+    *
+    * @param dev from open
+    *
+    * @return 0 if successful
+    */
+  int (*finish)(struct copybit_device_t *dev);
+
 };
 
 
