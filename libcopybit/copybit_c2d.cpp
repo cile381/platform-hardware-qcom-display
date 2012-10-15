@@ -125,7 +125,6 @@ struct copybit_context_t {
     int fb_width;
     int fb_height;
     bool isPremultipliedAlpha;
-    bool mBlitToFB;
 };
 
 struct blitlist{
@@ -491,98 +490,6 @@ error:
     return status;
 }
 
-static int set_src_image( uint32 *surfaceId, const struct copybit_image_t *rhs,
-                          int *cformat, uint32 *mapped)
-{
-    struct private_handle_t* handle = (struct private_handle_t*)rhs->handle;
-    *cformat  = get_format(rhs->format);
-    C2D_SURFACE_TYPE surfaceType;
-    uint32 gpuaddr = (uint32)handle->gpuaddr;
-    int status = COPYBIT_SUCCESS;
-
-    if (handle->gpuaddr == 0)
-    {
-        handle->gpuaddr = c2d_get_gpuaddr( handle);
-        if(!handle->gpuaddr)
-            return COPYBIT_FAILURE;
-
-        *mapped = 1;
-    }
-
-    /* create C2D surface */
-    if(is_supported_rgb_format(rhs->format) == COPYBIT_SUCCESS) {
-        /* RGB */
-        C2D_RGB_SURFACE_DEF surfaceDef;
-        surfaceType = (C2D_SURFACE_TYPE) (C2D_SURFACE_RGB_HOST | C2D_SURFACE_WITH_PHYS | C2D_SURFACE_WITH_PHYS_DUMMY);
-
-        surfaceDef.phys = (void*) handle->gpuaddr;
-        surfaceDef.buffer = (void*) (handle->base);
-        surfaceDef.buffer = (void*) (handle->base + handle->offset);
-
-        surfaceDef.format = get_format(rhs->format);
-        surfaceDef.width = rhs->w;
-        surfaceDef.height = rhs->h;
-        surfaceDef.stride = ALIGN(((surfaceDef.width * c2diGetBpp(surfaceDef.format))>>3), 32);
-
-        if(LINK_c2dCreateSurface( surfaceId, C2D_TARGET, surfaceType,(void*)&surfaceDef)) {
-            ALOGE("%s: LINK_c2dCreateSurface error", __FUNCTION__);
-            status = COPYBIT_FAILURE;
-            goto error;
-        }
-    } else if(is_supported_yuv_format(rhs->format) == COPYBIT_SUCCESS) {
-        /* YUV */
-        C2D_YUV_SURFACE_DEF surfaceDef;
-        int offset = 0;
-        int yStride = 0;
-        int uvStride = 0;
-        memset(&surfaceDef, 0, sizeof(surfaceDef));
-
-        surfaceType = (C2D_SURFACE_TYPE)(C2D_SURFACE_YUV_HOST | C2D_SURFACE_WITH_PHYS | C2D_SURFACE_WITH_PHYS_DUMMY);
-        surfaceDef.format = get_format(rhs->format);
-        bufferInfo info;
-        info.width = rhs->w;
-        info.height = rhs->h;
-        info.format = rhs->format;
-
-        yuvPlaneInfo yuvInfo;
-        status = calculate_yuv_offset_and_stride(info, yuvInfo);
-        if(status != COPYBIT_SUCCESS) {
-            ALOGE("%s: calculate_yuv_offset_and_stride error", __FUNCTION__);
-            goto error;
-        }
-
-        surfaceDef.width = rhs->w;
-        surfaceDef.height = rhs->h;
-        surfaceDef.plane0 = (void*) (handle->base);
-        surfaceDef.phys0 = (void*) handle->gpuaddr;
-        surfaceDef.stride0 = yuvInfo.yStride;
-
-        surfaceDef.plane1 = (void*) (handle->base + yuvInfo.plane1_offset);
-        surfaceDef.phys1 = (void*) (handle->gpuaddr + yuvInfo.plane1_offset);
-        surfaceDef.stride1 = yuvInfo.plane1_stride;
-
-        if(LINK_c2dCreateSurface( surfaceId, C2D_TARGET | C2D_SOURCE, surfaceType,
-                                  (void*)&surfaceDef)) {
-            ALOGE("%s: YUV surface LINK_c2dCreateSurface error", __func__);
-            status = COPYBIT_FAILURE;
-            goto error;
-        }
-    } else {
-        ALOGE("%s: Invalid format 0x%x", __FUNCTION__, rhs->format);
-        status = COPYBIT_FAILURE;
-    }
-
-    return COPYBIT_SUCCESS;
-
-error:
-    if(*mapped == 1) {
-        LINK_c2dUnMapAddr( (void*) handle->gpuaddr);
-        handle->gpuaddr = 0;
-        *mapped = 0;
-    }
-    return status;
-}
-
 void unset_image( uint32 surfaceId, const struct copybit_image_t *rhs,
                   uint32 mmapped)
 {
@@ -593,57 +500,6 @@ void unset_image( uint32 surfaceId, const struct copybit_image_t *rhs,
         LINK_c2dUnMapAddr( (void*) handle->gpuaddr);
         handle->gpuaddr = 0;
     }
-}
-
-static int blit_to_target( uint32 surfaceId, const struct copybit_image_t *rhs)
-{
-    struct private_handle_t* handle = (struct private_handle_t*)rhs->handle;
-    uint32 cformat  = get_format(rhs->format);
-    C2D_SURFACE_TYPE surfaceType;
-    uint32 memoryMapped = 0;
-    int status = COPYBIT_SUCCESS;
-
-    if (!handle->gpuaddr) {
-        handle->gpuaddr = c2d_get_gpuaddr(handle);
-        if(!handle->gpuaddr)
-            return COPYBIT_FAILURE;
-
-        memoryMapped = 1;
-    }
-
-    /* create C2D surface */
-
-    if(cformat) {
-        /* RGB */
-        C2D_RGB_SURFACE_DEF surfaceDef;
-        memset(&surfaceDef, 0, sizeof(surfaceDef));
-
-        surfaceDef.buffer = (void*) handle->base;
-        surfaceDef.phys = (void*) handle->gpuaddr;
-
-        surfaceType = C2D_SURFACE_RGB_HOST;
-        surfaceDef.format = get_format(rhs->format);
-        surfaceDef.width = rhs->w;
-        surfaceDef.height = rhs->h;
-        surfaceDef.stride = ALIGN(((surfaceDef.width * c2diGetBpp(surfaceDef.format))>>3), 32);
-
-        if(LINK_c2dReadSurface(surfaceId, surfaceType, (void*)&surfaceDef, 0, 0)) {
-            ALOGE("%s: LINK_c2dReadSurface ERROR", __func__);
-            status = COPYBIT_FAILURE;
-            goto done;
-        }
-    }
-    else {
-        /* YUV */
-        /* TODO */
-    }
-
-done:
-    if (memoryMapped) {
-        LINK_c2dUnMapAddr( (void*) handle->gpuaddr);
-        handle->gpuaddr = 0;
-    }
-    return status;
 }
 
 /** setup rectangles */
@@ -748,12 +604,6 @@ static int set_parameter_copybit(
             else
                 ctx->blitState.config_mask &=~C2D_GLOBAL_ALPHA_BIT;
             break;
-        case COPYBIT_DITHER:
-            /* TODO */
-            break;
-        case COPYBIT_BLUR:
-            /* TODO */
-            break;
         case COPYBIT_TRANSFORM:
             ctx->blitState.config_mask &=~C2D_ROTATE_BIT;
             ctx->blitState.config_mask &=~C2D_MIRROR_H_BIT;
@@ -783,15 +633,10 @@ static int set_parameter_copybit(
         case COPYBIT_FRAMEBUFFER_HEIGHT:
             ctx->fb_height = value;
             break;
+        case COPYBIT_DITHER:
+        case COPYBIT_BLUR:
         case COPYBIT_BLIT_TO_FRAMEBUFFER:
-            if (COPYBIT_ENABLE == value) {
-                ctx->mBlitToFB = value;
-            } else if (COPYBIT_DISABLE == value) {
-                ctx->mBlitToFB = value;
-            } else {
-              ALOGE ("%s:Invalid input for COPYBIT_BLIT_TO_FRAMEBUFFER : %d",
-                                                         __FUNCTION__, value);
-            }
+            // Do nothing
             break;
         default:
             ALOGE("%s: default case param=0x%x", __FUNCTION__, name);
