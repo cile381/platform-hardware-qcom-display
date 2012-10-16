@@ -229,7 +229,7 @@ size_t getBufferSizeAndDimensions(int width, int height, int format,
             break;
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
             size = alignedw*alignedh +
-                  (ALIGN(alignedw/2, 32) * (alignedh/2))*2;
+                  (ALIGN(alignedw/2, 32) * (alignedh/2))*2 + 32;
             size = ALIGN(size, 4096);
             break;
         default:
