@@ -214,7 +214,7 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_layer_list_t *list, EGLDisplay dpy,
             retVal = drawLayerUsingCopybit(ctx, &(list->hwLayers[i]),
                                                      (EGLDisplay)dpy,
                                                      (EGLSurface)sur,
-                                                        renderBuffer);
+                                                        renderBuffer, !i);
            if(retVal<0) {
               ALOGE("%s : drawLayerUsingCopybit failed", __FUNCTION__);
            }
@@ -226,7 +226,7 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_layer_list_t *list, EGLDisplay dpy,
 int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
                                                             EGLDisplay dpy,
                                                         EGLSurface surface,
-                                     android_native_buffer_t *renderBuffer)
+                                     android_native_buffer_t *renderBuffer , bool isFG)
 {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if(!ctx) {
@@ -458,6 +458,8 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
     copybit->set_parameter(copybit, COPYBIT_DITHER,
                              (dst.format == HAL_PIXEL_FORMAT_RGB_565)?
                                              COPYBIT_ENABLE : COPYBIT_DISABLE);
+    copybit->set_parameter(copybit, COPYBIT_FG_LAYER,isFG ? COPYBIT_ENABLE : COPYBIT_DISABLE);
+
     copybit->set_parameter(copybit, COPYBIT_BLIT_TO_FRAMEBUFFER,
                                                 COPYBIT_ENABLE);
     err = copybit->stretch(copybit, &dst, &src, &dstRect, &srcRect,
