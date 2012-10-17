@@ -21,6 +21,10 @@
 #undef ALOG_TAG
 #define ALOG_TAG "overlay"
 
+#define COMPFLOAT(f1, f2, precision) \
+         ((((f1 - precision) < f2) && \
+          ((f1 + precision) > f2))? 1 : 0) \
+
 namespace ovutils = overlay::utils;
 namespace overlay {
 
@@ -56,20 +60,12 @@ void MdpCtrl::reset() {
     mOrientation = utils::OVERLAY_TRANSFORM_0;
     mRotUsed = false;
 #ifdef USES_POST_PROCESSING
-    if (!mComputeParams) {
-        mComputeParams = calloc(1, sizeof(struct compute_params));
-        if (!mComputeParams) {
-            ALOGE("Falied to allocate the memory for computeparams!");
-            return;
-        }
-    }
-    struct compute_params *params = (struct compute_params *)mComputeParams;
-    params->params.conv_params.order = hsic_order_hsc_i;
-    params->params.conv_params.ops = 3;
-    params->params.conv_params.interface = interface_rec601;
-    params->params.conv_params.cc_matrix[0][0] =
-        params->params.conv_params.cc_matrix[1][1] =
-        params->params.conv_params.cc_matrix[2][2] = 1;
+    memset(&params, 0, sizeof(struct compute_params));
+    params.params.conv_params.order = hsic_order_hsc_i;
+    params.params.conv_params.interface = interface_rec601;
+    params.params.conv_params.cc_matrix[0][0] = 1;
+    params.params.conv_params.cc_matrix[1][1] = 1;
+    params.params.conv_params.cc_matrix[2][2] = 1;
 #endif
 }
 
@@ -81,10 +77,6 @@ bool MdpCtrl::close() {
         return false;
     }
     reset();
-#ifdef USES_POST_PROCESSING
-    if(mComputeParams)
-        free(mComputeParams);
-#endif
     if(!mFd.close()) {
         return false;
     }
@@ -292,46 +284,62 @@ void MdpCtrl3D::dump() const {
 bool MdpCtrl::setVisualParams(const MetaData_t& data) {
 #ifdef USES_POST_PROCESSING
     bool needUpdate = false;
-    if (!mComputeParams) {
-        ALOGE("Compute params is NULL!");
-        return false;
-    }
-    struct compute_params *params = (struct compute_params *)mComputeParams;
+    float precision = 0.00001;
+    int Contthres = 0, Satthres = 0;
+    uint32_t ops = 0;
+
     /* calculate the data */
     if (data.operation & PP_PARAM_HSIC) {
-        params->operation |= PP_OP_HSIC;
-        if (params->params.conv_params.hue != data.hsicData.hue ||
-            params->params.conv_params.sat != data.hsicData.saturation ||
-            params->params.conv_params.intensity !=
-                                                    data.hsicData.intensity ||
-            params->params.conv_params.contrast != data.hsicData.contrast)
-        {
-            params->params.conv_params.hue = data.hsicData.hue;
-            params->params.conv_params.sat = data.hsicData.saturation;
-            params->params.conv_params.intensity =
-                                                        data.hsicData.intensity;
-            params->params.conv_params.contrast = data.hsicData.contrast;
-            needUpdate = true;
+
+        Satthres = COMPFLOAT(params.params.conv_params.sat,
+                             data.hsicData.saturation,
+                             precision);
+        Contthres = COMPFLOAT(params.params.conv_params.contrast,
+                              data.hsicData.contrast,
+                              precision);
+
+        if(utils::isRgb(mOVInfo.src.format))
+            ops = 0;
+        else
+            ops = 3;
+
+        if ((params.params.conv_params.hue != data.hsicData.hue) ||
+            (Satthres != 0) || (Contthres != 0) ||
+            (params.params.conv_params.intensity !=
+                        data.hsicData.intensity) ||
+            (params.params.conv_params.ops != ops)) {
+
+                params.params.conv_params.hue = data.hsicData.hue;
+                params.params.conv_params.sat = data.hsicData.saturation;
+                params.params.conv_params.intensity = data.hsicData.intensity;
+                params.params.conv_params.contrast = data.hsicData.contrast;
+                params.params.conv_params.ops = ops;
+
+                params.operation |= PP_OP_HSIC;
+                needUpdate = true;
         }
     }
     if (data.operation & PP_PARAM_SHARPNESS) {
-        if(params->params.qseed_params.strength != data.sharpness) {
-            params->operation |= PP_OP_QSEED;
-            params->params.qseed_params.strength = data.sharpness;
+            uint32_t qseedData[2]={0,0};
+        if(params.params.qseed_params.strength != data.sharpness) {
+            params.params.qseed_params.strength = data.sharpness;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].len = 2;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].table_num = 1;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].data = qseedData;
+
+            params.operation |= PP_OP_QSEED;
             needUpdate = true;
         }
     }
+
     if (data.operation & PP_PARAM_VID_INTFC) {
-        if(params->params.conv_params.interface !=
-                                    (interface_type) data.video_interface) {
-            params->operation |= PP_OP_HSIC;
-            params->params.conv_params.interface =
-                                    (interface_type) data.video_interface;
-            needUpdate = true;
-        }
+            params.params.conv_params.interface =
+                        (interface_type) data.video_interface;
     }
-    if (needUpdate)
-        display_pp_compute_params(mComputeParams, &mOVInfo.overlay_pp_cfg);
+
+    if (needUpdate) {
+        display_pp_compute_params(&params, &mOVInfo.overlay_pp_cfg);
+     }
 #endif
     return true;
 }

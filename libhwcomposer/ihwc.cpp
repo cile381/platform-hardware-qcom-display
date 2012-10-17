@@ -26,6 +26,7 @@
 #include <binder/IBinder.h>
 #include <binder/IInterface.h>
 #include <ihwc.h>
+#include <hwc_utils.h>
 
 using namespace android;
 
@@ -139,6 +140,23 @@ public:
         result = reply.readInt32();
         return result;
     }
+
+    virtual status_t setPPParams(qhwc::VideoPPData pParams,
+                                 qhwc::PP_Video_Layer_Type numVideoLayer){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(numVideoLayer);
+        data.writeInt32((int32_t) pParams.ops);
+        data.writeInt32(pParams.hue);
+        data.writeFloat(pParams.saturation);
+        data.writeInt32(pParams.intensity);
+        data.writeFloat(pParams.contrast);
+        data.writeInt32(pParams.sharpness);
+        status_t result = remote()->transact(
+                          SET_PP_PARAMS, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
 };
 
 IMPLEMENT_META_INTERFACE(HWComposer, "android.display.IHWComposer");
@@ -220,6 +238,21 @@ status_t BnHWComposer::onTransact(
             int resModeCount;
             status_t res = getResolutionModeCount(&resModeCount);
             reply->writeInt32(resModeCount);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_PP_PARAMS: {
+            qhwc::VideoPPData pParams;
+            qhwc::PP_Video_Layer_Type numVideoLayer;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            numVideoLayer = (qhwc::PP_Video_Layer_Type)data.readInt32();
+            pParams.ops = data.readInt32();
+            pParams.hue = data.readInt32();
+            pParams.saturation = data.readFloat();
+            pParams.intensity = data.readInt32();
+            pParams.contrast = data.readFloat();
+            pParams.sharpness = data.readInt32();
+            status_t res = setPPParams(pParams, numVideoLayer);
             reply->writeInt32(res);
             return NO_ERROR;
         } break;

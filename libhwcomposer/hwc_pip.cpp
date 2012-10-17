@@ -115,6 +115,32 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
+    MetaData_t mData;
+    memset(&mData, 0 , sizeof(MetaData_t));
+    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
+                            (MetaData_t *)hnd->base_metadata : &mData);
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+        /* Preference will be for the HSIC & QSEED values
+         * set through binder */
+        metadata->operation |= ctx->mPpParams[VIDEO_LAYER_0].ops;
+        if(metadata->operation & PP_PARAM_HSIC) {
+            metadata->hsicData.hue = ctx->mPpParams[VIDEO_LAYER_0].hsicData.hue;
+            metadata->hsicData.saturation = ctx->mPpParams[VIDEO_LAYER_0].hsicData.saturation;
+            metadata->hsicData.intensity = ctx->mPpParams[VIDEO_LAYER_0].hsicData.intensity;
+            metadata->hsicData.contrast = ctx->mPpParams[VIDEO_LAYER_0].hsicData.contrast;
+        }
+        if(metadata->operation & PP_PARAM_SHARPNESS) {
+            metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].qseedData.sharpness;
+        }
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+    }
+
+    /* Set the metaData if any */
+    if(!metadata)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else
+        ov.setVisualParams(*metadata, ovutils::OV_PIPE0);
+
     ovutils::PipeArgs parg(mdpFlags,
             info,
             ovutils::ZORDER_0,
@@ -122,6 +148,11 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ROT_FLAGS_NONE);
     ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
     ov.setSource(pargs, ovutils::OV_PIPE0);
+
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+        ctx->mPpParams[VIDEO_LAYER_0].isValid = false;
+        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+    }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h
@@ -191,6 +222,32 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     ovutils::eIsFg isFgFlag = ovutils::IS_FG_OFF;
 
+    MetaData_t mData;
+    memset(&mData, 0 , sizeof(MetaData_t));
+    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
+                            (MetaData_t *)hnd->base_metadata : &mData);
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_1].isValid){
+        /* Preference will be for the HSIC & QSEED values
+         * set through binder */
+        metadata->operation |= ctx->mPpParams[VIDEO_LAYER_1].ops;
+        if(metadata->operation & PP_PARAM_HSIC) {
+            metadata->hsicData.hue = ctx->mPpParams[VIDEO_LAYER_1].hsicData.hue;
+            metadata->hsicData.saturation = ctx->mPpParams[VIDEO_LAYER_1].hsicData.saturation;
+            metadata->hsicData.intensity = ctx->mPpParams[VIDEO_LAYER_1].hsicData.intensity;
+            metadata->hsicData.contrast = ctx->mPpParams[VIDEO_LAYER_1].hsicData.contrast;
+        }
+        if(metadata->operation & PP_PARAM_SHARPNESS) {
+            metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_1].qseedData.sharpness;
+        }
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+    }
+
+    /* Set the metaData if any */
+    if(!metadata)
+        ALOGE("%s:NULL metadata!", __FUNCTION__);
+    else
+        ov.setVisualParams(*metadata, ovutils::OV_PIPE1);
+
     //Set z-order 1 since this video is on top of the
     //primary video
     ovutils::PipeArgs parg(mdpFlags,
@@ -202,6 +259,11 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     // Use pipe 1, pipe 0 is used for primary video
     ov.setSource(pargs, ovutils::OV_PIPE1);
+
+    if(metadata && ctx->mPpParams[VIDEO_LAYER_1].isValid){
+        ctx->mPpParams[VIDEO_LAYER_1].isValid = false;
+        ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+    }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h

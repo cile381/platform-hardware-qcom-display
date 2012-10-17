@@ -312,6 +312,7 @@ enum eMdpFlags {
     OV_MDP_MEMORY_ID_TYPE_FB = MDP_MEMORY_ID_TYPE_FB,
     OV_MDP_BACKEND_COMPOSITION = MDP_BACKEND_COMPOSITION,
     OV_MDP_BLEND_FG_PREMULT = MDP_BLEND_FG_PREMULT,
+    OV_MDP_PP_EN = MDP_OVERLAY_PP_CFG_EN,
 };
 
 enum eZorder {
@@ -582,6 +583,7 @@ inline bool isRgb(uint32_t format) {
         case MDP_BGRA_8888:
         case MDP_RGBX_8888:
         case MDP_RGB_565:
+        case MDP_RGB_888:
             return true;
         default:
             return false;
@@ -865,6 +867,24 @@ inline void even_floor(T& value) {
 }
 
 } // namespace utils ends
+
+typedef struct {
+    int32_t hue;
+    float saturation;
+    int32_t intensity;
+    float contrast;
+} HsicData;
+
+typedef struct {
+    uint32_t sharpness;
+} QseedData;
+
+typedef struct {
+    uint32_t ops;
+    HsicData hsicData;
+    QseedData qseedData;
+    bool isValid;
+} PPMetaData;
 
 //--------------------Class Res stuff (namespace overlay only) -----------
 

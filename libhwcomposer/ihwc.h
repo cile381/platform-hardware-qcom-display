@@ -28,7 +28,7 @@
 #include <utils/RefBase.h>
 
 #include <binder/IInterface.h>
-
+#include <hwc_utils.h>
 
 namespace hwcService {
 // ----------------------------------------------------------------------------
@@ -43,6 +43,7 @@ enum {
     GET_EXT_DISPLAY_TYPE,
     GET_EXT_DISPLAY_RESOLUTION_MODES,
     GET_EXT_DISPLAY_RESOLUTION_MODE_COUNT,
+    SET_PP_PARAMS,
 };
 
 class IHWComposer : public android::IInterface
@@ -63,6 +64,8 @@ public:
     virtual android::status_t setOpenSecureEnd() = 0;
     virtual android::status_t setCloseSecureStart() = 0;
     virtual android::status_t setCloseSecureEnd() = 0;
+    virtual android::status_t setPPParams(qhwc::VideoPPData pParams,
+                                qhwc::PP_Video_Layer_Type numVideoLayer) = 0;
 };
 
 // ----------------------------------------------------------------------------
