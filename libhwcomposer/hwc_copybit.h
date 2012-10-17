@@ -44,7 +44,7 @@ public:
     static void updateEglHandles(void*);
     static int  drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
                                           EGLDisplay dpy, EGLSurface surface,
-                                       android_native_buffer_t *renderBuffer);
+                                       android_native_buffer_t *renderBuffer, bool isFG);
     static bool canUseCopybitForYUV (hwc_context_t *ctx);
     static bool canUseCopybitForRGB (hwc_context_t *ctx,
                                      hwc_layer_list_t *list);
