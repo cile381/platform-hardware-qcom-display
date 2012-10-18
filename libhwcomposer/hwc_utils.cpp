@@ -51,11 +51,18 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
-    ctx->mCopybitEngine = CopybitEngine::getInstance();
+
+    char value[PROPERTY_VALUE_MAX];
+    // Check if the target has the C2D API Support
+    ctx->mCopybitEngine = NULL;
+    property_get("c2d.api.supported", value, "0");
+    if(atoi(value)) {
+        ctx->mCopybitEngine = CopybitEngine::getInstance();
+    }
+
     ctx->mExtDisplay = new ExternalDisplay(ctx);
     MDPComp::init(ctx);
 
-    char value[PROPERTY_VALUE_MAX];
     property_get("debug.egl.swapinterval", value, "1");
     ctx->swapInterval = atoi(value);
 
