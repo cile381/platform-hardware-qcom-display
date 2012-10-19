@@ -33,6 +33,7 @@
 #include <sys/poll.h>
 #include <sys/resource.h>
 #include <cutils/properties.h>
+#include <mdp_version.h>
 #include "hwc_utils.h"
 #include "hwc_external.h"
 #include "overlayUtils.h"
@@ -53,7 +54,12 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
 
     //Enable HPD for HDMI
     if(isHDMIConfigured()) {
-        writeHPDOption(1);
+        // Disable HPD at boot up on MDSS, due to Audio HW Codec bug
+        // if 5V boost is enabled before audio codec is probed then it draw high
+        // current which damages MSM and the board as well
+        // TODO: Remove the check when the HW bug is fixed
+        if(ctx->mMDP.version < qdutils::MDSS_V5)
+            writeHPDOption(1);
     }
 }
 
