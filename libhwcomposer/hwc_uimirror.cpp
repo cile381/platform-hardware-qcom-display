@@ -109,7 +109,7 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
             ovutils::PipeArgs parg(mdpFlags,
                     info,
                     ovutils::ZORDER_0,
-                    ovutils::IS_FG_OFF,
+                    ovutils::IS_FG_SET,
                     ovutils::ROT_0_ENABLED);
             ov.setSource(parg, dest);
 
