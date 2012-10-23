@@ -297,7 +297,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
                                info,
                                zOrder,
                                isFG,
-                               ovutils::ROT_FLAG_DISABLED);
+                               ovutils::ROT_FLAGS_NONE);
 
         if (!ov.setSource(parg, dest)) {
             ALOGE("%s: setSource failed", __FUNCTION__);

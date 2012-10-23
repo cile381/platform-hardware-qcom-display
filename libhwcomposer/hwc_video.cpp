@@ -133,7 +133,7 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             info,
             ovutils::ZORDER_1,
             isFgFlag,
-            ovutils::ROT_FLAG_DISABLED);
+            ovutils::ROT_DOWNSCALE_ENABLED);
     ov.setSource(parg, ovutils::OV_PIPE0);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
@@ -201,7 +201,7 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             info,
             ovutils::ZORDER_0,
             isFgFlag,
-            ovutils::ROT_FLAG_DISABLED);
+            ovutils::ROT_FLAGS_NONE);
     ov.setSource(parg, ovutils::OV_PIPE1);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
@@ -245,7 +245,7 @@ bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer) {
             info,
             ovutils::ZORDER_1,
             isFgFlag,
-            ovutils::ROT_FLAG_DISABLED);
+            ovutils::ROT_FLAGS_NONE);
     ov.setSource(parg, ovutils::OV_PIPE2);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
