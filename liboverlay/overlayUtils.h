@@ -161,6 +161,7 @@ uint32_t getColorFormat(uint32_t format);
 
 bool isHDMIConnected ();
 bool is3DTV();
+bool isHDMIPrimary();
 bool isPanel3D();
 bool usePanel3D();
 bool send3DInfoPacket (uint32_t fmt);
@@ -451,6 +452,16 @@ enum { PRIMARY, EXTERNAL };
 enum {
     HDMI = 1,
     WFD = 2
+};
+
+enum {
+    MAX_FRAME_BUFFER_NAME_SIZE = 80,
+    MAX_DISPLAY_TYPES = 2
+};
+
+static const char *PanelType[MAX_DISPLAY_TYPES] = {
+    "dtv panel",
+    "writeback panel"
 };
 
 //TODO Make this a part of some appropriate class
@@ -903,12 +914,18 @@ public:
     static const char* const fbPath;
     // /dev/msm_rotator
     static const char* const rotPath;
+    // /sys/class/graphics/fb0/format_3d
+    static const char* const primformat3DFile;
+    // /sys/class/graphics/fb0/3d_present
+    static const char* const primedid3dInfoFile;
     // /sys/class/graphics/fb1/format_3d
     static const char* const format3DFile;
     // /sys/class/graphics/fb1/3d_present
     static const char* const edid3dInfoFile;
     // /sys/devices/platform/mipi_novatek.0/enable_3d_barrier
     static const char* const barrierFile;
+    // /sys/class/graphics/fb0/msm_fb_type
+    static const char* const fbType;
 };
 
 

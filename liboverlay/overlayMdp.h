@@ -416,15 +416,18 @@ inline void MdpCtrl::overlayTransRot90()
 
 inline MdpCtrl3D::MdpCtrl3D() { reset(); }
 inline bool MdpCtrl3D::close() {
+    bool ret = true;
     if (m3DOVInfo.is_3d) {
         m3DOVInfo.is_3d = 0;
-        if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
-            ALOGE("MdpCtrl3D close failed set3D with 0");
-            return false;
+        if(not overlay::utils::isHDMIPrimary()){
+            if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
+                ALOGE("MdpCtrl3D close failed set3D with 0");
+                ret = false;
+            }
         }
     }
     reset();
-    return true;
+    return ret;
 }
 inline void MdpCtrl3D::reset() {
     utils::memset0(m3DOVInfo);
@@ -444,9 +447,11 @@ inline void MdpCtrl3D::setWh(const utils::Whf& whf) {
 inline bool MdpCtrl3D::useVirtualFB() {
     if(!m3DOVInfo.is_3d) {
         m3DOVInfo.is_3d = 1;
-        if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
-            ALOGE("MdpCtrl3D close failed set3D with 0");
-            return false;
+        if(not overlay::utils::isHDMIPrimary()){
+            if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
+                ALOGE("MdpCtrl3D close failed set3D with 0");
+                return false;
+            }
         }
     }
     return true;

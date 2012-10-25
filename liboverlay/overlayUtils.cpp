@@ -73,12 +73,18 @@ namespace overlay {
 //----------From class Res ------------------------------
 const char* const Res::fbPath = "/dev/graphics/fb%u";
 const char* const Res::rotPath = "/dev/msm_rotator";
+const char* const Res::primformat3DFile =
+        "/sys/class/graphics/fb0/format_3d";
+const char* const Res::primedid3dInfoFile =
+        "/sys/class/graphics/fb0/3d_present";
 const char* const Res::format3DFile =
         "/sys/class/graphics/fb1/format_3d";
 const char* const Res::edid3dInfoFile =
         "/sys/class/graphics/fb1/3d_present";
 const char* const Res::barrierFile =
         "/sys/devices/platform/mipi_novatek.0/enable_3d_barrier";
+const char* const Res::fbType =
+        "/sys/class/graphics/fb0/msm_fb_type";
 //--------------------------------------------------------
 
 
@@ -228,18 +234,41 @@ bool is3DTV() {
     return (is3DTV == '0') ? false : true;
 }
 
+bool isHDMIPrimary() {
+    char paneltype[MAX_FRAME_BUFFER_NAME_SIZE];
+    memset(&paneltype, 0 , sizeof(char)*MAX_FRAME_BUFFER_NAME_SIZE);
+
+    IOFile fp(Res::fbType, "r");
+    if(fp.valid()){
+        (void)fp.read(paneltype, MAX_FRAME_BUFFER_NAME_SIZE);
+        ALOGI("PanelType is %s",paneltype);
+
+        if(!strncmp(paneltype, PanelType[0], sizeof(PanelType[0]))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool isPanel3D() {
-    OvFD fd;
-    if(!overlay::open(fd, 0 /*fb*/, Res::fbPath)){
-        ALOGE("isPanel3D Can't open framebuffer 0");
-        return false;
+    if(isHDMIPrimary()){
+        char isPanel3D = '0';
+        IOFile fp(Res::primedid3dInfoFile, "r");
+        (void)fp.read(isPanel3D, 1);
+        return (isPanel3D == '0') ? false : true;
+    } else {
+        OvFD fd;
+        if(!overlay::open(fd, 0 /*fb*/, Res::fbPath)){
+            ALOGE("isPanel3D Can't open framebuffer 0");
+            return false;
+        }
+        fb_fix_screeninfo finfo;
+        if(!mdp_wrapper::getFScreenInfo(fd.getFD(), finfo)) {
+            ALOGE("isPanel3D read fb0 failed");
+        }
+        fd.close();
+        return (FB_TYPE_3D_PANEL == finfo.type) ? true : false;
     }
-    fb_fix_screeninfo finfo;
-    if(!mdp_wrapper::getFScreenInfo(fd.getFD(), finfo)) {
-        ALOGE("isPanel3D read fb0 failed");
-    }
-    fd.close();
-    return (FB_TYPE_3D_PANEL == finfo.type) ? true : false;
 }
 
 bool usePanel3D() {
@@ -252,22 +281,37 @@ bool usePanel3D() {
 }
 
 bool send3DInfoPacket (uint32_t format3D) {
-    IOFile fp(Res::format3DFile, "wb");
-    (void)fp.write("%d", format3D);
-    if(!fp.valid()) {
+    if(is3DTV()){
+        IOFile fp(Res::format3DFile, "wb");
+        (void)fp.write("%d", format3D);
+        if(!fp.valid()) {
+            ALOGE("send3DInfoPacket: no sysfs entry for setting 3d mode");
+            return false;
+        }
+        return true;
+    } else if(isPanel3D()){
+        IOFile fp(Res::primformat3DFile, "wb");
+        (void)fp.write("%d", format3D);
+        if(!fp.valid()) {
+            ALOGE("send3DInfoPacket: no sysfs entry for setting 3d mode");
+            return false;
+        }
+        return true;
+    } else {
         ALOGE("send3DInfoPacket: no sysfs entry for setting 3d mode");
         return false;
     }
-    return true;
 }
 
 bool enableBarrier (uint32_t orientation) {
-    IOFile fp(Res::barrierFile, "wb");
-    (void)fp.write("%d", orientation);
-    if(!fp.valid()) {
-        ALOGE("enableBarrier no sysfs entry for "
-                "enabling barriers on 3D panel");
-        return false;
+    if(not isHDMIPrimary()){
+        IOFile fp(Res::barrierFile, "wb");
+        (void)fp.write("%d", orientation);
+        if(!fp.valid()) {
+            ALOGE("enableBarrier no sysfs entry for "
+                    "enabling barriers on 3D panel");
+            return false;
+        }
     }
     return true;
 }

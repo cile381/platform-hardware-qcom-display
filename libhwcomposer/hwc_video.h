@@ -44,6 +44,8 @@ private:
     static bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer);
     //Configures overlay for external video
     static bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer);
+    //Configures overlay for primary video 3D
+    static bool configPrimVidS3D(hwc_context_t *ctx, hwc_layer_t *layer);
     //Configures overlay for external video 3D
     static bool configExtVidS3D(hwc_context_t *ctx, hwc_layer_t *layer);
     //Configures overlay for External video close caption
