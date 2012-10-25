@@ -20,6 +20,7 @@
 
 #include <hardware/hwcomposer.h>
 #include <gralloc_priv.h>
+#include "qdMetaData.h"
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
