@@ -36,6 +36,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     int vsync = 0;
     int64_t timestamp = 0;
     const char *str = udata;
+    int hdmiconnected = ctx->externalDisplay;
 
     if(!strcasestr(str, "@/devices/virtual/graphics/fb")) {
         ALOGD_IF(DEBUG, "%s: Not Ext Disp Event ", __FUNCTION__);

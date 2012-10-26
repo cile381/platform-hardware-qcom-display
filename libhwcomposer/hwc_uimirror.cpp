@@ -45,7 +45,7 @@ bool UIMirrorOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
        return false;
     }
     // If external display is connected
-    if(ctx->mExtDisplay->getExternalDisplay()) {
+    if(ctx->externalDisplay) {
         if(VideoOverlay::getYuvCount() == 1) {
             ALOGD_IF(HWC_UI_MIRROR, "In %s: setting the state to"
                                          "2D_TRUE_OV_UI_MIRROR", __FUNCTION__);
