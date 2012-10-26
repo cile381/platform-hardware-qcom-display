@@ -66,7 +66,7 @@ void ExtOnly::chooseState(hwc_context_t *ctx) {
     ovutils::eOverlayState newState = ovutils::OV_CLOSED;
 
     if(sExtCount > 0 &&
-        ctx->mExtDisplay->getExternalDisplay()) {
+        ctx->externalDisplay) {
             newState = ovutils::OV_DUAL_DISP;
     }
 

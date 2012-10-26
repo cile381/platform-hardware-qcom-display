@@ -64,7 +64,7 @@ static void *vsync_loop(void *param)
         }
         pthread_mutex_unlock(&ctx->vstate.lock);
 
-       int hdmiconnected = ctx->mExtDisplay->getExternalDisplay();
+       int hdmiconnected = ctx->externalDisplay;
 
        // vsync for primary OR HDMI ?
        if(ctx->mExtDisplay->isHDMIConfigured() &&
