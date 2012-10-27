@@ -65,6 +65,9 @@ int setMetaData(private_handle_t *handle, DispParamType paramType,
         case PP_PARAM_INTERLACED:
             data->interlaced = *((int32_t *)param);
             break;
+        case PP_PARAM_S3D_VIDEO:
+            data->s3d_format = *((int32_t *)param);
+            break;
         default:
             ALOGE("Unknown paramType %d", paramType);
             break;

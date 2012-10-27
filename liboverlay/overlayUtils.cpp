@@ -272,13 +272,7 @@ bool enableBarrier (uint32_t orientation) {
     return true;
 }
 
-uint32_t getS3DFormat(uint32_t fmt) {
-    // The S3D is part of the HAL_PIXEL_FORMAT_YV12 value. Add
-    // an explicit check for the format
-    if (fmt == HAL_PIXEL_FORMAT_YV12) {
-        return 0;
-    }
-    uint32_t fmt3D = format3D(fmt);
+uint32_t getS3DFormat(uint32_t fmt3D) {
     uint32_t fIn3D = format3DInput(fmt3D); // MSB 2 bytes - inp
     uint32_t fOut3D = format3DOutput(fmt3D); // LSB 2 bytes - out
     fmt3D = fIn3D | fOut3D;

@@ -34,7 +34,8 @@ typedef enum {
     PP_PARAM_HSIC       = 0x0001,
     PP_PARAM_SHARPNESS  = 0x0002,
     PP_PARAM_INTERLACED = 0x0004,
-    PP_PARAM_VID_INTFC  = 0x0008
+    PP_PARAM_VID_INTFC  = 0x0008,
+    PP_PARAM_S3D_VIDEO  = 0x0010,
 } DispParamType;
 
 int setMetaData(private_handle_t *handle, DispParamType paramType, void *param);

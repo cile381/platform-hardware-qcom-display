@@ -29,6 +29,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
 #include "hwc_service.h"
+#include "qdMetaData.h"
 
 namespace qhwc {
 
@@ -155,12 +156,14 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
     int extCount = 0; //ext-only except closed caption
     bool isExtBlockPresent = false; //is BLOCK layer present
     bool yuvSecure = false;
+    int layerS3DFormat = 0; // is the layer format 3D
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
         private_handle_t *hnd =
             (private_handle_t *)list->hwLayers[i].handle;
 
         if (UNLIKELY(isYuvBuffer(hnd))) {
+            MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
             yuvCount++;
             if(yuvCount==1) {
                 //Set the primary video to the video layer in
@@ -178,6 +181,15 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
             if (isSkipLayer(&list->hwLayers[i]) && !yuvSecure) {
                 isYuvLayerSkip = true;
             }
+            if (metadata->operation & PP_PARAM_S3D_VIDEO) {
+                layerS3DFormat = metadata->s3d_format;
+            }
+            // if YUV layer is skip layer, then the layer will be composed using
+            // GPU. since GPU does not support 3D format mark the skip layer
+            // flag as false.
+            if(layerS3DFormat) {
+                isYuvLayerSkip = false;
+            }
         } else if(UNLIKELY(isExtCC(hnd))) {
             ccLayerIndex = i;
         } else if(UNLIKELY(isExtBlock(hnd))) {
@@ -192,9 +204,8 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
             skipCount++;
         }
     }
-
     VideoOverlay::setStats(yuvCount, yuvLayerIndex, isYuvLayerSkip,
-            ccLayerIndex);
+            ccLayerIndex, layerS3DFormat);
     VideoPIP::setStats(yuvCount, yuvLayerIndex, isYuvLayerSkip,
             pipLayerIndex);
     ExtOnly::setStats(extCount, extLayerIndex, isExtBlockPresent);

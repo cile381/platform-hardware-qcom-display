@@ -147,7 +147,7 @@ template <> struct StateTraits<utils::OV_2D_VIDEO_ON_TV>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL>
 {
-    typedef overlay::M3DPrimaryPipe<utils::OV_PIPE0> pipe0;
+    typedef overlay::M3DPrimaryPipe<utils::OV_CHAN0> pipe0;
     typedef overlay::NullPipe pipe1;   // place holder
     typedef overlay::NullPipe pipe2;   // place holder
 
@@ -160,8 +160,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_PANEL>
 {
-    typedef overlay::S3DPrimaryPipe<utils::OV_PIPE0> pipe0;
-    typedef overlay::S3DPrimaryPipe<utils::OV_PIPE1> pipe1;
+    typedef overlay::S3DPrimaryPipe<utils::OV_CHAN0> pipe0;
+    typedef overlay::S3DPrimaryPipe<utils::OV_CHAN1> pipe1;
     typedef overlay::NullPipe pipe2;   // place holder
 
     typedef Rotator rot0;
@@ -173,8 +173,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_PANEL>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_TV>
 {
-    typedef overlay::S3DExtPipe<utils::OV_PIPE0> pipe0;
-    typedef overlay::S3DExtPipe<utils::OV_PIPE1> pipe1;
+    typedef overlay::S3DExtPipe<utils::OV_CHAN0> pipe0;
+    typedef overlay::S3DExtPipe<utils::OV_CHAN1> pipe1;
     typedef overlay::NullPipe pipe2;   // place holder
 
     typedef NullRotator rot0;
@@ -186,8 +186,8 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_3D_TV>
 
 template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV>
 {
-    typedef overlay::M3DPrimaryPipe<utils::OV_PIPE0> pipe0;
-    typedef overlay::M3DExtPipe<utils::OV_PIPE1> pipe1;
+    typedef overlay::M3DPrimaryPipe<utils::OV_CHAN0> pipe0;
+    typedef overlay::M3DExtPipe<utils::OV_CHAN0> pipe1;
     typedef overlay::NullPipe pipe2;   // place holder
 
     typedef Rotator rot0;

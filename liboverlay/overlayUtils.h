@@ -213,15 +213,17 @@ struct Dim {
 // TODO have Whfz
 
 struct Whf {
-    Whf() : w(0), h(0), format(0), size(0) {}
+    Whf() : w(0), h(0), format(0), format_3d(0), size(0) {}
     Whf(uint32_t wi, uint32_t he, uint32_t f) :
-        w(wi), h(he), format(f), size(0) {}
+        w(wi), h(he), format(f), format_3d(0), size(0) {}
     Whf(uint32_t wi, uint32_t he, uint32_t f, uint32_t s) :
-        w(wi), h(he), format(f), size(s) {}
+        w(wi), h(he), format(f), format_3d(0), size(s) {}
+    Whf(uint32_t wi, uint32_t he, uint32_t f, uint32_t f_3d, uint32_t s) :
+        w(wi), h(he), format(f), format_3d(f_3d), size(s) {}
     // FIXME not comparing size at the moment
     bool operator==(const Whf& whf) const {
         return whf.w == w && whf.h == h &&
-                whf.format == format;
+                whf.format == format && whf.format_3d == format_3d;
     }
     bool operator!=(const Whf& whf) const {
         return !operator==(whf);
@@ -230,6 +232,7 @@ struct Whf {
     uint32_t w;
     uint32_t h;
     uint32_t format;
+    uint32_t format_3d;
     uint32_t size;
 };
 
@@ -339,6 +342,12 @@ enum eDest {
     OV_PIPE1 = 1 << 1,
     OV_PIPE2 = 1 << 2,
     OV_PIPE_ALL  = (OV_PIPE0 | OV_PIPE1 | OV_PIPE2)
+};
+
+/* Overlay Channels */
+enum eChannel {
+    OV_CHAN0 = 0,
+    OV_CHAN1 = 1,
 };
 
 /* values for copybit_set_parameter(OVERLAY_TRANSFORM) */
@@ -741,7 +750,7 @@ inline uint32_t getColorFormat(uint32_t format)
 template <int CHAN>
 inline Dim getPositionS3DImpl(const Whf& whf)
 {
-    switch (whf.format & OUTPUT_3D_MASK)
+    switch (whf.format_3d & OUTPUT_3D_MASK)
     {
         case HAL_3D_OUT_SBS_MASK:
             // x, y, w, h
@@ -749,22 +758,22 @@ inline Dim getPositionS3DImpl(const Whf& whf)
         case HAL_3D_OUT_TOP_BOT_MASK:
             return Dim(0, 0, whf.w, whf.h/2);
         case HAL_3D_OUT_MONOS_MASK:
-            return Dim();
+            return Dim(0, 0, whf.w, whf.h);
         case HAL_3D_OUT_INTERL_MASK:
             // FIXME error?
             ALOGE("%s HAL_3D_OUT_INTERLEAVE_MASK", __FUNCTION__);
             return Dim();
         default:
             ALOGE("%s Unsupported 3D output format %d", __FUNCTION__,
-                    whf.format);
+                    whf.format_3d);
     }
     return Dim();
 }
 
 template <>
-inline Dim getPositionS3DImpl<utils::OV_PIPE1>(const Whf& whf)
+inline Dim getPositionS3DImpl<utils::OV_CHAN1>(const Whf& whf)
 {
-    switch (whf.format & OUTPUT_3D_MASK)
+    switch (whf.format_3d & OUTPUT_3D_MASK)
     {
         case HAL_3D_OUT_SBS_MASK:
             return Dim(whf.w/2, 0, whf.w/2, whf.h);
@@ -778,7 +787,7 @@ inline Dim getPositionS3DImpl<utils::OV_PIPE1>(const Whf& whf)
             return Dim();
         default:
             ALOGE("%s Unsupported 3D output format %d", __FUNCTION__,
-                    whf.format);
+                    whf.format_3d);
     }
     return Dim();
 }
@@ -810,7 +819,7 @@ inline Dim getCropS3DImpl(const Dim& in, uint32_t fmt) {
 }
 
 template <>
-inline Dim getCropS3DImpl<utils::OV_PIPE1>(const Dim& in, uint32_t fmt) {
+inline Dim getCropS3DImpl<utils::OV_CHAN1>(const Dim& in, uint32_t fmt) {
     switch (fmt & INPUT_3D_MASK)
     {
         case HAL_3D_IN_SIDE_BY_SIDE_L_R:

@@ -27,20 +27,24 @@
 #ifndef QCOM_GPUFORMATS_H
 #define QCOM_GPUFORMATS_H
 #include <gralloc_priv.h>
-
+#include "qdMetaData.h"
 namespace qdutils {
 /*
  * Checks if the format is supported by the GPU.
  *
- * @param: format to check
+ * @param: pointer to native_handle
  *
  * @return true if the format is supported by the GPU.
  */
-static inline bool isGPUSupportedFormat(int format)
+static inline bool isGPUSupportedFormat(const native_handle *handle)
 {
+    const private_handle_t *hnd = static_cast<const private_handle_t *>(handle);
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    int format = hnd->format;
     if ((format == HAL_PIXEL_FORMAT_RGB_888)      ||
         (format == HAL_PIXEL_FORMAT_YCrCb_422_SP) ||
-        (format == HAL_PIXEL_FORMAT_YCbCr_422_SP)) {
+        (format == HAL_PIXEL_FORMAT_YCbCr_422_SP) ||
+        (metadata->operation & PP_PARAM_S3D_VIDEO)) {
         return false;
     }
     return true;

@@ -150,6 +150,7 @@ typedef struct {
     HSICData_t hsicData;
     int32_t sharpness;
     int32_t video_interface;
+    int32_t s3d_format;
 } MetaData_t;
 
 #ifdef __cplusplus
