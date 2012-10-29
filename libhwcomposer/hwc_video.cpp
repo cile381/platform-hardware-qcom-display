@@ -180,6 +180,11 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
+    //Ensure that VG pipe is allocated in cases where buffer-type
+    //is video while format is RGB
+    ovutils::setMdpFlags(mdpFlags,
+            ovutils::OV_MDP_PIPE_SHARE);
+
     /* Set the metaData if any */
     if(!metadata)
         ALOGE("%s:NULL metadata!", __FUNCTION__);
@@ -262,6 +267,11 @@ bool VideoOverlay::configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     if (ctx->numHwLayers == 1) {
         isFgFlag = ovutils::IS_FG_SET;
     }
+
+    //Ensure that VG pipe is allocated in cases where buffer-type
+    //is video while format is RGB
+    ovutils::setMdpFlags(mdpFlags,
+            ovutils::OV_MDP_PIPE_SHARE);
 
     /* Set the metaData if any */
     if(!metadata)
