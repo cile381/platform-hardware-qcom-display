@@ -39,6 +39,7 @@
 #include "hwc_extonly.h"
 #include "qcom_ui.h"
 #include "hwc_dump_layers.h"
+#include "profiler.h"
 
 #define VSYNC_DEBUG 0
 using namespace qhwc;
@@ -269,6 +270,7 @@ static int hwc_set(hwc_composer_device_t *dev,
         ctx->qbuf->unlockAll();
     }
 
+    qdutils::VsyncMiss::getInstance().printVsyncMiss();
     ctx->qbuf->unlockAllPrevious();
     return ret;
 }
