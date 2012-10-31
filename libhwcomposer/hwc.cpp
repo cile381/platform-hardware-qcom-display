@@ -71,6 +71,9 @@ static void hwc_registerProcs(struct hwc_composer_device* dev,
         return;
     }
     ctx->device.reserved_proc[0] = (void*)procs;
+
+    // Kick off uevent thread
+    init_vsync_thread(ctx);
 }
 
 static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
@@ -226,7 +229,11 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
         methods->eventControl = hwc_eventControl;
 
         dev->device.common.tag     = HARDWARE_DEVICE_TAG;
-        dev->device.common.version = HWC_DEVICE_API_VERSION_0_3;
+        // Disable hw vsync on MDP 5 targets
+        if(dev->mMDP.version >= 500)
+           dev->device.common.version = 0;
+        else
+           dev->device.common.version = HWC_DEVICE_API_VERSION_0_3;
         dev->device.common.module  = const_cast<hw_module_t*>(module);
         dev->device.common.close   = hwc_device_close;
         dev->device.prepare        = hwc_prepare;
