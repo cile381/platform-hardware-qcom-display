@@ -35,6 +35,7 @@
 #include "ionalloc.h"
 #include "gr.h"
 #include "comptype.h"
+#include <media/msm_media_info.h>
 
 using namespace gralloc;
 using namespace qdutils;
@@ -232,9 +233,7 @@ size_t getBufferSizeAndDimensions(int width, int height, int format,
             size = ALIGN(alignedw * alignedh * 2, 4096);
             break;
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
-            size = alignedw*alignedh +
-                  (ALIGN(alignedw/2, 32) * (alignedh/2))*2 + 32;
-            size = ALIGN(size, 4096);
+            size = VENUS_BUFFER_SIZE(COLOR_FMT_NV12, width, height);
             break;
         default:
             ALOGE("unrecognized pixel format: 0x%x", format);
