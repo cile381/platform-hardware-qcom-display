@@ -28,7 +28,7 @@
 #include <utils/RefBase.h>
 
 #include <binder/IInterface.h>
-#include <hwc_utils.h>
+#include "hwc_ppmetadata.h"
 
 namespace hwcService {
 // ----------------------------------------------------------------------------

@@ -181,15 +181,8 @@ status_t HWComposerService::getExternalDisplay(int *dispType) {
 status_t HWComposerService::setPPParams(qhwc::VideoPPData pParams,
         qhwc::PP_Video_Layer_Type numVideoLayer){
     if(numVideoLayer < PP_MAX_VG_PIPES) {
-        overlay::PPMetaData ppData;
-        ppData.ops = pParams.ops;
-        ppData.hsicData.hue = pParams.hue;
-        ppData.hsicData.contrast = pParams.contrast;
-        ppData.hsicData.intensity = pParams.intensity;
-        ppData.hsicData.saturation = pParams.saturation;
-        ppData.qseedData.sharpness = pParams.sharpness;
-        ppData.isValid = true;
-        mHwcContext->mPpParams[numVideoLayer]= ppData;
+        pParams.isValid = true;
+        mHwcContext->mPpParams[numVideoLayer]= pParams;
     }
     else{
         ALOGE("invalid layer type : %d",numVideoLayer);

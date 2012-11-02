@@ -188,13 +188,13 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
          * set through binder */
         metadata->operation |= ctx->mPpParams[VIDEO_LAYER_0].ops;
         if(metadata->operation & PP_PARAM_HSIC) {
-            metadata->hsicData.hue = ctx->mPpParams[VIDEO_LAYER_0].hsicData.hue;
-            metadata->hsicData.saturation = ctx->mPpParams[VIDEO_LAYER_0].hsicData.saturation;
-            metadata->hsicData.intensity = ctx->mPpParams[VIDEO_LAYER_0].hsicData.intensity;
-            metadata->hsicData.contrast = ctx->mPpParams[VIDEO_LAYER_0].hsicData.contrast;
+            metadata->hsicData.hue = ctx->mPpParams[VIDEO_LAYER_0].hue;
+            metadata->hsicData.saturation = ctx->mPpParams[VIDEO_LAYER_0].saturation;
+            metadata->hsicData.intensity = ctx->mPpParams[VIDEO_LAYER_0].intensity;
+            metadata->hsicData.contrast = ctx->mPpParams[VIDEO_LAYER_0].contrast;
         }
         if(metadata->operation & PP_PARAM_SHARPNESS) {
-            metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].qseedData.sharpness;
+            metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].sharpness;
         }
         ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
