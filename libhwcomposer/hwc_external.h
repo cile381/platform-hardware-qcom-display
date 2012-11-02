@@ -33,19 +33,25 @@ namespace qhwc {
 #define DEVICE_NODE_FB2                 "fb2"
 #define HDMI_PANEL                      "dtv panel"
 #define WFD_PANEL                       "writeback panel"
-#define EXTERN_DISPLAY_NONE             0
-#define EXTERN_DISPLAY_FB1              1
-#define EXTERN_DISPLAY_FB2              2
-#define MAX_FRAME_BUFFER_NAME_SIZE      80
-#define MAX_DISPLAY_EXTERNAL_DEVICES    2
-#define HPD_ENABLE                      1
-#define HPD_DISABLE                     0
 #define DEVICE_ONLINE                   true
 #define DEVICE_OFFLINE                  false
 
-
 #define SYSFS_EDID_MODES        DEVICE_ROOT "/" DEVICE_NODE_FB1 "/edid_modes"
 #define SYSFS_HPD               DEVICE_ROOT "/" DEVICE_NODE_FB1 "/hpd"
+
+enum {
+    EXTERN_DISPLAY_NONE = 0,
+    EXTERN_DISPLAY_FB1  = 1,
+    EXTERN_DISPLAY_FB2  = 2
+};
+enum {
+    MAX_FRAME_BUFFER_NAME_SIZE   = 80,
+    MAX_DISPLAY_EXTERNAL_DEVICES = 2
+};
+enum {
+    HPD_DISABLE = 0,
+    HPD_ENABLE  = 1
+};
 
 class ExternalDisplay
 {
