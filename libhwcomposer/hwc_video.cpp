@@ -109,6 +109,10 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
             if(sLayerS3DFormat) {
                 // Initialize to the default state
                 newState = ovutils::OV_3D_VIDEO_ON_2D_PANEL;
+                if(ovutils::isPanel3D()) {
+                    // Change the state if the Panel is 3D
+                    newState = ovutils::OV_3D_VIDEO_ON_3D_PANEL;
+                }
             }
         }
     }
@@ -122,6 +126,7 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
         case ovutils::OV_2D_VIDEO_ON_PANEL:
         case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
         case ovutils::OV_3D_VIDEO_ON_3D_TV:
+        case ovutils::OV_3D_VIDEO_ON_3D_PANEL:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
             layer->compositionType = HWC_OVERLAY;
@@ -315,6 +320,88 @@ bool VideoOverlay::configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     return true;
 }
 
+bool VideoOverlay::configPrimVidS3D(hwc_context_t *ctx, hwc_layer_t *layer) {
+    overlay::Overlay& ov = *(ctx->mOverlay);
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
+
+    ovutils::Whf info(hnd->width, hnd->height,
+                      hnd->format, sLayerS3DFormat, hnd->size);
+
+    ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
+    if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
+        ovutils::setMdpFlags(mdpFlags,
+                ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+    }
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    if ((metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
+    }
+    ovutils::eIsFg isFgFlag = ovutils::IS_FG_OFF;
+    if (ctx->numHwLayers == 1) {
+        isFgFlag = ovutils::IS_FG_SET;
+    }
+    // Configure overlay channel 0 for left view
+    ovutils::PipeArgs parg0(mdpFlags,
+            info,
+            ovutils::ZORDER_0,
+            isFgFlag,
+            ovutils::ROT_FLAGS_NONE);
+    // Configure overlay channel 1 for right view
+    ovutils::PipeArgs parg1(mdpFlags,
+            info,
+            ovutils::ZORDER_1,
+            isFgFlag,
+            ovutils::ROT_FLAGS_NONE);
+    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg0, parg1, parg0 };
+
+    ov.setSource(pargs, ovutils::OV_PIPE0);
+    ov.setSource(pargs, ovutils::OV_PIPE1);
+
+    hwc_rect_t sourceCrop = layer->sourceCrop;
+    hwc_rect_t displayFrame = layer->displayFrame;
+
+    //Calculate the rect for primary based on whether the supplied position
+    //is within or outside bounds.
+    const int fbWidth =
+            ovutils::FrameBufferInfo::getInstance()->getWidth();
+    const int fbHeight =
+            ovutils::FrameBufferInfo::getInstance()->getHeight();
+
+    if( displayFrame.left < 0 ||
+            displayFrame.top < 0 ||
+            displayFrame.right > fbWidth ||
+            displayFrame.bottom > fbHeight) {
+        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight);
+    }
+
+    // source crop x,y,w,h
+    ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
+            sourceCrop.right - sourceCrop.left,
+            sourceCrop.bottom - sourceCrop.top);
+    //Only for Primary
+    ov.setCrop(dcrop, ovutils::OV_PIPE0);
+    ov.setCrop(dcrop, ovutils::OV_PIPE1);
+
+    ovutils::eTransform orient =
+            static_cast<ovutils::eTransform>(layer->transform);
+    ov.setTransform(orient, ovutils::OV_PIPE0);
+    ov.setTransform(orient, ovutils::OV_PIPE1);
+
+    // position x,y,w,h
+    ovutils::Dim dpos(displayFrame.left,
+            displayFrame.top,
+            displayFrame.right - displayFrame.left,
+            displayFrame.bottom - displayFrame.top);
+    ov.setPosition(dpos, ovutils::OV_PIPE0);
+    ov.setPosition(dpos, ovutils::OV_PIPE1);
+
+    if ((!ov.commit(ovutils::OV_PIPE0)) || (!ov.commit(ovutils::OV_PIPE1))) {
+        ALOGE("%s: commit fails", __FUNCTION__);
+        return false;
+    }
+    return true;
+}
+
 bool VideoOverlay::configExtVidS3D(hwc_context_t *ctx, hwc_layer_t *layer) {
     overlay::Overlay& ov = *(ctx->mOverlay);
     private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -446,6 +533,9 @@ bool VideoOverlay::configure(hwc_context_t *ctx, hwc_layer_t *yuvLayer,
                 ret &= configExtVid(ctx, yuvLayer);
                 ret &= configExtCC(ctx, ccLayer);
                 break;
+            case ovutils::OV_3D_VIDEO_ON_3D_PANEL:
+                ret &= configPrimVidS3D(ctx,yuvLayer);
+                break;
             case ovutils::OV_3D_VIDEO_ON_3D_TV:
                 ret &= configExtVidS3D(ctx, yuvLayer);
                 break;
@@ -522,6 +612,21 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
                 ret = false;
             }
             break;
+        case ovutils::OV_3D_VIDEO_ON_3D_PANEL:
+            // Play left view on primary
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+                ALOGE("%s: queueBuffer failed for left view external",
+                        __FUNCTION__);
+                ret = false;
+            }
+            // Play right view on primary
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+                ALOGE("%s: queueBuffer failed for right view external",
+                                                            __FUNCTION__);
+                ret = false;
+            }
+            break;
+
         case ovutils::OV_3D_VIDEO_ON_3D_TV:
             // Play left view on external
             if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
