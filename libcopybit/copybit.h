@@ -67,9 +67,8 @@ enum {
     /* blurs the copied bitmap. The amount of blurring cannot be changed
      * at this time. */
     COPYBIT_BLUR            = 5,
-    /* Informs the copybit that the source and destination contains
-       premultiplied alpha */
-    COPYBIT_PREMULTIPLIED_ALPHA  = 6,
+    /* Blend mode */
+    COPYBIT_BLEND_MODE  = 6,
     /* FB width */
     COPYBIT_FRAMEBUFFER_WIDTH = 7,
     /* FB height */
@@ -94,6 +93,20 @@ enum {
 enum {
     COPYBIT_DISABLE = 0,
     COPYBIT_ENABLE  = 1
+};
+
+/*
+ * copybit blending values. same as HWC blending values
+ */
+enum {
+    /* no blending */
+    COPYBIT_BLENDING_NONE     = 0x0100,
+
+    /* ONE / ONE_MINUS_SRC_ALPHA */
+    COPYBIT_BLENDING_PREMULT  = 0x0105,
+
+    /* SRC_ALPHA / ONE_MINUS_SRC_ALPHA */
+    COPYBIT_BLENDING_COVERAGE = 0x0405
 };
 
 /* use get_static_info() to query static informations about the hardware */
