@@ -76,6 +76,14 @@ void initContext(hwc_context_t *ctx)
 
     ctx->hdmi_pending = false;
 
+    ctx->mExtCommit = false;
+    pthread_mutex_init(&(ctx->mExtCommitLock), NULL);
+    pthread_cond_init(&(ctx->mExtCommitCond), NULL);
+
+    ctx->mExtCommitDone = false;
+    pthread_mutex_init(&(ctx->mExtCommitDoneLock), NULL);
+    pthread_cond_init(&(ctx->mExtCommitDoneCond), NULL);
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
     ALOGI("DYN composition threshold : %f", ctx->dynThreshold);
@@ -299,6 +307,31 @@ void wait4Pan(hwc_context_t* ctx) {
         }
         m->fbPanDone = false;
         pthread_mutex_unlock(&m->fbPanLock);
+    }
+}
+
+// Used in ExtCommit thread to wait for the signal from hwc_set
+void wait4CommitSignal(hwc_context_t* ctx) {
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtCommitLock);
+        while(ctx->mExtCommit == false) {
+            pthread_cond_wait(&(ctx->mExtCommitCond), &(ctx->mExtCommitLock));
+        }
+        ctx->mExtCommit = false;
+        pthread_mutex_unlock(&ctx->mExtCommitLock);
+    }
+}
+
+// Used in hwc_set to wait for External commit to finish
+void wait4ExtCommitDone(hwc_context_t* ctx) {
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtCommitDoneLock);
+        while(ctx->mExtCommitDone  == false) {
+            pthread_cond_wait(&(ctx->mExtCommitDoneCond),
+                              &(ctx->mExtCommitDoneLock));
+        }
+        ctx->mExtCommitDone = false;
+        pthread_mutex_unlock(&ctx->mExtCommitDoneLock);
     }
 }
 };//namespace
