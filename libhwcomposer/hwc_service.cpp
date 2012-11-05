@@ -58,7 +58,7 @@ status_t HWComposerService::setHPDStatus(int hpdStatus) {
 status_t HWComposerService::setResolutionMode(int resMode) {
     ALOGD_IF(HWC_SERVICE_DEBUG, "resMode=%d", resMode);
     qhwc::ExternalDisplay *externalDisplay = mHwcContext->mExtDisplay;
-    if(externalDisplay->getExternalDisplay()) {
+    if(mHwcContext->externalDisplay) {
         externalDisplay->setEDIDMode(resMode);
     } else {
         ALOGE("External Display not connected");
@@ -74,7 +74,7 @@ status_t HWComposerService::setActionSafeDimension(int w, int h) {
             "ActionSafe Width and Height exceeded the limit! w=%d h=%d", w, h);
         return NO_ERROR;
     }
-    if(externalDisplay->getExternalDisplay()) {
+    if(mHwcContext->externalDisplay) {
         externalDisplay->setActionSafeDimension(w, h);
     } else {
         ALOGE("External Display not connected");
@@ -141,7 +141,7 @@ status_t HWComposerService::setCloseSecureEnd( ) {
 
 status_t HWComposerService::getResolutionModeCount(int *resModeCount) {
     qhwc::ExternalDisplay *externalDisplay = mHwcContext->mExtDisplay;
-     if(externalDisplay->getExternalDisplay()) {
+     if(mHwcContext->externalDisplay) {
         *resModeCount = externalDisplay->getModeCount();
     } else {
         ALOGE("External Display not connected");
@@ -152,7 +152,7 @@ status_t HWComposerService::getResolutionModeCount(int *resModeCount) {
 
 status_t HWComposerService::getResolutionModes(int *resModes, int count) {
     qhwc::ExternalDisplay *externalDisplay = mHwcContext->mExtDisplay;
-    if(externalDisplay->getExternalDisplay()) {
+    if(mHwcContext->externalDisplay) {
         externalDisplay->getEDIDModes(resModes);
     } else {
         ALOGE("External Display not connected");
@@ -162,7 +162,7 @@ status_t HWComposerService::getResolutionModes(int *resModes, int count) {
 
 status_t HWComposerService::getExternalDisplay(int *dispType) {
     qhwc::ExternalDisplay *externalDisplay = mHwcContext->mExtDisplay;
-    *dispType = externalDisplay->getExternalDisplay();
+    *dispType = mHwcContext->externalDisplay;
     ALOGD_IF(HWC_SERVICE_DEBUG, "dispType=%d", *dispType);
     return NO_ERROR;
 }
