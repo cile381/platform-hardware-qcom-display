@@ -97,7 +97,7 @@ static void *commitExtDisp(void *ptr)
         //wait for the signal from hwc_set
         wait4CommitSignal(ctx);
         // Commit the external display for update
-        if(ctx->mExtDisplay->getExternalDisplay())
+        if(ctx->externalDisplay)
         {
             ctx->mExtDisplay->commit();
             //If video is playing signal the main thread
@@ -251,7 +251,7 @@ static int hwc_set(hwc_composer_device_t *dev,
             //Virtual barrier for threads to finish
             wait4Pan(ctx);
             // wait for video commit on Ext display do finish..
-            if(ctx->mExtDisplay->getExternalDisplay() &&
+            if(ctx->externalDisplay &&
                                 VideoOverlay::isModeOn())
                 wait4ExtCommitDone(ctx);
         }
