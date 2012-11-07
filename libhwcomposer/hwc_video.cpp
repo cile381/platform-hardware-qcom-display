@@ -76,14 +76,14 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
         bool trueMirrorSupported = overlay::utils::FrameBufferInfo::
                                           getInstance()->supportTrueMirroring();
         //Skip on primary, display on ext.
-        if(sIsYuvLayerSkip && ctx->mExtDisplay->getExternalDisplay()) {
+        if(sIsYuvLayerSkip && ctx->externalDisplay) {
             if(trueMirrorSupported && sCCLayerIndex == -1)
                 newState = ovutils::OV_UI_MIRROR;
             else
                 newState = ovutils::OV_2D_VIDEO_ON_TV;
         } else if(sIsYuvLayerSkip) { //skip on primary, no ext
             newState = ovutils::OV_FB;
-        } else if(ctx->mExtDisplay->getExternalDisplay()) {
+        } else if(ctx->externalDisplay) {
             //display on both
             if(trueMirrorSupported && (sCCLayerIndex == -1)) {
                 ALOGD_IF(VIDEO_DEBUG,"In %s: setting state to "
@@ -112,7 +112,7 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
             layer->hints |= HWC_HINT_CLEAR_FB;
             break;
         case ovutils::OV_2D_VIDEO_ON_TV:
-            break; //dont update flags.
+            break; //dont update Flags.
         default:
             break;
     }
