@@ -17,6 +17,11 @@
  */
 
 #include <cutils/properties.h>
+#include <mdp_version.h>
+#include <cutils/log.h>
+#include <hardware/gralloc.h>
+#include <fb_priv.h>
+
 #include "hwc_mdpcomp.h"
 #include "hwc_qbuf.h"
 #include "hwc_external.h"
@@ -123,6 +128,30 @@ void MDPComp::timeout_handler(void *udata) {
     sIdleFallBack = true;
     /* Trigger SF to redraw the current frame */
     proc->invalidate(proc);
+}
+
+void MDPComp::calculate_scaled_destination(hwc_context_t* ctx, int &top,
+                                         int &left, int &width, int &height) {
+    framebuffer_device_t *fbDev = ctx->mFbDev;
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+                                           fbDev->common.module);
+    if (!m->isDynamicResolutionEnabled)
+        return; // Return if we are not in the resolution change mode
+
+    // If dyn. fb resolution is enabled, we need to scale the layer
+    // display rectangle to fit into the panel resolution.
+    float panel_w = (float)m->info.xres;
+    float panel_h = (float)m->info.yres;
+    int fb_w      = m->dynResBuffer->width;
+    int fb_h      = m->dynResBuffer->height;
+
+    float scale_w = panel_w/fb_w;
+    float scale_h = panel_h/fb_h;
+
+    left     = (int)(left*scale_w);
+    top      = (int)(top*scale_h);
+    width    = (int)(width*scale_w);
+    height   = (int)(height*scale_h);
 }
 
 void MDPComp::reset( hwc_context_t *ctx, hwc_layer_list_t* list ) {
@@ -310,6 +339,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
             return -1;
         }
 
+        calculate_scaled_destination(ctx, dst.top, dst.left, dst_w, dst_h);
         ovutils::Dim dim(dst.left, dst.top, dst_w, dst_h);
         if (!ov.setPosition(dim, dest)) {
             ALOGE("%s: setPosition failed", __FUNCTION__);

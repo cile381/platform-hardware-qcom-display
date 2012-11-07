@@ -124,12 +124,16 @@ public:
     /* Gets height of primary framebuffer */
     int getHeight() const;
 
+    /* Gets stride of primary framebuffer */
+    int getStride() const;
+
     /* Indicates whether true mirroring is supported */
     bool supportTrueMirroring() const;
 
 private:
     int mFBWidth;
     int mFBHeight;
+    int mFBStride;
     bool mBorderFillSupported;
     static FrameBufferInfo *sFBInfoInstance;
 };
