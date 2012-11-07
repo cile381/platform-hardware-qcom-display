@@ -33,6 +33,8 @@ class UIMirrorOverlay {
         static bool prepare(hwc_context_t *ctx, hwc_layer_list_t *list);
         // Draws layer if this feature is on
         static bool draw(hwc_context_t *ctx);
+        // resets the state of the UIMirrorOverlay class
+        static void reset();
     private:
         //Configures overlay
         static bool configure(hwc_context_t *ctx, hwc_layer_list_t *list);
@@ -41,6 +43,11 @@ class UIMirrorOverlay {
         //Flags if this feature is on.
         static bool sIsUiMirroringOn;
 };
+
+inline void UIMirrorOverlay::reset() {
+    sIsUiMirroringOn = false;
+    sState = ovutils::OV_CLOSED;
+}
 
 }; //namespace qhwc
 
