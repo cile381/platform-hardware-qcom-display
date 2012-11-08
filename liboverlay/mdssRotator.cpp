@@ -17,6 +17,7 @@
 
 #include "overlayUtils.h"
 #include "overlayRotator.h"
+#include <media/msm_media_info.h>
 
 namespace ovutils = overlay::utils;
 
@@ -79,6 +80,7 @@ void MdssRot::doTransform() {
 
 bool MdssRot::commit() {
     doTransform();
+    setBufSize(mRotInfo.src.format);
     mRotInfo.flags |= MDSS_MDP_ROT_ONLY;
     if(!overlay::mdp_wrapper::setOverlay(mFd.getFD(), mRotInfo)) {
         ALOGE("MdssRot commit failed!");
@@ -208,4 +210,10 @@ void MdssRot::dump() const {
     ALOGE("== Dump MdssRot end ==");
 }
 
+void MdssRot::setBufSize(int format) {
+    if (format == MDP_Y_CBCR_H2V2_VENUS) {
+        mBufSize = VENUS_BUFFER_SIZE(COLOR_FMT_NV12, mRotInfo.dst_rect.w,
+                                     mRotInfo.dst_rect.h);
+    }
+}
 } // namespace overlay
