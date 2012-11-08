@@ -83,6 +83,7 @@ C2D_STATUS (*LINK_c2dMapAddr) ( int mem_fd, void * hostptr, uint32 len,
 
 C2D_STATUS (*LINK_c2dUnMapAddr) ( void * gpuaddr);
 
+C2D_STATUS (*LINK_c2dGetDriverCapabilities) ( C2D_DRIVER_INFO * driver_info);
 /******************************************************************************/
 
 #if defined(COPYBIT_Z180)
@@ -131,6 +132,7 @@ struct copybit_context_t {
     C2D_OBJECT_STR blit_yuv_2_plane_object[MAX_YUV_2_PLANE_SURFACES];
     C2D_OBJECT_STR blit_yuv_3_plane_object[MAX_YUV_3_PLANE_SURFACES];
     C2D_OBJECT_STR blit_list[MAX_BLIT_OBJECT_COUNT]; // Z-ordered list of blit objects
+    C2D_DRIVER_INFO c2d_driver_info;
     void *libc2d2;
     alloc_data temp_src_buffer;
     alloc_data temp_dst_buffer;
@@ -677,26 +679,37 @@ static int set_parameter_copybit(
         case COPYBIT_TRANSFORM:
         {
             unsigned int transform = 0;
+            uint32 config_mask = 0;
+            config_mask |= C2D_OVERRIDE_GLOBAL_TARGET_ROTATE_CONFIG;
             if((value & 0x7) == COPYBIT_TRANSFORM_ROT_180) {
                 transform = C2D_TARGET_ROTATE_180;
+                config_mask |= C2D_OVERRIDE_TARGET_ROTATE_180;
             } else if((value & 0x7) == COPYBIT_TRANSFORM_ROT_270) {
                 transform = C2D_TARGET_ROTATE_90;
+                config_mask |= C2D_OVERRIDE_TARGET_ROTATE_90;
             } else if(value == COPYBIT_TRANSFORM_ROT_90) {
                 transform = C2D_TARGET_ROTATE_270;
+                config_mask |= C2D_OVERRIDE_TARGET_ROTATE_270;
             } else {
+                config_mask |= C2D_OVERRIDE_TARGET_ROTATE_0;
                 if(value & COPYBIT_TRANSFORM_FLIP_H) {
-                    ctx->config_mask |= C2D_MIRROR_H_BIT;
+                    config_mask |= C2D_MIRROR_H_BIT;
                 } else if(value & COPYBIT_TRANSFORM_FLIP_V) {
-                    ctx->config_mask |= C2D_MIRROR_V_BIT;
+                    config_mask |= C2D_MIRROR_V_BIT;
                 }
             }
 
             if (transform != ctx->trg_transform) {
-                // The transform for this surface does not match the current
-                // target transform. Draw all previous surfaces. This will be
-                // changed once we have a new mechanism to send different
-                // target rotations to c2d.
-                finish_copybit(dev);
+                if (ctx->c2d_driver_info.capabilities_mask &
+                    C2D_DRIVER_SUPPORTS_OVERRIDE_TARGET_ROTATE_OP) {
+                    ctx->config_mask |= config_mask;
+                } else {
+                    // The transform for this surface does not match the current
+                    // target transform. Draw all previous surfaces. This will be
+                    // changed once we have a new mechanism to send different
+                    // target rotations to c2d.
+                    finish_copybit(dev);
+                }
             }
             ctx->trg_transform = transform;
         }
@@ -1354,10 +1367,13 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
                                          "c2dMapAddr");
     *(void **)&LINK_c2dUnMapAddr = ::dlsym(ctx->libc2d2,
                                            "c2dUnMapAddr");
+    *(void **)&LINK_c2dGetDriverCapabilities = ::dlsym(ctx->libc2d2,
+                                           "c2dGetDriverCapabilities");
 
     if (!LINK_c2dCreateSurface || !LINK_c2dUpdateSurface || !LINK_c2dReadSurface
         || !LINK_c2dDraw || !LINK_c2dFlush || !LINK_c2dWaitTimestamp ||
-        !LINK_c2dFinish  || !LINK_c2dDestroySurface) {
+        !LINK_c2dFinish  || !LINK_c2dDestroySurface ||
+        !LINK_c2dGetDriverCapabilities) {
         ALOGE("%s: dlsym ERROR", __FUNCTION__);
         clean_up(ctx);
         status = COPYBIT_FAILURE;
@@ -1517,7 +1533,13 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
         return status;
     }
 
-
+    if (LINK_c2dGetDriverCapabilities(&(ctx->c2d_driver_info))) {
+         ALOGE("%s: LINK_c2dGetDriverCapabilities failed", __FUNCTION__);
+         clean_up(ctx);
+         status = COPYBIT_FAILURE;
+        *device = NULL;
+        return status;
+    }
     // Initialize context variables.
     ctx->trg_transform = C2D_TARGET_ROTATE_0;
 
