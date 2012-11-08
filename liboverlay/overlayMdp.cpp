@@ -21,9 +21,16 @@
 #undef ALOG_TAG
 #define ALOG_TAG "overlay"
 
-#define COMPFLOAT(f1, f2, precision) \
-         ((((f1 - precision) < f2) && \
-          ((f1 + precision) > f2))? 1 : 0) \
+#define HSIC_SETTINGS_DEBUG 0
+
+/* Saturation and Contrast are in the range
+ * (-1,1) of the form x.yz. The below inline function
+ * is a simple way to compare two floats of this form
+ * in this range */
+
+static inline bool isEqual(float f1, float f2) {
+    return ((int)(f1*100) == (int)(f2*100)) ? true : false;
+}
 
 namespace ovutils = overlay::utils;
 namespace overlay {
@@ -295,37 +302,66 @@ bool MdpCtrl::setVisualParams(const MetaData_t& data) {
     /* calculate the data */
     if (data.operation & PP_PARAM_HSIC) {
 
-        Satthres = COMPFLOAT(params.params.conv_params.sat,
-                             data.hsicData.saturation,
-                             precision);
-        Contthres = COMPFLOAT(params.params.conv_params.contrast,
-                              data.hsicData.contrast,
-                              precision);
+        if( params.params.conv_params.hue != data.hsicData.hue ) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,"Hue has changed from %d to %d",
+                params.params.conv_params.hue,data.hsicData.hue);
+            needUpdate = true;
+        }
+
+        if( not isEqual(params.params.conv_params.sat,
+                                data.hsicData.saturation)) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,
+                "Saturation has changed from %f to %f",
+                params.params.conv_params.sat,
+                data.hsicData.saturation);
+            needUpdate = true;
+        }
+
+        if( params.params.conv_params.intensity != data.hsicData.intensity ) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,
+                "Intensity has changed from %d to %d",
+                params.params.conv_params.intensity,
+                data.hsicData.intensity);
+            needUpdate = true;
+        }
+
+        if( not isEqual(params.params.conv_params.contrast,
+                                data.hsicData.contrast)) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,
+                "Contrast has changed from %f to %f",
+                params.params.conv_params.contrast,
+                data.hsicData.contrast);
+            needUpdate = true;
+        }
 
         if(utils::isRgb(mOVInfo.src.format))
             ops = 0;
         else
             ops = 3;
 
-        if ((params.params.conv_params.hue != data.hsicData.hue) ||
-            (Satthres != 0) || (Contthres != 0) ||
-            (params.params.conv_params.intensity !=
-                        data.hsicData.intensity) ||
-            (params.params.conv_params.ops != ops)) {
+        if( params.params.conv_params.ops != ops) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,"Ops changed from %d to %d",
+                params.params.conv_params.ops,ops);
+            needUpdate = true;
+        }
 
-                params.params.conv_params.hue = data.hsicData.hue;
-                params.params.conv_params.sat = data.hsicData.saturation;
-                params.params.conv_params.intensity = data.hsicData.intensity;
-                params.params.conv_params.contrast = data.hsicData.contrast;
-                params.params.conv_params.ops = ops;
-
-                params.operation |= PP_OP_HSIC;
-                needUpdate = true;
+        if(needUpdate) {
+            params.params.conv_params.hue = data.hsicData.hue;
+            params.params.conv_params.sat = data.hsicData.saturation;
+            params.params.conv_params.intensity = data.hsicData.intensity;
+            params.params.conv_params.contrast = data.hsicData.contrast;
+            params.params.conv_params.ops = ops;
+            params.operation |= PP_OP_HSIC;
         }
     }
+
     if (data.operation & PP_PARAM_SHARPNESS) {
             uint32_t qseedData[2]={0,0};
         if(params.params.qseed_params.strength != data.sharpness) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,
+                "Sharpness has changed from %d to %d",
+                params.params.qseed_params.strength,
+                data.sharpness);
             params.params.qseed_params.strength = data.sharpness;
             mOVInfo.overlay_pp_cfg.qseed_cfg[0].len = 2;
             mOVInfo.overlay_pp_cfg.qseed_cfg[0].table_num = 1;

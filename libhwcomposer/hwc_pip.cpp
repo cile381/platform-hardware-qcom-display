@@ -115,10 +115,7 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
-    MetaData_t mData;
-    memset(&mData, 0 , sizeof(MetaData_t));
-    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
-                            (MetaData_t *)hnd->base_metadata : &mData);
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
     if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
         /* Preference will be for the HSIC & QSEED values
          * set through binder */
@@ -156,6 +153,11 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
         ctx->mPpParams[VIDEO_LAYER_0].isValid = false;
+        /* Done with setting HSIC values. Clear the
+         * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
+         * from metadata operation if present.
+         */
+        metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_0].ops);
         ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
@@ -227,10 +229,7 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     ovutils::eIsFg isFgFlag = ovutils::IS_FG_OFF;
 
-    MetaData_t mData;
-    memset(&mData, 0 , sizeof(MetaData_t));
-    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
-                            (MetaData_t *)hnd->base_metadata : &mData);
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
     if(metadata && ctx->mPpParams[VIDEO_LAYER_1].isValid){
         /* Preference will be for the HSIC & QSEED values
          * set through binder */
@@ -272,6 +271,11 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_1].isValid){
         ctx->mPpParams[VIDEO_LAYER_1].isValid = false;
+        /* Done with setting HSIC values. Clear the
+         * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
+         * from metadata operation if present.
+         */
+        metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_1].ops);
         ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
