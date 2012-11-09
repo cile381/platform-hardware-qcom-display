@@ -894,24 +894,6 @@ inline void even_floor(T& value) {
 
 } // namespace utils ends
 
-typedef struct {
-    int32_t hue;
-    float saturation;
-    int32_t intensity;
-    float contrast;
-} HsicData;
-
-typedef struct {
-    uint32_t sharpness;
-} QseedData;
-
-typedef struct {
-    uint32_t ops;
-    HsicData hsicData;
-    QseedData qseedData;
-    bool isValid;
-} PPMetaData;
-
 //--------------------Class Res stuff (namespace overlay only) -----------
 
 class Res {
