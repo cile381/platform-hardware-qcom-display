@@ -181,13 +181,17 @@ static int hwc_set(hwc_composer_device_t *dev,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    if (LIKELY(list)) {
-        VideoOverlay::draw(ctx, list);
-        ExtOnly::draw(ctx, list);
-        CopyBit::draw(ctx, list, (EGLDisplay)dpy, (EGLSurface)sur);
-        MDPComp::draw(ctx, list);
-        EGLBoolean sucess = eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
-        if(ctx->mMDP.hasOverlay) {
+    if (dpy && sur) {
+        if (LIKELY(list)) {
+            VideoOverlay::draw(ctx, list);
+            ExtOnly::draw(ctx, list);
+            CopyBit::draw(ctx, list, (EGLDisplay)dpy, (EGLSurface)sur);
+            MDPComp::draw(ctx, list);
+        }
+        // This is required to take care of GPU/C2D to Overlay transition
+        resetFlags(ctx);
+        eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
+	if(ctx->mMDP.hasOverlay) {
             wait4fbPost(ctx);
             //Can draw to HDMI only when fb_post is reached
             UIMirrorOverlay::draw(ctx);
@@ -195,7 +199,8 @@ static int hwc_set(hwc_composer_device_t *dev,
             if(ctx->mExtDisplay->getExternalDisplay())
                 ctx->mExtDisplay->commit();
             //Virtual barrier for threads to finish
-            wait4Pan(ctx);
+            if(ctx->overlayInUse)
+                wait4Pan(ctx);
         }
     } else {
         ctx->mOverlay->setState(ovutils::OV_CLOSED);
