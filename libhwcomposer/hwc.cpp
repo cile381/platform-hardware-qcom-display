@@ -307,11 +307,7 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
 
         dev->device.common.tag     = HARDWARE_DEVICE_TAG;
 
-        // Disable vsync for mdp5
-        if(dev->mMDP.version >= 500)
-            dev->device.common.version = 0;
-        else
-            dev->device.common.version = HWC_DEVICE_API_VERSION_0_3;
+        dev->device.common.version = HWC_DEVICE_API_VERSION_0_3;
         dev->device.common.module  = const_cast<hw_module_t*>(module);
         dev->device.common.close   = hwc_device_close;
         dev->device.prepare        = hwc_prepare;
