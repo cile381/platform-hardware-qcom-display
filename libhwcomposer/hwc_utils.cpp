@@ -29,6 +29,8 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
 #include "hwc_service.h"
+#include "qdMetaData.h"
+#include "comptype.h"
 
 namespace qhwc {
 
@@ -53,10 +55,15 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
 
     char value[PROPERTY_VALUE_MAX];
-    // Check if the target has the C2D API Support
+    // Check if the target supports copybit compostion (dyn/mdp/c2d) to
+    // decide if we need to open the copybit module.
     ctx->mCopybitEngine = NULL;
-    property_get("c2d.api.supported", value, "0");
-    if(atoi(value)) {
+    int compositionType =
+        qdutils::QCCompositionType::getInstance().getCompositionType();
+
+    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
+                           qdutils::COMPOSITION_TYPE_MDP |
+                           qdutils::COMPOSITION_TYPE_C2D)) {
         ctx->mCopybitEngine = CopybitEngine::getInstance();
     }
 
