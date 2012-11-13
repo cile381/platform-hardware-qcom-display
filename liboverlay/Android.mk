@@ -11,7 +11,7 @@ ifeq ($(TARGET_USES_POST_PROCESSING),true)
     LOCAL_SHARED_LIBRARIES        += libmm-abl
 endif
 
-LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"overlay\"
+LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"qdoverlay\"
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES := \
       overlay.cpp \
