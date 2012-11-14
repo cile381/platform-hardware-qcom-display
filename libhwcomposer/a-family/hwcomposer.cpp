@@ -1304,8 +1304,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                     //dynamic composition for non-overlay targets(8x25/7x27a)
                     list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
 #endif
-                } else if (hwcModule->compositionType & (COMPOSITION_TYPE_C2D |
-                                            COMPOSITION_TYPE_MDP)) {
+                } else if ((hwcModule->compositionType & (COMPOSITION_TYPE_C2D |
+                                            COMPOSITION_TYPE_MDP)) && useCopybit) {
                     //Fail safe path: If drawing with overlay fails,
 
                     //Use C2D if available.
@@ -1407,7 +1407,7 @@ struct range {
     int end;
 };
 struct region_iterator : public copybit_region_t {
-    
+
     region_iterator(hwc_region_t region) {
         mRegion = region;
         r.end = region.numRects;
@@ -1433,9 +1433,9 @@ private:
         }
         return 0;
     }
-    
+
     hwc_region_t mRegion;
-    mutable range r; 
+    mutable range r;
 };
 
 static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer, EGLDisplay dpy,
