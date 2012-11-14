@@ -505,6 +505,11 @@ static int blit_copybit(
     return stretch_copybit(dev, dst, src, &dr, &sr, region);
 }
 
+static int finish_copybit(struct copybit_device_t *dev)
+{
+    // NOP for MDP copybit
+}
+
 /*****************************************************************************/
 
 /** Close the copybit device */
@@ -535,6 +540,7 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->device.get = get;
     ctx->device.blit = blit_copybit;
     ctx->device.stretch = stretch_copybit;
+    ctx->device.finish = finish_copybit;
     ctx->mAlpha = MDP_ALPHA_NOP;
     ctx->mFlags = 0;
     ctx->mFD = open("/dev/graphics/fb0", O_RDWR, 0);
