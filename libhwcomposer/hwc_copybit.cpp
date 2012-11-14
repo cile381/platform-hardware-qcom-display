@@ -175,6 +175,7 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_layer_list_t *list, EGLDisplay dpy,
                                                                EGLSurface sur){
     // draw layers marked for COPYBIT
     int retVal = true;
+    int copybitLayerCount = 0;
 
     if(sCopyBitDraw == false) // there is no any layer marked for copybit
        return true ;
@@ -193,10 +194,16 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_layer_list_t *list, EGLDisplay dpy,
                                                      (EGLDisplay)dpy,
                                                      (EGLSurface)sur,
                                                         renderBuffer);
+           copybitLayerCount++;
            if(retVal<0) {
               ALOGE("%s : drawLayerUsingCopybit failed", __FUNCTION__);
            }
         }
+    }
+
+    if (copybitLayerCount) {
+        copybit_device_t *copybit = ctx->mCopybitEngine->getEngine();
+        copybit->finish(copybit);
     }
     return true;
 }
