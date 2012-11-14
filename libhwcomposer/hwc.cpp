@@ -22,6 +22,9 @@
 #include <cutils/atomic.h>
 #include <EGL/egl.h>
 
+#include <sys/resource.h>
+#include <sys/prctl.h>
+
 #include <overlay.h>
 #include <fb_priv.h>
 #include <mdp_version.h>
@@ -78,6 +81,36 @@ static void hwc_registerProcs(struct hwc_composer_device* dev,
     // the uevent & vsync threads
     init_uevent_thread(ctx);
     init_vsync_thread(ctx);
+}
+
+/*
+ * commitExtDisp thread function.
+ * waits for the signal from the hwc_set and commits
+ * to the External display
+ */
+static void *commitExtDisp(void *ptr)
+{
+    hwc_context_t* ctx = (hwc_context_t*)(ptr);
+    char thread_name[64] = "hwcCommitThr";
+    prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
+    setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY);
+    while (1) {
+        //wait for the signal from hwc_set
+        wait4CommitSignal(ctx);
+        // Commit the external display for update
+        if(ctx->mExtDisplay->getExternalDisplay())
+        {
+            ctx->mExtDisplay->commit();
+            //If video is playing signal the main thread
+            if(VideoOverlay::isModeOn()) {
+                pthread_mutex_lock(&ctx->mExtCommitDoneLock);
+                ctx->mExtCommitDone = true;
+                pthread_cond_signal(&ctx->mExtCommitDoneCond);
+                pthread_mutex_unlock(&ctx->mExtCommitDoneLock);
+            }
+        }
+    }
+    return NULL;
 }
 
 static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
@@ -218,14 +251,24 @@ static int hwc_set(hwc_composer_device_t *dev,
         }
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
         if(ctx->mMDP.hasOverlay) {
-            wait4fbPost(ctx);
-            //Can draw to HDMI only when fb_post is reached
-            UIMirrorOverlay::draw(ctx);
-            //HDMI commit and primary commit (PAN) happening in parallel
-            if(ctx->mExtDisplay->getExternalDisplay())
-                ctx->mExtDisplay->commit();
+            if(ctx->mExtDisplay->getExternalDisplay()) {
+                wait4fbPost(ctx);
+                //Can draw to Ext Disp only when fb_post is reached
+                //Ext Display Rotate + ov_play and primary commit (PAN)
+                //happening in parallel
+                UIMirrorOverlay::draw(ctx);
+                //signal the commitExt thread commit
+                pthread_mutex_lock(&ctx->mExtCommitLock);
+                ctx->mExtCommit = true;
+                pthread_cond_signal(&ctx->mExtCommitCond);
+                pthread_mutex_unlock(&ctx->mExtCommitLock);
+            }
             //Virtual barrier for threads to finish
             wait4Pan(ctx);
+            // wait for video commit on Ext display do finish..
+            if(ctx->mExtDisplay->getExternalDisplay() &&
+                                VideoOverlay::isModeOn())
+                wait4ExtCommitDone(ctx);
         }
     } else {
         ctx->mOverlay->setState(ovutils::OV_CLOSED);
@@ -261,6 +304,9 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
 
         //Initialize hwc context
         initContext(dev);
+
+        pthread_t extDispCommitThread;
+        pthread_create(&extDispCommitThread, NULL, &commitExtDisp, (void *)dev);
 
         //Setup HWC methods
         hwc_methods_t *methods;
