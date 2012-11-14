@@ -98,7 +98,7 @@ static void *commitExtDisp(void *ptr)
         //wait for the signal from hwc_set
         wait4CommitSignal(ctx);
         // Commit the external display for update
-        if(ctx->mExtDisplay->getExternalDisplay())
+        if(ctx->externalDisplay)
         {
             ctx->mExtDisplay->commit();
             //If video is playing signal the main thread
@@ -118,8 +118,10 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     ctx->overlayInUse = false;
 
-    if(ctx->mExtDisplay->getExternalDisplay())
-        ovutils::setExtType(ctx->mExtDisplay->getExternalDisplay());
+    ctx->externalDisplay = ctx->mExtDisplay->getExternalDisplay();
+
+    if(ctx->externalDisplay)
+        ovutils::setExtType(ctx->externalDisplay);
 
     if (LIKELY(list)) {
         //reset for this draw round
@@ -197,7 +199,7 @@ static int hwc_eventControl(struct hwc_composer_device* dev,
             /* vsync state change logic - end*/
 
              if(ctx->mExtDisplay->isHDMIConfigured() &&
-                (ctx->mExtDisplay->getExternalDisplay()==EXTERN_DISPLAY_FB1)) {
+                (ctx->externalDisplay==EXTERN_DISPLAY_FB1)) {
                 // enableHDMIVsync will return -errno on error
                 ret = ctx->mExtDisplay->enableHDMIVsync(value);
              }
@@ -251,7 +253,7 @@ static int hwc_set(hwc_composer_device_t *dev,
         }
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
         if(ctx->mMDP.hasOverlay) {
-            if(ctx->mExtDisplay->getExternalDisplay()) {
+            if(ctx->externalDisplay) {
                 wait4fbPost(ctx);
                 //Can draw to Ext Disp only when fb_post is reached
                 //Ext Display Rotate + ov_play and primary commit (PAN)
@@ -266,8 +268,7 @@ static int hwc_set(hwc_composer_device_t *dev,
             //Virtual barrier for threads to finish
             wait4Pan(ctx);
             // wait for video commit on Ext display do finish..
-            if(ctx->mExtDisplay->getExternalDisplay() &&
-                                VideoOverlay::isModeOn())
+            if(ctx->externalDisplay && VideoOverlay::isModeOn())
                 wait4ExtCommitDone(ctx);
         }
     } else {
