@@ -18,9 +18,6 @@
 #include "overlayUtils.h"
 #include "overlayMdp.h"
 
-#undef ALOG_TAG
-#define ALOG_TAG "overlay"
-
 #define COMPFLOAT(f1, f2, precision) \
          ((((f1 - precision) < f2) && \
           ((f1 + precision) > f2))? 1 : 0) \

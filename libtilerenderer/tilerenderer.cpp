@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "TileRenderer"
-
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
 #include <gl2ext.h>

@@ -5,7 +5,7 @@ include $(CLEAR_VARS)
 ifeq ($(USE_OPENGL_RENDERER),true)
 LOCAL_MODULE           := libtilerenderer
 LOCAL_MODULE_TAGS      := optional
-LOCAL_CFLAGS += -DGL_GLEXT_PROTOTYPES
+LOCAL_CFLAGS += -DGL_GLEXT_PROTOTYPES -DLOG_TAG=\"qdtilerenderer\"
 ifeq ($(call is-vendor-board-platform,QCOM),true)
 LOCAL_CFLAGS += -DQCOM_APP_TILE_RENDER
 endif

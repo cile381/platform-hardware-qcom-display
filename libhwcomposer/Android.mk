@@ -12,7 +12,7 @@ LOCAL_SHARED_LIBRARIES        := $(common_libs) libEGL liboverlay libgenlock \
                                  libdl libmemalloc libhwcservice libGLESv1_CM \
                                  libskia
 
-LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"hwcomposer\"
+LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"qdhwcomposer\"
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES               := hwc.cpp          \
                                  hwc_video.cpp    \
@@ -36,7 +36,7 @@ LOCAL_MODULE_TAGS             := optional
 LOCAL_C_INCLUDES              := $(common_includes) $(kernel_includes)
 LOCAL_SHARED_LIBRARIES        := $(common_libs) liboverlay
 
-LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"hwcexternal\"
+LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"qdhwcexternal\"
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES               := hwc_external.cpp
 
@@ -50,7 +50,7 @@ LOCAL_MODULE_TAGS             := optional
 LOCAL_C_INCLUDES              := $(common_includes) $(kernel_includes)
 LOCAL_SHARED_LIBRARIES        := $(common_libs) libhwcexternal libbinder \
 
-LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"hwcservice\"
+LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"qdhwcservice\"
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES               := hwc_service.cpp \
                                  ihwc.cpp
