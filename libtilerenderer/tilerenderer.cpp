@@ -243,10 +243,10 @@ void TileRenderer::endTileRendering() {
     setReady(false);
 }
 
-void TileRenderer::startTiling(int fbo, int left, int top,
+void TileRenderer::startTiling(int fbo, int prevfbo, int left, int top,
                                int right, int bottom,
                                int width, int height, bool preserve) {
-    if (!isReady() || isTiled())
+    if ((fbo == prevfbo) || !isReady() || isTiled())
         return;
 
     mTileCacheMgr.set(fbo, left, top, right, bottom, width, height);
@@ -261,12 +261,12 @@ void TileRenderer::startTiling(int fbo, int left, int top,
     return;
 }
 
-void TileRenderer::startTiling(int fbo, bool preserve) {
+void TileRenderer::startTiling(int fbo, int prevfbo, bool preserve) {
     int left, top;
     int right, bottom;
     int width, height;
 
-    if (!isReady() || isTiled())
+    if ((fbo == prevfbo) || !isReady() || isTiled())
         return;
 
     mTileCacheMgr.peek(fbo, left, top, right, bottom, width, height);
@@ -279,8 +279,8 @@ void TileRenderer::startTiling(int fbo, bool preserve) {
     return;
 }
 
-void TileRenderer::endTiling(int fbo, bool bClear) {
-    if (!isTiled()) {
+void TileRenderer::endTiling(int fbo, int nextfbo, bool bClear) {
+    if ((fbo == nextfbo) || !isTiled()) {
         return;
     }
     TILE_RENDERER_LOGD("TileRenderer::end fbo=%d", fbo);
