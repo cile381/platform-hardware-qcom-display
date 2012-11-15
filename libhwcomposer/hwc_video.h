@@ -36,6 +36,8 @@ public:
     static void reset();
     //returns yuv count
     static int getYuvCount();
+    // Returns if the VideoOverlay Mode is on
+    static bool isModeOn();
 private:
     //Choose an appropriate overlay state based on conditions
     static void chooseState(hwc_context_t *ctx);
@@ -89,6 +91,11 @@ inline void VideoOverlay::reset() {
     sState = ovutils::OV_CLOSED;
     sLayerS3DFormat = 0;
 }
+
+inline bool VideoOverlay::isModeOn() {
+    return sIsModeOn;
+}
+
 }; //namespace qhwc
 
 #endif //HWC_VIDEO_H
