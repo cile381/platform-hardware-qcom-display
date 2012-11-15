@@ -118,7 +118,7 @@ bool MdpRot::close() {
     bool success = true;
     if(mFd.valid() && (getSessId() > 0)) {
         if(!mdp_wrapper::endRotator(mFd.getFD(), getSessId())) {
-            ALOGE("Mdp Rot error endRotator, fd=%d sessId=%d",
+            ALOGE("Mdp Rot error endRotator, fd=%d sessId=%u",
                     mFd.getFD(), getSessId());
             success = false;
         }

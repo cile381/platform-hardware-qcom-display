@@ -64,7 +64,7 @@ bool rotate(int fd, msm_rotator_data_info& rot);
 bool setOverlay(int fd, mdp_overlay& ov);
 
 /* MSM_ROTATOR_IOCTL_FINISH */
-bool endRotator(int fd, int sessionId);
+bool endRotator(int fd, uint32_t sessionId);
 
 /* MSMFB_OVERLAY_UNSET */
 bool unsetOverlay(int fd, int ovId);
@@ -152,7 +152,7 @@ inline bool setOverlay(int fd, mdp_overlay& ov) {
     return true;
 }
 
-inline bool endRotator(int fd, int sessionId) {
+inline bool endRotator(int fd, uint32_t sessionId) {
     if (ioctl(fd, MSM_ROTATOR_IOCTL_FINISH, &sessionId) < 0) {
         ALOGE("Failed to call ioctl MSM_ROTATOR_IOCTL_FINISH err=%s",
                 strerror(errno));
