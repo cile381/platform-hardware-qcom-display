@@ -43,10 +43,6 @@ namespace hwcService {
 // ----------------------------------------------------------------------------
 
 class HWComposerService : public BnHWComposer {
-enum {
-    MAX_ACTIONSAFE_WIDTH  = 10,
-    MAX_ACTIONSAFE_HEIGHT = MAX_ACTIONSAFE_WIDTH,
-};
 private:
     HWComposerService();
 public:
@@ -72,6 +68,8 @@ public:
 private:
     static HWComposerService *sHwcService;
     hwc_context_t *mHwcContext;
+    int mMaxActionSafeWidth;
+    int mMaxActionSafeHeight;
 };
 
 }; // namespace hwcService

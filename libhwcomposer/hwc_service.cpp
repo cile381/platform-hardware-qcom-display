@@ -29,6 +29,7 @@
 
 #include <hwc_service.h>
 #include <hwc_utils.h>
+#include <cutils/properties.h>
 
 #define HWC_SERVICE_DEBUG 0
 
@@ -38,9 +39,19 @@ namespace hwcService {
 
 HWComposerService* HWComposerService::sHwcService = NULL;
 // ----------------------------------------------------------------------------
-HWComposerService::HWComposerService():mHwcContext(0)
+HWComposerService::HWComposerService():mHwcContext(0),
+                                       mMaxActionSafeWidth(0),
+                                       mMaxActionSafeHeight(0)
 {
     ALOGD_IF(HWC_SERVICE_DEBUG, "HWComposerService Constructor invoked");
+    // Get ActionSafe Maximum Width and Height
+    char property[PROPERTY_VALUE_MAX];
+    if(property_get("persist.actionsafe.maxwidth", property, NULL) > 0) {
+        mMaxActionSafeWidth = atoi(property);
+    }
+    if(property_get("persist.actionsafe.maxheight", property, NULL) > 0) {
+        mMaxActionSafeHeight = atoi(property);
+    }
 }
 
 HWComposerService::~HWComposerService()
@@ -69,7 +80,7 @@ status_t HWComposerService::setResolutionMode(int resMode) {
 status_t HWComposerService::setActionSafeDimension(int w, int h) {
     ALOGD_IF(HWC_SERVICE_DEBUG, "w=%d h=%d", w, h);
     qhwc::ExternalDisplay *externalDisplay = mHwcContext->mExtDisplay;
-    if((w > MAX_ACTIONSAFE_WIDTH) && (h > MAX_ACTIONSAFE_HEIGHT)) {
+    if((w > mMaxActionSafeWidth) && (h > mMaxActionSafeHeight)) {
         ALOGE_IF(HWC_SERVICE_DEBUG,
             "ActionSafe Width and Height exceeded the limit! w=%d h=%d", w, h);
         return NO_ERROR;
