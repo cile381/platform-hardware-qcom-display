@@ -2041,6 +2041,13 @@ bool OverlayControlChannel::rotatorDownscaleControl(
         rotinfo.enable ? "Enabling" : "Disabling", getFbNumString(mFBNum),
                     src_w, src_h, dst_w, dst_h, 1 << rotinfo.downscale_ratio,
                     src_w >> mRotDscaleAdj, src_h >> mRotDscaleAdj);
+
+    if (ROT_DSCALE_ONE_EIGTH == mRotDscaleAdj && rotinfo.src_rect.h & 0xF) {
+        // Ensure src_rect.h is a multiple of 16 for 1/8 downscaling.
+        rotinfo.src_rect.h = rotinfo.src_rect.h & (~0xF);
+        LOGD("rotator srcadj(%dx%d)", rotinfo.src_rect.w, rotinfo.src_rect.h);
+    }
+
     if (ioctl(mRotFD, MSM_ROTATOR_IOCTL_START, &rotinfo)) {
         reportError("rotatorDownscaleControl, rotator start failed");
         dump(rotinfo);
