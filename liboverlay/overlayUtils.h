@@ -42,6 +42,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <utils/Log.h>
+#include <mdp_version.h>
 #include "gralloc_priv.h" //for interlace
 /*
 *

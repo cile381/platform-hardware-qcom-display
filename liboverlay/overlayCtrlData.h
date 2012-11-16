@@ -62,7 +62,9 @@ public:
     /* set crop info and pass it down to mdp */
     bool setCrop(const utils::Dim& d);
     /* set orientation */
-    bool setTransform(const utils::eTransform& p, const bool&);
+    bool setTransform(const utils::eTransform& p);
+    /* set whether rotator can be used */
+    void setRotatorUsed(const bool& rotUsed);
     /* set mdp position using dim */
     bool setPosition(const utils::Dim& dim);
     /* mdp set overlay/commit changes */
@@ -88,7 +90,10 @@ public:
     void doTransform();
 
     /* Performs downscale calculations */
-    int doDownscale();
+    void doDownscale(int dscale_factor);
+
+    /* Get downscale factor */
+    int getDownscalefactor();
 
 private:
     /* Retrieve screen info from underlying mdp */
@@ -195,8 +200,12 @@ inline void Ctrl::doTransform() {
     return mMdp.doTransform();
 }
 
-inline int Ctrl::doDownscale() {
-    return mMdp.doDownscale();
+inline void Ctrl::doDownscale(int dscale_factor) {
+    mMdp.doDownscale(dscale_factor);
+}
+
+inline int Ctrl::getDownscalefactor() {
+    return mMdp.getDownscalefactor();
 }
 
 inline Data::Data() {
