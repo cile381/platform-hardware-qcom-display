@@ -133,17 +133,20 @@ bool MdpCtrl::setPosition(const overlay::utils::Dim& d,
     return true;
 }
 
-bool MdpCtrl::setTransform(const utils::eTransform& orient,
-        const bool& rotUsed) {
+bool MdpCtrl::setTransform(const utils::eTransform& orient) {
     int rot = utils::getMdpOrient(orient);
     setUserData(rot);
     //getMdpOrient will switch the flips if the source is 90 rotated.
     //Clients in Android dont factor in 90 rotation while deciding the flip.
     mOrientation = static_cast<utils::eTransform>(rot);
 
-    //Rotator can be requested by client even if layer has 0 orientation.
-    mRotUsed = rotUsed;
     return true;
+}
+
+void MdpCtrl::setRotatorUsed(const bool& rotUsed) {
+    //rotUsed dictates whether rotator hardware can be used.
+    //It is set if transformation or downscaling is required.
+    mRotUsed = rotUsed;
 }
 
 void MdpCtrl::doTransform() {
@@ -162,7 +165,8 @@ void MdpCtrl::doTransform() {
     }
 }
 
-int MdpCtrl::doDownscale() {
+int MdpCtrl::getDownscalefactor() {
+
     int dscale_factor = utils::ROT_DS_NONE;
     int src_w = mOVInfo.src_rect.w;
     int src_h = mOVInfo.src_rect.h;
@@ -195,12 +199,18 @@ int MdpCtrl::doDownscale() {
         }
     }
 
-    mOVInfo.src_rect.x >>= dscale_factor;
-    mOVInfo.src_rect.y >>= dscale_factor;
-    mOVInfo.src_rect.w >>= dscale_factor;
-    mOVInfo.src_rect.h >>= dscale_factor;
-
     return dscale_factor;
+}
+
+void MdpCtrl::doDownscale(int dscale_factor) {
+
+    if( dscale_factor ) {
+        mOVInfo.src_rect.x >>= dscale_factor;
+        mOVInfo.src_rect.y >>= dscale_factor;
+        mOVInfo.src_rect.w >>= dscale_factor;
+        mOVInfo.src_rect.h >>= dscale_factor;
+    }
+
 }
 
 bool MdpCtrl::set() {
