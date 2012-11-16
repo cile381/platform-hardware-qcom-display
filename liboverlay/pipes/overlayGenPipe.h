@@ -267,6 +267,15 @@ inline bool GenericPipe<PANEL>::commit() {
             ALOGE("GenPipe Rotator commit failed");
             return false;
         }
+
+        int version = qdutils::MDPVersion::getInstance().getMDPVersion();
+        if ((version >= qdutils::MDP_V4_2) && (version < qdutils::MDSS_V5)) {
+            /* Set the mdp src format to the output format of the rotator.
+             * The output format of the rotator might be different depending on
+             * whether fastyuv mode is enabled in the rotator
+             */
+            mCtrlData.ctrl.updateSrcformat(mRot->getDstFormat());
+        }
     }
     ret = mCtrlData.ctrl.commit();
     pipeState = ret ? OPEN : CLOSED;

@@ -95,6 +95,9 @@ public:
     /* Get downscale factor */
     int getDownscalefactor();
 
+    /* Update the src format */
+    void updateSrcformat(const uint32_t& inputsrcFormat);
+
 private:
     /* Retrieve screen info from underlying mdp */
     bool getScreenInfo(utils::ScreenInfo& info);
@@ -189,6 +192,10 @@ inline int Ctrl::getPipeId() const {
 
 inline int Ctrl::getFd() const {
     return mMdp.getFd();
+}
+
+inline void Ctrl::updateSrcformat(const uint32_t& inputsrcFormat) {
+    mMdp.updateSrcformat(inputsrcFormat);
 }
 
 inline utils::ScreenInfo Ctrl::getScreenInfo() const {
