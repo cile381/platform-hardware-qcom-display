@@ -190,25 +190,45 @@ void disp_mode_timing_type::set_info(struct fb_var_screeninfo &info) const
 #define m1920x1080p24_16_9      32
 #define m1920x1080p25_16_9      33
 #define m1920x1080p30_16_9      34
+/* Video Identification Codes from 65-127 are reserved for the future */
+#define HDMI_VFRMT_END          128
+/* TODO: instead of kernel and user-space maintaining their each copy of
+ *       video timing information. Have kernel export it using sanitized
+ *       headers or fb ioctls.
+ */
+/* extended video formats */
+#define m3840x2160p30_16_9      (HDMI_VFRMT_END + 1)
+#define m3840x2160p25_16_9      (HDMI_VFRMT_END + 2)
+#define m3840x2160p24_16_9      (HDMI_VFRMT_END + 3)
+#define m4096x2160p24_16_9      (HDMI_VFRMT_END + 4)
+#define HDMI_EVFRMT_END         m4096x2160p24_16_9
+/* DVI only resolutions */
+#define m2560x1600p60_16_9      (HDMI_EVFRMT_END + 1)
+#define DVI_VFRMT_END           m2560x1600p60_16_9
 
 static struct disp_mode_timing_type supported_video_mode_lut[] = {
-    {m640x480p60_4_3,     640,  480,  16,  96,  48, 10, 2, 33,  25200, false},
-    {m720x480p60_4_3,     720,  480,  16,  62,  60,  9, 6, 30,  27030, false},
-    {m720x480p60_16_9,    720,  480,  16,  62,  60,  9, 6, 30,  27030, false},
-    {m1280x720p60_16_9,  1280,  720, 110,  40, 220,  5, 5, 20,  74250, false},
-    {m1920x1080i60_16_9, 1920,  540,  88,  44, 148,  2, 5,  5,  74250, false},
-    {m1440x480i60_4_3,   1440,  240,  38, 124, 114,  4, 3, 15,  27000, true},
-    {m1440x480i60_16_9,  1440,  240,  38, 124, 114,  4, 3, 15,  27000, true},
-    {m1920x1080p60_16_9, 1920, 1080,  88,  44, 148,  4, 5, 36, 148500, false},
-    {m720x576p50_4_3,     720,  576,  12,  64,  68,  5, 5, 39,  27000, false},
-    {m720x576p50_16_9,    720,  576,  12,  64,  68,  5, 5, 39,  27000, false},
-    {m1280x720p50_16_9,  1280,  720, 440,  40, 220,  5, 5, 20,  74250, false},
-    {m1440x576i50_4_3,   1440,  288,  24, 126, 138,  2, 3, 19,  27000, true},
-    {m1440x576i50_16_9,  1440,  288,  24, 126, 138,  2, 3, 19,  27000, true},
-    {m1920x1080p50_16_9, 1920, 1080, 528,  44, 148,  4, 5, 36, 148500, false},
-    {m1920x1080p24_16_9, 1920, 1080, 638,  44, 148,  4, 5, 36,  74250, false},
-    {m1920x1080p25_16_9, 1920, 1080, 528,  44, 148,  4, 5, 36,  74250, false},
-    {m1920x1080p30_16_9, 1920, 1080,  88,  44, 148,  4, 5, 36,  74250, false},
+    {m640x480p60_4_3,     640,  480,   16,  96,  48, 10,  2, 33,  25200, false},
+    {m720x480p60_4_3,     720,  480,   16,  62,  60,  9,  6, 30,  27030, false},
+    {m720x480p60_16_9,    720,  480,   16,  62,  60,  9,  6, 30,  27030, false},
+    {m1280x720p60_16_9,  1280,  720,  110,  40, 220,  5,  5, 20,  74250, false},
+    {m1920x1080i60_16_9, 1920,  540,   88,  44, 148,  2,  5,  5,  74250, false},
+    {m1440x480i60_4_3,   1440,  240,   38, 124, 114,  4,  3, 15,  27000, true},
+    {m1440x480i60_16_9,  1440,  240,   38, 124, 114,  4,  3, 15,  27000, true},
+    {m1920x1080p60_16_9, 1920, 1080,   88,  44, 148,  4,  5, 36, 148500, false},
+    {m720x576p50_4_3,     720,  576,   12,  64,  68,  5,  5, 39,  27000, false},
+    {m720x576p50_16_9,    720,  576,   12,  64,  68,  5,  5, 39,  27000, false},
+    {m1280x720p50_16_9,  1280,  720,  440,  40, 220,  5,  5, 20,  74250, false},
+    {m1440x576i50_4_3,   1440,  288,   24, 126, 138,  2,  3, 19,  27000, true},
+    {m1440x576i50_16_9,  1440,  288,   24, 126, 138,  2,  3, 19,  27000, true},
+    {m1920x1080p50_16_9, 1920, 1080,  528,  44, 148,  4,  5, 36, 148500, false},
+    {m1920x1080p24_16_9, 1920, 1080,  638,  44, 148,  4,  5, 36,  74250, false},
+    {m1920x1080p25_16_9, 1920, 1080,  528,  44, 148,  4,  5, 36,  74250, false},
+    {m1920x1080p30_16_9, 1920, 1080,   88,  44, 148,  4,  5, 36,  74250, false},
+    {m3840x2160p30_16_9, 3840, 2160,  176,  88, 296,  8, 10, 72, 297000, false},
+    {m3840x2160p25_16_9, 3840, 2160, 1056,  88, 296,  8, 10, 72, 297000, false},
+    {m3840x2160p24_16_9, 3840, 2160, 1276,  88, 296,  8, 10, 72, 297000, false},
+    {m4096x2160p24_16_9, 4096, 2160, 1020,  88, 296,  8, 10, 72, 297000, false},
+    {m2560x1600p60_16_9, 2560, 1600,   48,  32,  80,  3,  6, 37, 268500, false},
 };
 
 int ExternalDisplay::parseResolution(char* edidStr, int* edidModes)
@@ -341,6 +361,16 @@ int ExternalDisplay::getModeOrder(int mode)
             return 16; //1080p@50Hz
         case m1920x1080p60_16_9:
             return 17; //1080p@60Hz
+        case m2560x1600p60_16_9:
+            return 18; //WQXGA@60Hz
+        case m3840x2160p24_16_9:
+            return 19;
+        case m3840x2160p25_16_9:
+            return 20;
+        case m3840x2160p30_16_9:
+            return 21;
+        case m4096x2160p24_16_9:
+            return 22;
     }
 }
 
@@ -363,7 +393,20 @@ int ExternalDisplay::getBestMode() {
 
 inline bool ExternalDisplay::isValidMode(int ID)
 {
-    return ((ID >= m640x480p60_4_3) && (ID <= m1920x1080p30_16_9));
+    bool valid = false;
+    unsigned count =  sizeof(supported_video_mode_lut)/sizeof
+        (*supported_video_mode_lut);
+
+    for (unsigned int i = 0; i < count; ++i) {
+        const struct disp_mode_timing_type *cur =
+            &supported_video_mode_lut[i];
+        if (cur->video_format == ID) {
+            valid = true;
+            break;
+        }
+    }
+
+    return valid;
 }
 
 void ExternalDisplay::setResolution(int ID)
