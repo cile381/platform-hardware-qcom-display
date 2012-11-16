@@ -93,12 +93,10 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
             }
 
             ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
-            /* - TODO: Secure content
-               if (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER) {
-               ovutils::setMdpFlags(mdpFlags,
-               ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
-               }
-             */
+            if (ctx->mSecure == true) {
+                ovutils::setMdpFlags(mdpFlags,
+                                     ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+            }
 
              // Use VG pipe if target does not support true mirroring
             if(!overlay::utils::FrameBufferInfo::
