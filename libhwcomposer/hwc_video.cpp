@@ -44,19 +44,23 @@ bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
     if(sYuvLayerIndex == -1) {
         return false;
     }
-    hwc_layer_t *yuvLayer = &list->hwLayers[sYuvLayerIndex];
-    private_handle_t *hnd = (private_handle_t *)yuvLayer->handle;
-    if(ctx->mSecure) {
-        if (! (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER)) {
-            ALOGD_IF(VIDEO_DEBUG, "%s, non-secure video layer during secure"
-                    "playback gracefully", __FUNCTION__);
-            return false;
-        }
-    } else {
-        if ((hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER)) {
-            ALOGD_IF(VIDEO_DEBUG, "%s, secure video layer during"
-                    "non-secure playback gracefully",__FUNCTION__);
-            return false;
+
+    int mdpVersion = qdutils::MDPVersion::getInstance().getMDPVersion();
+    if (mdpVersion < qdutils::MDSS_V5) {
+        hwc_layer_t *yuvLayer = &list->hwLayers[sYuvLayerIndex];
+        private_handle_t *hnd = (private_handle_t *)yuvLayer->handle;
+        if(ctx->mSecure) {
+            if (!(hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER)) {
+                ALOGD_IF(VIDEO_DEBUG, "%s, non-secure video layer during secure"
+                         "playback gracefully", __FUNCTION__);
+                return false;
+            }
+        } else {
+            if ((hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER)) {
+                ALOGD_IF(VIDEO_DEBUG, "%s, secure video layer during"
+                         "non-secure playback gracefully",__FUNCTION__);
+                return false;
+            }
         }
     }
     chooseState(ctx);
