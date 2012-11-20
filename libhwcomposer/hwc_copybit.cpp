@@ -150,6 +150,16 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
     int compositionType =
         qdutils::QCCompositionType::getInstance().getCompositionType();
 
+    /*mark single video layer to mdp irrespective of device composition*/
+    int numHwLayer = list->numHwLayers;
+    if(numHwLayer == 1){
+          private_handle_t *hnd = (private_handle_t *)list->hwLayers[0].handle;
+          if (hnd && hnd->bufferType == BUFFER_TYPE_VIDEO){
+             list->hwLayers[0].compositionType = HWC_USE_COPYBIT;
+             sCopyBitDraw = true;
+         }
+    }
+
     if ((compositionType == qdutils::COMPOSITION_TYPE_GPU) ||
         (compositionType == qdutils::COMPOSITION_TYPE_CPU))   {
         //GPU/CPU composition, don't change layer composition type
