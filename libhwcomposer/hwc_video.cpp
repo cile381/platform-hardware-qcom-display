@@ -170,11 +170,8 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
                 ovutils::OV_MDP_BLEND_FG_PREMULT);
     }
 
-    MetaData_t mData;
-    memset(&mData, 0 , sizeof(MetaData_t));
-    MetaData_t *metadata = ((MetaData_t *)hnd->base_metadata ?
-                            (MetaData_t *)hnd->base_metadata : &mData);
-    if ((metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    if (metadata && (metadata->operation & PP_PARAM_INTERLACED) && metadata->interlaced) {
         ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
     }
 
@@ -221,6 +218,11 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
         ovutils::clearMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+        /* Done with setting HSIC values. Clear the
+         * PP_PARAM_HSIC and PP_PARAM_SHARPNESS flags
+         * from metadata operation if present.
+         */
+        metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_0].ops);
         ctx->mPpParams[VIDEO_LAYER_0].isValid = false;
     }
 
