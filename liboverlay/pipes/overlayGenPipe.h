@@ -96,6 +96,9 @@ private:
     /* set Closed pipe */
     bool setClosed();
 
+    /* Set whether rotator can be used */
+    void setRotatorUsed(const bool& rotUsed);
+
     /* Ctrl/Data aggregator */
     CtrlData mCtrlData;
 
@@ -201,8 +204,7 @@ inline bool GenericPipe<PANEL>::setSource(
 
     int version = qdutils::MDPVersion::getInstance().getMDPVersion();
     if ((version >= qdutils::MDP_V4_2) && (version < qdutils::MDSS_V5)) {
-        //Use rotator for downscale optimization
-        mRotUsed |= newargs.rotFlags & utils::ROT_DOWNSCALE_ENABLED;
+        //Use rotator for downscale optimization if required.
         mRotDownscaleOpt = newargs.rotFlags & utils::ROT_DOWNSCALE_ENABLED;
     }
 
@@ -224,9 +226,9 @@ inline bool GenericPipe<PANEL>::setTransform(
     //Rotation could be enabled by user for zero-rot or the layer could have
     //some transform. Mark rotation enabled in either case.
     mRotUsed |= (orient != utils::OVERLAY_TRANSFORM_0);
-    mRot->setTransform(orient, mRotUsed);
+    mRot->setTransform(orient);
 
-    return mCtrlData.ctrl.setTransform(orient, mRotUsed);
+    return mCtrlData.ctrl.setTransform(orient);
 }
 
 template <int PANEL>
@@ -241,16 +243,32 @@ inline bool GenericPipe<PANEL>::setVisualParams(const MetaData_t& data) {
 }
 
 template <int PANEL>
+inline void GenericPipe<PANEL>::setRotatorUsed(const bool& rotUsed) {
+    mRot->setRotatorUsed(rotUsed);
+    mCtrlData.ctrl.setRotatorUsed(rotUsed);
+}
+
+template <int PANEL>
 inline bool GenericPipe<PANEL>::commit() {
     bool ret = false;
-    int downscale = utils::ROT_DS_NONE;
-    mCtrlData.ctrl.doTransform();
+    int downscale_factor = utils::ROT_DS_NONE;
+
     if(mRotDownscaleOpt) {
-        downscale = mCtrlData.ctrl.doDownscale();
-        mRot->setDownscale(downscale);
+        /* Can go ahead with calculation of downscale_factor since
+         * we consider area when calculating it */
+        downscale_factor = mCtrlData.ctrl.getDownscalefactor();
+        if(downscale_factor)
+            mRotUsed = true;
     }
-    //If wanting to use rotator, start it.
+
+    setRotatorUsed(mRotUsed);
+    mCtrlData.ctrl.doTransform();
+
+    mCtrlData.ctrl.doDownscale(downscale_factor);
+    mRot->setDownscale(downscale_factor);
+
     if(mRotUsed) {
+        //If wanting to use rotator, start it.
         if(!mRot->commit()) {
             ALOGE("GenPipe Rotator commit failed");
             return false;
