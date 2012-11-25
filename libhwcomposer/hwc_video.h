@@ -56,6 +56,8 @@ private:
     static bool configExtCC(hwc_context_t *ctx, hwc_layer_t *layer);
     //Marks layer flags if this feature is used
     static void markFlags(hwc_layer_t *layer);
+    //Mark UI layers for S3D composition
+    static void markUILayersforS3DComposition(hwc_layer_list_t *list);
     //The chosen overlay state.
     static ovutils::eOverlayState sState;
     //Number of yuv layers in this drawing round

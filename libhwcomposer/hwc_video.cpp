@@ -62,6 +62,10 @@ bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
     chooseState(ctx);
     //if the state chosen above is CLOSED, skip this block.
     if(sState != ovutils::OV_CLOSED) {
+        if(sState == ovutils::OV_3D_VIDEO_ON_3D_PANEL) {
+            //Need to mark UI layers for S3D composition
+            markUILayersforS3DComposition(list);
+        }
         hwc_layer_t *yuvLayer = &list->hwLayers[sYuvLayerIndex];
         hwc_layer_t *ccLayer = NULL;
         if(sCCLayerIndex != -1)
@@ -79,6 +83,28 @@ bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
             sIsYuvLayerSkip, sCCLayerIndex, sIsModeOn);
 
     return sIsModeOn;
+}
+
+void VideoOverlay::markUILayersforS3DComposition(hwc_layer_list_t *list) {
+    for (size_t i = 0; i < list->numHwLayers; i++) {
+
+        if((int)i == (int)sYuvLayerIndex)
+            continue;
+
+        hwc_layer_t* layer = &(list->hwLayers[i]);
+        if( (sLayerS3DFormat & HAL_3D_IN_SIDE_BY_SIDE_L_R) or
+                (sLayerS3DFormat & HAL_3D_IN_SIDE_BY_SIDE_R_L) ) {
+            ALOGD_IF(VIDEO_DEBUG,
+            "Setting the hint HWC_HINT_DRAW_S3D_SIDE_BY_SIDE to SF");
+            layer->hints |= HWC_HINT_DRAW_S3D_SIDE_BY_SIDE;
+        } else if (sLayerS3DFormat & HAL_3D_IN_TOP_BOTTOM) {
+            ALOGD_IF(VIDEO_DEBUG,
+            "Setting the hint HWC_HINT_DRAW_S3D_TOP_BOTTOM to SF");
+            layer->hints |= HWC_HINT_DRAW_S3D_TOP_BOTTOM;
+        } else {
+            ALOGE("Invalid 3D format %x",sLayerS3DFormat);
+        }
+    }
 }
 
 void VideoOverlay::chooseState(hwc_context_t *ctx) {
