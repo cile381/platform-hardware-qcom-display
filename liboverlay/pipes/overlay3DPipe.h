@@ -439,7 +439,7 @@ inline bool S3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d)
 {
     utils::Whf fbwhf(mS3d.getScreenInfo().mFBWidth,
             mS3d.getScreenInfo().mFBHeight,
-            0 /* fmt dont care*/);
+            0,mS3Dfmt, 0);
     mCtrl3D.setWh(fbwhf);
     if(!mCtrl3D.useVirtualFB()) {
         ALOGE("Failed to use VFB on %d (non fatal)", utils::FB0);
@@ -450,7 +450,7 @@ inline bool S3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d)
     // which means format is HAL_3D_OUT_SBS_MASK
     // HAL_3D_OUT_SBS_MASK is 0x1000 >> 12 == 0x1 as the orig
     // code suggets
-    utils::Whf _whf(d.w, d.h, 0,  utils::HAL_3D_OUT_SBS_MASK, 0);
+    utils::Whf _whf(d.w, d.h, 0, mS3Dfmt, 0);
     if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
         ALOGE("S3DPrimaryPipe setPosition err in getPositionS3D");
         _dim = d;
