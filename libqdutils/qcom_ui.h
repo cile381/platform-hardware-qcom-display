@@ -40,9 +40,14 @@ private:
   static bool sGPUlayerpresent;
 
 public:
+  enum { // S3D formats
+      eS3D_SIDE_BY_SIDE   = 0x10000,
+      eS3D_TOP_BOTTOM     = 0x20000
+  };
   static void checkforGPULayer(const hwc_layer_list_t* list);
   static bool isUpdatingFB(int compositionType);
   static int qcomuiClearRegion(Region region, EGLDisplay dpy);
+  static int getS3DCompositionFormat(int hints);
 };
 }//namespace qdutils
 #endif /* end of include guard: QCOM_UTIL_H*/

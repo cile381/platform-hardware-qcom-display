@@ -132,4 +132,14 @@ int CBUtils::qcomuiClearRegion(Region region, EGLDisplay dpy){
     }
     return 0;
 }
+
+int CBUtils::getS3DCompositionFormat(int hints) {
+    if (hints & HWC_HINT_DRAW_S3D_SIDE_BY_SIDE)
+        return eS3D_SIDE_BY_SIDE;
+    else if (hints & HWC_HINT_DRAW_S3D_TOP_BOTTOM)
+        return eS3D_TOP_BOTTOM;
+    else
+        return 0;
+}
+
 } //namespace
