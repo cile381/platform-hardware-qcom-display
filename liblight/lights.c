@@ -42,15 +42,27 @@ static int g_attention = 0;
 
 char const*const RED_LED_FILE
         = "/sys/class/leds/red/brightness";
+char const*const RED_LED_BLINK_FILE
+        = "/sys/class/leds/red/blink";
 
 char const*const GREEN_LED_FILE
         = "/sys/class/leds/green/brightness";
+char const*const GREEN_LED_BLINK_FILE
+        = "/sys/class/leds/green/blink";
 
 char const*const BLUE_LED_FILE
         = "/sys/class/leds/blue/brightness";
+char const*const BLUE_LED_BLINK_FILE
+        = "/sys/class/leds/blue/blink";
 
 char const*const LCD_FILE
         = "/sys/class/leds/lcd-backlight/brightness";
+
+char const*const BUTTON_FILE
+        = "/sys/class/leds/button-backlight/brightness";
+
+char const*const BATTERY_STATUS
+        = "/sys/class/power_supply/battery/status";
 
 /**
  * device methods
@@ -84,6 +96,50 @@ write_int(char const* path, int value)
     }
 }
 
+/*
+ * Read the content from file and return as a string.
+ * @path: the path of the file
+ * @buf: the buffer used to store the content.
+ * User should allocate memory for it. The size must large than 12.
+ * @return: the bytes read from the file. -1 if failed.
+ */
+static int read_string(char const* path, char* buf)
+{
+    int fd;
+    static int already_warned = 0;
+
+    fd = open(path, O_RDONLY);
+    if(fd >= 0) {
+        int size = read(fd, buf, 12);
+        close(fd);
+        buf[size - 1] = '\0';
+        return size;
+    } else {
+        if(0 == already_warned) {
+            ALOGE("write_int failed to open %s\n", path);
+            already_warned = 1;
+        }
+        return -1;
+    }
+}
+
+/*
+ * determine whether the battery is on charging.
+ * @return: none-zero if the battery is charging.
+ */
+static int is_charging(void)
+{
+    char buf[12];
+    int ret;
+
+    ret = read_string(BATTERY_STATUS, buf);
+    if(ret <= 0) {
+        return 0;
+    } else {
+        return !strcmp(buf, "Charging") || !strcmp(buf, "Full");
+    }
+}
+
 static int
 is_lit(struct light_state_t const* state)
 {
@@ -114,12 +170,9 @@ static int
 set_speaker_light_locked(struct light_device_t* dev,
         struct light_state_t const* state)
 {
-    int len;
-    int alpha, red, green, blue;
-    int blink, freq, pwm;
+    int blink, red, green, blue;
     int onMS, offMS;
     unsigned int colorRGB;
-
     switch (state->flashMode) {
         case LIGHT_FLASH_TIMED:
             onMS = state->flashOnMS;
@@ -134,52 +187,44 @@ set_speaker_light_locked(struct light_device_t* dev,
 
     colorRGB = state->color;
 
-#if 0
-    ALOGD("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
-            colorRGB, onMS, offMS);
-#endif
-
     red = (colorRGB >> 16) & 0xFF;
     green = (colorRGB >> 8) & 0xFF;
     blue = colorRGB & 0xFF;
 
-    // R, G, B value is among 0, 1, 2
-    if (red > 128)  red = 2;
-    else if (red <= 128 && red > 0) red = 1;
-    if (green > 128)  green = 2;
-    else if (green <= 128 && green > 0) green = 1;
-    if (blue > 128)  blue = 2;
-    else if (blue <= 128 && blue > 0) red = 1;
-
-    write_int(RED_LED_FILE, red);
-    write_int(GREEN_LED_FILE, green);
-    write_int(BLUE_LED_FILE, blue);
-
-    // TODO
     if (onMS > 0 && offMS > 0) {
-        int totalMS = onMS + offMS;
-
-        // the LED appears to blink about once per second if freq is 20
-        // 1000ms / 20 = 50
-        freq = totalMS / 50;
-        // pwm specifies the ratio of ON versus OFF
-        // pwm = 0 -> always off
-        // pwm = 255 => always on
-        pwm = (onMS * 255) / totalMS;
-
-        // the low 4 bits are ignored, so round up if necessary
-        if (pwm > 0 && pwm < 16)
-            pwm = 16;
-
         blink = 1;
     } else {
         blink = 0;
-        freq = 0;
-        pwm = 0;
     }
 
     if (blink) {
-        write_int(RED_LED_FILE, freq);
+        write_int(RED_LED_FILE, 0);
+        write_int(GREEN_LED_FILE, 0);
+        write_int(BLUE_LED_FILE, 0);
+
+        if(red) {
+            write_int(RED_LED_BLINK_FILE, 1);
+        } else {
+            write_int(RED_LED_BLINK_FILE, 0);
+        }
+        if(green) {
+            write_int(GREEN_LED_BLINK_FILE, 1);
+        } else {
+            write_int(GREEN_LED_BLINK_FILE, 0);
+        }
+        if(blue) {
+            write_int(BLUE_LED_BLINK_FILE, 1);
+        } else {
+	    write_int(BLUE_LED_BLINK_FILE, 0);
+        }
+    } else {
+        write_int(RED_LED_BLINK_FILE, 0);
+        write_int(GREEN_LED_BLINK_FILE, 0);
+        write_int(BLUE_LED_BLINK_FILE, 0);
+
+        write_int(RED_LED_FILE, red);
+        write_int(GREEN_LED_FILE, green);
+        write_int(BLUE_LED_FILE, blue);
     }
 
     return 0;
@@ -188,7 +233,9 @@ set_speaker_light_locked(struct light_device_t* dev,
 static void
 handle_speaker_battery_locked(struct light_device_t* dev)
 {
-    if (is_lit(&g_battery)) {
+    /* priority: low battery > notification > charging */
+    if((!is_charging() && is_lit(&g_battery))
+            || (is_charging() && !is_lit(&g_notification))) {
         set_speaker_light_locked(dev, &g_battery);
     } else {
         set_speaker_light_locked(dev, &g_notification);
@@ -232,6 +279,16 @@ set_light_attention(struct light_device_t* dev,
     return 0;
 }
 
+static int
+set_light_buttons(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    int err = 0;
+    pthread_mutex_lock(&g_lock);
+    err = write_int(BUTTON_FILE, state->color & 0xFF);
+    pthread_mutex_unlock(&g_lock);
+    return err;
+}
 
 /** Close the lights device */
 static int
@@ -263,6 +320,8 @@ static int open_lights(const struct hw_module_t* module, char const* name,
         set_light = set_light_battery;
     else if (0 == strcmp(LIGHT_ID_NOTIFICATIONS, name))
         set_light = set_light_notifications;
+    else if (0 == strcmp(LIGHT_ID_BUTTONS, name))
+        set_light = set_light_buttons;
     else if (0 == strcmp(LIGHT_ID_ATTENTION, name))
         set_light = set_light_attention;
     else
