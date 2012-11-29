@@ -162,12 +162,13 @@ void disp_mode_timing_type::set_info(struct fb_var_screeninfo &info) const
     info.pixclock = pixel_freq*1000;
     info.vmode = interlaced ? FB_VMODE_INTERLACED : FB_VMODE_NONINTERLACED;
 
-    info.right_margin = front_porch_h;
+    info.right_margin = back_porch_h;
     info.hsync_len = pulse_width_h;
-    info.left_margin = back_porch_h;
-    info.lower_margin = front_porch_v;
+    info.left_margin = front_porch_h;
+
+    info.lower_margin = back_porch_v;
     info.vsync_len = pulse_width_v;
-    info.upper_margin = back_porch_v;
+    info.upper_margin = front_porch_v;
 }
 
 /* Video formates supported by the HDMI Standard */
