@@ -20,7 +20,6 @@
 #include "hwc_qbuf.h"
 #include "hwc_video.h"
 #include "hwc_external.h"
-#include "hwc_uimirror.h"
 #include "qdMetaData.h"
 
 namespace qhwc {
@@ -73,27 +72,14 @@ void VideoOverlay::chooseState(hwc_context_t *ctx) {
 
     //Support 1 video layer
     if(sYuvCount == 1) {
-        bool trueMirrorSupported = overlay::utils::FrameBufferInfo::
-                                          getInstance()->supportTrueMirroring();
         //Skip on primary, display on ext.
         if(sIsYuvLayerSkip && ctx->mExtDisplay->getExternalDisplay()) {
-            if(trueMirrorSupported && sCCLayerIndex == -1)
-                newState = ovutils::OV_UI_MIRROR;
-            else
-                newState = ovutils::OV_2D_VIDEO_ON_TV;
+            newState = ovutils::OV_2D_VIDEO_ON_TV;
         } else if(sIsYuvLayerSkip) { //skip on primary, no ext
             newState = ovutils::OV_CLOSED;
         } else if(ctx->mExtDisplay->getExternalDisplay()) {
-            if(trueMirrorSupported && (sCCLayerIndex == -1)) {
-                ALOGD_IF(VIDEO_DEBUG,"In %s: setting state to "
-                                          "OV_2D_TRUE_UI_MIRROR", __FUNCTION__);
-                newState = ovutils::OV_2D_TRUE_UI_MIRROR;
-            } else {
-                ALOGD_IF(VIDEO_DEBUG,"In %s: setting state to "
-                                      "OV_2D_VIDEO_ON_PANEL_TV", __FUNCTION__);
-                //display on both primary and secondary
-                newState = ovutils::OV_2D_VIDEO_ON_PANEL_TV;
-            }
+            //display on both
+            newState = ovutils::OV_2D_VIDEO_ON_PANEL_TV;
         } else { //display on primary only
             newState = ovutils::OV_2D_VIDEO_ON_PANEL;
         }
@@ -107,7 +93,6 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
     switch(sState) {
         case ovutils::OV_2D_VIDEO_ON_PANEL:
         case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
-        case ovutils::OV_2D_TRUE_UI_MIRROR:
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
             break;
@@ -212,16 +197,11 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
-    // z_order should be 1 for TRUE MIRRORING
-    ovutils::eZorder zorder = (overlay::utils::FrameBufferInfo::
-                                  getInstance()->supportTrueMirroring()) ?
-                                  ovutils::ZORDER_1: ovutils::ZORDER_0;
-
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            zorder,
+            ovutils::ZORDER_0,
             isFgFlag,
-            ovutils::ROT_DOWNSCALE_ENABLED);
+            ovutils::ROT_FLAGS_NONE);
     ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
     ov.setSource(pargs, ovutils::OV_PIPE1);
 
@@ -242,7 +222,6 @@ bool configExtVid(hwc_context_t *ctx, hwc_layer_t *layer) {
     dpos.y = displayFrame.top;
     dpos.w = (displayFrame.right - displayFrame.left);
     dpos.h = (displayFrame.bottom - displayFrame.top);
-    dpos.o = ctx->deviceOrientation;
 
     //Only for External
     ov.setPosition(dpos, ovutils::OV_PIPE1);
@@ -315,11 +294,6 @@ bool VideoOverlay::configure(hwc_context_t *ctx, hwc_layer_t *yuvLayer,
                 ret &= configExtVid(ctx, yuvLayer);
                 ret &= configExtCC(ctx, ccLayer);
                 break;
-            case ovutils::OV_2D_TRUE_UI_MIRROR:
-                UIMirrorOverlay::prepare(ctx, NULL);
-                ret &= configExtVid(ctx, yuvLayer);
-                ret &= configPrimVid(ctx, yuvLayer);
-                break;
             default:
                 return false;
         }
@@ -388,18 +362,6 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
             if (cchnd && !ov.queueBuffer(cchnd->fd, cchnd->offset,
                         ovutils::OV_PIPE2)) {
                 ALOGE("%s: queueBuffer failed for cc external", __FUNCTION__);
-                ret = false;
-            }
-            break;
-        case ovutils::OV_2D_TRUE_UI_MIRROR:
-            // Play external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
-                ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
-                ret = false;
-            }
-            // Play primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
-                ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
                 ret = false;
             }
             break;

@@ -23,8 +23,6 @@
 #include <fb_priv.h>
 #include "hwc_uimirror.h"
 #include "hwc_external.h"
-#include "hwc_video.h"
-
 
 namespace qhwc {
 
@@ -46,17 +44,8 @@ bool UIMirrorOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
     }
     // If external display is connected
     if(ctx->mExtDisplay->getExternalDisplay()) {
-        if(VideoOverlay::getYuvCount() == 1) {
-            ALOGD_IF(HWC_UI_MIRROR, "In %s: setting the state to"
-                                         "2D_TRUE_OV_UI_MIRROR", __FUNCTION__);
-            sState = ovutils::OV_2D_TRUE_UI_MIRROR;
-        } else {
-            ALOGD_IF(HWC_UI_MIRROR, "In %s: setting the state to"
-                                         "2D_UI_MIRROR", __FUNCTION__);
-            sState = ovutils::OV_UI_MIRROR;
-        }
-        if(configure(ctx, list))
-            sIsUiMirroringOn = true;
+        sState = ovutils::OV_UI_MIRROR;
+        configure(ctx, list);
     }
     return sIsUiMirroringOn;
 }
@@ -64,7 +53,6 @@ bool UIMirrorOverlay::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
 // Configure
 bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
 {
-    bool ret = false;
     if (LIKELY(ctx->mOverlay)) {
         overlay::Overlay& ov = *(ctx->mOverlay);
         // Set overlay state
@@ -81,15 +69,12 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
             ovutils::Whf info(alignedW, hnd->height, hnd->format, size);
             // Determine the RGB pipe for UI depending on the state
             ovutils::eDest dest = ovutils::OV_PIPE_ALL;
-            switch (sState) {
-                case ovutils::OV_2D_TRUE_UI_MIRROR:
-                case ovutils::OV_UI_MIRROR:
-                    // UIMirror pipe is OV_PIPE2
-                    dest = ovutils::OV_PIPE2;
-                    break;
-                default:
-                    ALOGE("Incorrect state in UIMirrorOverlay::Configure!!!");
-                    return false;
+            if (sState == ovutils::OV_2D_TRUE_UI_MIRROR) {
+                // True UI mirroring state: external RGB pipe is OV_PIPE2
+                dest = ovutils::OV_PIPE2;
+            } else if (sState == ovutils::OV_UI_MIRROR) {
+                // UI-only mirroring state: external RGB pipe is OV_PIPE0
+                dest = ovutils::OV_PIPE0;
             }
 
             ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
@@ -99,13 +84,6 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
                ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
                }
              */
-
-             // Use VG pipe if target does not support true mirroring
-            if(!overlay::utils::FrameBufferInfo::
-                                       getInstance()->supportTrueMirroring()) {
-                ovutils::setMdpFlags(mdpFlags,
-                                     ovutils::OV_MDP_PIPE_SHARE);
-            }
 
             ovutils::PipeArgs parg(mdpFlags,
                     info,
@@ -132,10 +110,10 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
                 ALOGE("%s: commit fails", __FUNCTION__);
                 return false;
             }
-            ret = true;
+            sIsUiMirroringOn = true;
         }
     }
-    return ret;
+    return sIsUiMirroringOn;
 }
 
 bool UIMirrorOverlay::draw(hwc_context_t *ctx)
@@ -153,6 +131,12 @@ bool UIMirrorOverlay::draw(hwc_context_t *ctx)
                               fbDev->common.module);
         switch (state) {
             case ovutils::OV_UI_MIRROR:
+                if (!ov.queueBuffer(m->framebuffer->fd, m->currentOffset,
+                                                           ovutils::OV_PIPE0)) {
+                    ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
+                    ret = false;
+                }
+                break;
             case ovutils::OV_2D_TRUE_UI_MIRROR:
                 if (!ov.queueBuffer(m->framebuffer->fd, m->currentOffset,
                                                            ovutils::OV_PIPE2)) {
@@ -160,6 +144,7 @@ bool UIMirrorOverlay::draw(hwc_context_t *ctx)
                     ret = false;
                 }
                 break;
+
         default:
             break;
         }
