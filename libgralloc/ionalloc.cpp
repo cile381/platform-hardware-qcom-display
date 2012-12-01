@@ -40,7 +40,6 @@
 using gralloc::IonAlloc;
 
 #define ION_DEVICE "/dev/ion"
-#define SZ_1M (0x100000)
 
 int IonAlloc::open_device()
 {
@@ -79,10 +78,8 @@ int IonAlloc::alloc_buffer(alloc_data& data)
 
     // ToDo: replace usage of alloc data structure with
     //  ionallocdata structure.
-    if (data.flags & ION_SECURE) {
+    if (data.flags & ION_SECURE)
         ionAllocData.flags |= ION_SECURE;
-        ionAllocData.align = ALIGN(ionAllocData.align,SZ_1M);
-    }
 
     err = open_device();
     if (err)
