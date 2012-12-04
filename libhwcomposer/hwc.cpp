@@ -127,6 +127,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
     if(ctx->externalDisplay)
         ovutils::setExtType(ctx->externalDisplay);
 
+
     if (LIKELY(list)) {
         //reset for this draw round
         VideoOverlay::reset();
@@ -159,6 +160,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
 
         qdutils::CBUtils::checkforGPULayer(list);
     }
+
+    ctx->mExtDisplay->configureExtDisplay();
 
     return 0;
 }
