@@ -46,8 +46,8 @@ static const char *extPanelName[MAX_DISPLAY_EXTERNAL_DEVICES] = {
     WFD_PANEL
 };
 
-ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
-    mCurrentMode(-1), mExternalDisplay(0), mModeCount(0), mHwcContext(ctx)
+ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1), mCurrentMode(-1),
+    mExternalDisplay(0), mExternalPending(false), mModeCount(0), mHwcContext(ctx)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
 
@@ -480,7 +480,19 @@ void ExternalDisplay::configureWFDDisplay(int fbIndex) {
 }
 
 void ExternalDisplay::processUEventOnline(const char *str) {
+    strcpy(mUEventStr, str);
+    mExternalPending = true;
+}
+void ExternalDisplay::configureExtDisplay() {
+
+    if(!mExternalPending) {
+        return;
+    }
+
+    mExternalPending = false;
+    const char *str = mUEventStr;
     const char *s1 = str + (strlen(str)-strlen(DEVICE_NODE_FB1));
+
     // check if it is for FB1
     if(strncmp(s1,DEVICE_NODE_FB1, strlen(DEVICE_NODE_FB1))== 0) {
         if(isHDMIConfigured()) {
