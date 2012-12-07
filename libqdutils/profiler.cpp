@@ -188,3 +188,142 @@ void CalcFps::calc_fps(nsecs_t currtime_us)
 }
 };//namespace qomutils
 #endif
+
+ANDROID_SINGLETON_STATIC_INSTANCE(qdutils::VsyncMiss) ;
+
+namespace qdutils {
+VsyncMiss::VsyncMiss() {
+    /*
+     * property debug.vsyncmiss:
+     *     purpose: To enable disable vsync miss prints
+     *     values: 0 - disable, 1 - enable
+     *     default value: 0
+     * property debug.vsynctol:
+     *     purpose: To specify tolerance value above vsync limit
+     *     values: integer
+     *     default balue: 8
+     * property debug.vsynctime:
+     *     purpose: To specify vsync pulse time
+     *     values: integer
+     *     default: 16
+     * property debug.vsyncframes:
+     *     purpose: To specify min number of frames over which
+     *                  statics will be printed
+     *     values: integer
+     *     default - 10
+     */
+    char prop[PROPERTY_VALUE_MAX];
+    property_get("debug.vsyncmiss", prop, "0");
+    mEnableVsyncMissData = atoi(prop);
+    property_get("debug.vsynctol", prop, "8");
+    mVsyncMissTolerance = atoi(prop);
+    property_get("debug.vsynctime", prop, "16");
+    mVsyncTime = atoi(prop);
+    property_get("debug.vsyncframes", prop, "10");
+    mNumFrames = atoi(prop);
+    mLastTimeStamp = 0;
+    mCurrentFrameNum = 0;
+    mNumVsyncCompMiss = 0;
+}
+
+VsyncMiss::~VsyncMiss() {
+    mLayerMap.clear();
+}
+
+void VsyncMiss::printVsyncMiss() {
+    if (!isVsyncMissPrintEnabled())
+        return;
+    mCurrentFrameNum++;
+
+    nsecs_t now = systemTime();
+    if (mLastTimeStamp) {
+        int diff = ns2ms(now - mLastTimeStamp);
+        if (diff > (mVsyncMissTolerance + mVsyncTime))
+            mNumVsyncCompMiss++;
+    }
+    mLastTimeStamp = systemTime();
+
+    if (mCurrentFrameNum >= mNumFrames) {
+        mCurrentFrameNum = 0;
+        if (mNumVsyncCompMiss > 0)
+            ALOGD("Composition Vsync Miss %d in last %d frames",
+                                       mNumVsyncCompMiss, mNumFrames);
+        mNumVsyncCompMiss = 0;
+        Mutex::Autolock _l(mLock);
+        const unsigned int mapSize = mLayerMap.size();
+        for (unsigned int i = 0; i < mapSize; i++) {
+            LayerInfo* layer = mLayerMap.valueAt(i);
+            if (layer->mNumVsyncMiss > 0) {
+                const char* name = layer->mLayerName.string();
+                ALOGD("LayerIdentity:: %d LayerName:: %s, for last %d frames, NumVsyncMiss:: %d",
+                          layer->mLayerNum, ((name == NULL) ? "NULL" : name),
+                          mNumFrames, layer->mNumVsyncMiss);
+            }
+            layer->clearVsyncInfo();
+        }
+    }
+}
+
+void VsyncMiss::addLayer(int32_t num, const String8& name) {
+    if (!isVsyncMissPrintEnabled())
+        return;
+    if (isLayerPresent(num)) {
+        ALOGE("Trying to add duplicate key-value for identity %d and name %s",
+                             num, name.string());
+        return;
+    }
+    Mutex::Autolock _l(mLock);
+    LayerInfo* layer = new LayerInfo(num, name);
+    mLayerMap.add(num, layer);
+}
+
+void VsyncMiss::removeLayer(int32_t num) {
+    if (!isVsyncMissPrintEnabled())
+        return;
+    Mutex::Autolock _l(mLock);
+    if (!isLayerPresent(num)) {
+        ALOGE("Trying to remove non-existent item");
+        return;
+    }
+    LayerInfo* layer = mLayerMap.valueFor(num);
+    mLayerMap.removeItem(num);
+    delete layer;
+}
+
+void VsyncMiss::pageFlipInfo(int32_t num) {
+    if (!isVsyncMissPrintEnabled())
+        return;
+    Mutex::Autolock _l(mLock);
+    if (!isLayerPresent(num)) {
+        ALOGE("No layer added for identity.. %d", num);
+        return;
+    }
+    LayerInfo* layer = mLayerMap.valueFor(num);
+    nsecs_t now = systemTime();
+    if (layer->mLastTimeStamp) {
+        int diff = ns2ms(now - layer->mLastTimeStamp);
+        if (diff > (mVsyncMissTolerance + mVsyncTime))
+            layer->mNumVsyncMiss++;
+    }
+    layer->mLastTimeStamp = now;
+}
+
+void VsyncMiss::onFrameQInfo(int32_t num) {
+    if (!isVsyncMissPrintEnabled())
+        return;
+    Mutex::Autolock _l(mLock);
+    if (!isLayerPresent(num)) {
+        ALOGE("No layer added for identity.. %d", num);
+        return;
+    }
+    LayerInfo* layer = mLayerMap.valueFor(num);
+    nsecs_t now = systemTime();
+    if (layer->mLastFrameQ) {
+        int diff = ns2ms(now - layer->mLastFrameQ);
+        if ((diff > (mVsyncMissTolerance + mVsyncTime)) ||
+                                            diff < mVsyncTime)
+            layer->mNumQVsyncDiff++;
+    }
+    layer->mLastFrameQ = now;
+}
+};//namespace qomutils

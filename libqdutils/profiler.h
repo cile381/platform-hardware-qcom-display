@@ -32,8 +32,70 @@
 
 #include <stdio.h>
 #include <utils/Singleton.h>
+#include <utils/String8.h>
+#include <utils/KeyedVector.h>
+#include <utils/Timers.h>
 #include <cutils/properties.h>
 #include <cutils/log.h>
+
+using namespace android;
+namespace qdutils {
+class VsyncMiss : public Singleton<VsyncMiss> {
+public:
+    VsyncMiss();
+    ~VsyncMiss();
+
+    void printVsyncMiss();
+    void addLayer(int32_t num, const String8& name);
+    void removeLayer(int32_t num);
+    void pageFlipInfo(int32_t num);
+    void onFrameQInfo(int32_t num);
+
+private:
+    struct LayerInfo {
+    public:
+        int32_t mLayerNum;
+        String8 mLayerName;
+        nsecs_t mLastTimeStamp;
+        nsecs_t mLastFrameQ;
+        int mNumVsyncMiss;
+        int mNumQVsyncDiff;
+
+        LayerInfo(unsigned int num, const String8& name) :
+                    mLayerNum(num), mLayerName(name),
+                    mLastTimeStamp(0), mLastFrameQ(0),
+                    mNumVsyncMiss(0), mNumQVsyncDiff(0) { }
+        LayerInfo(const LayerInfo& rhs) :
+                    mLayerNum(rhs.mLayerNum), mLayerName(rhs.mLayerName),
+                    mLastTimeStamp(rhs.mLastTimeStamp),
+                    mLastFrameQ(rhs.mLastFrameQ),
+                    mNumVsyncMiss(rhs.mNumVsyncMiss),
+                    mNumQVsyncDiff(rhs.mNumQVsyncDiff) { }
+        ~LayerInfo() { ALOGE("Deleting %s", mLayerName.string()); }
+        void clearVsyncInfo() { mNumVsyncMiss = mNumQVsyncDiff = 0; }
+    private:
+        LayerInfo() : mLayerNum(-1), mLastTimeStamp(0), mLastFrameQ(0),
+                      mNumVsyncMiss(0), mNumQVsyncDiff(0) { }
+    };
+
+    KeyedVector<int, LayerInfo* > mLayerMap;
+    mutable Mutex mLock;
+    nsecs_t mLastTimeStamp;
+    int mEnableVsyncMissData;
+    int mVsyncMissTolerance;
+    int mVsyncTime;
+    int mNumFrames;
+    int mCurrentFrameNum;
+    int mNumVsyncCompMiss;
+    inline int isVsyncMissPrintEnabled() {
+        return mEnableVsyncMissData;
+    }
+
+    inline int isLayerPresent(int32_t num) {
+        return (mLayerMap.indexOfKey(num) >= 0);
+    }
+};
+}
 
 #ifndef DEBUG_CALC_FPS
 #define CALC_FPS() ((void)0)
@@ -102,7 +164,8 @@ class CalcFps : public Singleton<CalcFps> {
     debug_fps_metadata_t debug_fps_metadata;
     unsigned int debug_fps_level;
 };
-};//namespace qdutils
+
+} //namespace qdutils
 #endif
 
 #endif // INCLUDE_PROFILER
