@@ -178,6 +178,19 @@ status_t HWComposerService::getExternalDisplay(int *dispType) {
     return NO_ERROR;
 }
 
+status_t HWComposerService::setScreenRefresh() {
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: HWC Invalidate from PP Daemon!!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
+    return NO_ERROR;
+}
+
 HWComposerService* HWComposerService::getInstance()
 {
     if(!sHwcService) {
@@ -198,4 +211,5 @@ void HWComposerService::setHwcContext(hwc_context_t *hwcCtx) {
         mHwcContext = hwcCtx;
     }
 }
+
 }

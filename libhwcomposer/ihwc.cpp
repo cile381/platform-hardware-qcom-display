@@ -139,6 +139,15 @@ public:
         result = reply.readInt32();
         return result;
     }
+
+    virtual status_t setScreenRefresh() {
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        status_t result = remote()->transact(SET_SCREEN_REFRESH, data, &reply,
+                                                           IBinder::FLAG_ONEWAY);
+        result = reply.readInt32();
+        return result;
+    }
 };
 
 IMPLEMENT_META_INTERFACE(HWComposer, "android.display.IHWComposer");
@@ -223,6 +232,12 @@ status_t BnHWComposer::onTransact(
             reply->writeInt32(res);
             return NO_ERROR;
         } break;
+        case SET_SCREEN_REFRESH: {
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            status_t res = setScreenRefresh();
+            reply->writeInt32(res);
+            return NO_ERROR;
+        }
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

@@ -43,6 +43,7 @@ enum {
     GET_EXT_DISPLAY_TYPE,
     GET_EXT_DISPLAY_RESOLUTION_MODES,
     GET_EXT_DISPLAY_RESOLUTION_MODE_COUNT,
+    SET_SCREEN_REFRESH
 };
 
 class IHWComposer : public android::IInterface
@@ -63,6 +64,7 @@ public:
     virtual android::status_t setOpenSecureEnd() = 0;
     virtual android::status_t setCloseSecureStart() = 0;
     virtual android::status_t setCloseSecureEnd() = 0;
+    virtual android::status_t setScreenRefresh() = 0;
 };
 
 // ----------------------------------------------------------------------------

@@ -55,6 +55,7 @@ public:
     virtual android::status_t setHPDStatus(int enable);
     virtual android::status_t setResolutionMode(int resMode);
     virtual android::status_t setActionSafeDimension(int w, int h);
+    virtual android::status_t setScreenRefresh();
 
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();
