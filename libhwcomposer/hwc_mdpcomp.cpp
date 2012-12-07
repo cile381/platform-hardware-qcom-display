@@ -361,7 +361,7 @@ bool MDPComp::is_doable(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
     }
 
     //Disable MDPComp when ext display connected
-    if(ctx->externalDisplay) {
+    if(ctx->externalDisplay || ctx->mExtDisplay->isExternalDispPending()) {
         ALOGD_IF(isDebug(), "%s: External display connected.", __FUNCTION__);
         return false;
     }
