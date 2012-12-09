@@ -113,8 +113,9 @@ enum {
     HAL_PIXEL_FORMAT_RG_88                  = 0x10E,
     HAL_PIXEL_FORMAT_YCbCr_444_SP           = 0x10F,
     HAL_PIXEL_FORMAT_YCrCb_444_SP           = 0x110,
+    HAL_PIXEL_FORMAT_YCbCr_444_I            = 0x120,
+    HAL_PIXEL_FORMAT_YCrCb_444_I            = 0x140,
     HAL_PIXEL_FORMAT_INTERLACE              = 0x180,
-
 };
 
 /* possible formats for 3D content*/
