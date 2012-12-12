@@ -121,7 +121,9 @@ static int hwc_eventControl(struct hwc_composer_device* dev,
             if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_VSYNC_CTRL, &value) < 0)
                 ret = -errno;
 
-            if(ctx->mExtDisplay->getExternalDisplay()) {
+            if(ctx->mExtDisplay->isHDMIConfigured() &&
+                 (ctx->mExtDisplay->getExternalDisplay()==EXTERN_DISPLAY_FB1)) {
+                // enableHDMIVsync will return -errno on error
                 ret = ctx->mExtDisplay->enableHDMIVsync(value);
             }
            break;

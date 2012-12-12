@@ -249,9 +249,12 @@ const char* msmFbDevicePath[2] = {  "/dev/graphics/fb1",
 bool ExternalDisplay::openFrameBuffer(int fbNum)
 {
     if (mFd == -1) {
+        ALOGD_IF(DEBUG, "In %s: opening the framebuffer device = %d",
+                                                  __FUNCTION__, fbNum);
         mFd = open(msmFbDevicePath[fbNum-1], O_RDWR);
         if (mFd < 0)
-            ALOGE("%s: %s not available", __FUNCTION__, msmFbDevicePath[fbNum-1]);
+            ALOGE("%s: %s not available", __FUNCTION__,
+                                                    msmFbDevicePath[fbNum-1]);
     }
     return (mFd > 0);
 }
@@ -415,7 +418,6 @@ bool ExternalDisplay::isHDMIConfigured() {
     bool configured = false;
     FILE *displayDeviceFP = NULL;
     char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
-
     displayDeviceFP = fopen("/sys/class/graphics/fb1/msm_fb_type", "r");
 
     if(displayDeviceFP) {
@@ -433,17 +435,31 @@ void ExternalDisplay::processUEventOffline(const char *str) {
     const char *s1 = str + (strlen(str)-strlen(DEVICE_NODE_FB1));
     // check if it is for FB1
     if(strncmp(s1,DEVICE_NODE_FB1, strlen(DEVICE_NODE_FB1))== 0) {
-        enableHDMIVsync(EXTERN_DISPLAY_NONE);
-        closeFrameBuffer();
-        resetInfo();
-        setExternalDisplay(EXTERN_DISPLAY_NONE);
+        if(isHDMIConfigured()) {
+            enableHDMIVsync(EXTERN_DISPLAY_NONE);
+            closeFrameBuffer();
+            resetInfo();
+        } else {
+            closeFrameBuffer();
+        }
     }
     else if(strncmp(s1, DEVICE_NODE_FB2, strlen(DEVICE_NODE_FB2)) == 0) {
         closeFrameBuffer();
-        setExternalDisplay(EXTERN_DISPLAY_NONE);
     }
+    setExternalDisplay(EXTERN_DISPLAY_NONE);
 }
 
+void ExternalDisplay::configureWFDDisplay(int fbIndex) {
+    int ret = 0;
+    if (!openFrameBuffer(fbIndex))
+        return;
+    ret = ioctl(mFd, FBIOGET_VSCREENINFO, &mVInfo);
+    if(ret < 0) {
+        ALOGD("In %s: FBIOGET_VSCREENINFO failed Err Str = %s", __FUNCTION__,
+                strerror(errno));
+    }
+    mVInfo.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_ALL | FB_ACTIVATE_FORCE;
+}
 
 void ExternalDisplay::processUEventOnline(const char *str) {
     const char *s1 = str + (strlen(str)-strlen(DEVICE_NODE_FB1));
@@ -456,11 +472,13 @@ void ExternalDisplay::processUEventOnline(const char *str) {
                 closeFrameBuffer();
                 setExternalDisplay(EXTERN_DISPLAY_NONE);
             }
+            readResolution();
+            //Get the best mode and set
+            setResolution(getBestMode());
+            enableHDMIVsync(EXTERN_DISPLAY_FB1);
+        } else {
+            configureWFDDisplay(EXTERN_DISPLAY_FB1);
         }
-        readResolution();
-        //Get the best mode and set
-        setResolution(getBestMode());
-        enableHDMIVsync(EXTERN_DISPLAY_FB1);
         setExternalDisplay(EXTERN_DISPLAY_FB1);
     }
     else if(strncmp(s1, DEVICE_NODE_FB2, strlen(DEVICE_NODE_FB2)) == 0) {
@@ -470,7 +488,7 @@ void ExternalDisplay::processUEventOnline(const char *str) {
             // Do Not Override.
         }else {
             // WFD is connected
-            openFrameBuffer(EXTERN_DISPLAY_FB2);
+            configureWFDDisplay(EXTERN_DISPLAY_FB2);
             setExternalDisplay(EXTERN_DISPLAY_FB2);
         }
     }
@@ -484,6 +502,8 @@ void ExternalDisplay::setExternalDisplay(int connected)
                  connected);
         // Store the external display
         mExternalDisplay = connected;
+        ALOGD_IF(DEBUG, "In %s: mExternalDisplay = %d", __FUNCTION__,
+                                                         mExternalDisplay);
         const char* prop = (connected) ? "1" : "0";
         // set system property
         property_set("hw.hdmiON", prop);
@@ -527,28 +547,39 @@ bool ExternalDisplay::writeHPDOption(int userOption) const
     return ret;
 }
 
+/*
+ * commits the changes to the external display
+ * mExternalDisplay has the mixer number(1-> HDMI 2-> WFD)
+ */
 bool ExternalDisplay::commit()
 {
     if(mFd == -1) {
         return false;
-    } else if(ioctl(mFd, FBIOPUT_VSCREENINFO, &mVInfo) == -1) {
-         ALOGE("%s: FBIOPUT_VSCREENINFO failed, str: %s", __FUNCTION__,
-                                                          strerror(errno));
+    } else if(ioctl(mFd, MSMFB_OVERLAY_COMMIT, &mExternalDisplay) == -1) {
+         ALOGE("%s: MSMFB_OVERLAY_COMMIT failed errno: %d , str: %s",
+                                       __FUNCTION__, errno, strerror(errno));
          return false;
     }
     return true;
 }
 
+/*
+ * return 0 on success
+ * return -errno on ioctl failure as the hwc_eventControl need
+ * to return -errno.
+ */
 int ExternalDisplay::enableHDMIVsync(int enable)
 {
+    int ret = 0;
     if(mFd > 0) {
         int ret = ioctl(mFd, MSMFB_OVERLAY_VSYNC_CTRL, &enable);
         if (ret<0) {
             ALOGE("%s: enabling HDMI vsync failed, str: %s", __FUNCTION__,
                                                             strerror(errno));
+            ret = -errno;
         }
     }
-    return -errno;
+    return ret;
 }
 
 };
