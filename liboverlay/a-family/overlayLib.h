@@ -81,7 +81,8 @@
 
 enum {
     HDMI_OFF,
-    HDMI_ON
+    HDMI_ON,
+    HDMI_INVALIDATE_STATE = -1
 };
 
 enum {
