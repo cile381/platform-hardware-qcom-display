@@ -28,6 +28,8 @@
 #include "memalloc.h"
 #include "alloc_controller.h"
 
+#define SZ_1M 0x100000
+
 using namespace gralloc;
 
 gpu_context_t::gpu_context_t(const private_module_t* module,
@@ -136,6 +138,10 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
         data.align = 8192;
     else
         data.align = getpagesize();
+
+    if (usage & GRALLOC_USAGE_PROTECTED) {
+        data.align = ALIGN(data.align, SZ_1M);
+    }
     data.pHandle = (unsigned int) pHandle;
     err = mAllocCtrl->allocate(data, usage);
 
@@ -220,8 +226,7 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
     // All buffers marked as protected or for external
     // display need to go to overlay
     if ((usage & GRALLOC_USAGE_EXTERNAL_DISP) ||
-        (usage & GRALLOC_USAGE_PROTECTED) ||
-        (usage & GRALLOC_USAGE_PRIVATE_CP_BUFFER)) {
+        (usage & GRALLOC_USAGE_PROTECTED)) {
         bufferType = BUFFER_TYPE_VIDEO;
     }
     int err;

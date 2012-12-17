@@ -73,13 +73,6 @@ enum {
     /* Close Caption displayed on an external display only */
     GRALLOC_USAGE_PRIVATE_EXTERNAL_CC     =       0x00200000,
 
-    /* Use this flag to request content protected buffers. Please note
-     * that this flag is different from the GRALLOC_USAGE_PROTECTED flag
-     * which can be used for buffers that are not secured for DRM
-     * but still need to be protected from screen captures
-     */
-    GRALLOC_USAGE_PRIVATE_CP_BUFFER       =       0x00400000,
-
     /* Legacy heaps - these heaps are no-ops so we are making them zero
      * The flags need to be around to compile certain HALs which have
      * not cleaned up the code
