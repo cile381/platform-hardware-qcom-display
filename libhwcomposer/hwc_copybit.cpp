@@ -26,6 +26,8 @@
 #include "comptype.h"
 #include "egl_handles.h"
 
+#define MAX_COPYBIT_RECT 12
+
 namespace qhwc {
 
 
@@ -415,7 +417,15 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
     // Copybit region
     hwc_region_t region = layer->visibleRegionScreen;
     region_iterator copybitRegion(region);
-
+    if (region.numRects > MAX_COPYBIT_RECT) {
+         hwc_rect display_rect = { layer->displayFrame.left,
+                                   layer->displayFrame.top,
+                                   layer->displayFrame.right,
+                                   layer->displayFrame.bottom };
+         hwc_region_t display_region = { 1, (hwc_rect_t const*)&display_rect };
+         region_iterator copyRegion(display_region);
+         copybitRegion = copyRegion;
+    }
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_WIDTH,
                                           renderBuffer->width);
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT,
@@ -423,7 +433,8 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
     copybit->set_parameter(copybit, COPYBIT_TRANSFORM,
                                               layer->transform);
     //TODO: once, we are able to read layer alpha, update this
-    copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, 255);
+    copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA,
+                      (layer->blending == HWC_BLENDING_NONE) ? -1 : 255);
     copybit->set_parameter(copybit, COPYBIT_PREMULTIPLIED_ALPHA,
                       (layer->blending == HWC_BLENDING_PREMULT)?
                                              COPYBIT_ENABLE : COPYBIT_DISABLE);
