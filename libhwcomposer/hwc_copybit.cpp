@@ -26,6 +26,8 @@
 #include "comptype.h"
 #include "egl_handles.h"
 
+#define  MAX_COPYBIT_RECT 5
+
 namespace qhwc {
 
 
@@ -440,6 +442,15 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_t *layer,
     hwc_region_t region = layer->visibleRegionScreen;
     region_iterator copybitRegion(region);
 
+    if(region.numRects >  MAX_COPYBIT_RECT) {
+        //create one clip region
+        hwc_rect display_rect = { layer->displayFrame.left,
+                      layer->displayFrame.top,layer->displayFrame.right,
+                      layer->displayFrame.bottom };
+        hwc_region_t display_region = { 1, (hwc_rect_t const*)&display_rect };
+        region_iterator copyRegion(display_region);
+        copybitRegion = copyRegion;
+    }
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_WIDTH,
                                           renderBuffer->width);
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT,
