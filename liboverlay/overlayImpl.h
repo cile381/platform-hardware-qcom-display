@@ -475,11 +475,8 @@ bool OverlayImpl<P0, P1, P2, P3>::close()
 template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->commit()) {
             ALOGE("OverlayImpl p0 failed to commit");
             return false;
@@ -487,6 +484,7 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->commit()) {
             ALOGE("OverlayImpl p1 failed to commit");
             return false;
@@ -494,6 +492,7 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->commit()) {
             ALOGE("OverlayImpl p2 failed to commit");
             return false;
@@ -501,6 +500,7 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->commit()) {
             ALOGE("OverlayImpl p3 failed to commit");
             return false;
@@ -513,11 +513,8 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
 template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->setCrop(d)) {
             ALOGE("OverlayImpl p0 failed to crop");
             return false;
@@ -525,6 +522,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->setCrop(d)) {
             ALOGE("OverlayImpl p1 failed to crop");
             return false;
@@ -532,6 +530,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->setCrop(d)) {
             ALOGE("OverlayImpl p2 failed to crop");
             return false;
@@ -539,6 +538,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->setCrop(d)) {
             ALOGE("OverlayImpl p3 failed to crop");
             return false;
@@ -551,11 +551,8 @@ template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->setPosition(d)) {
             ALOGE("OverlayImpl p0 failed to setpos");
             return false;
@@ -563,6 +560,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->setPosition(d)) {
             ALOGE("OverlayImpl p1 failed to setpos");
             return false;
@@ -570,6 +568,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->setPosition(d)) {
             ALOGE("OverlayImpl p2 failed to setpos");
             return false;
@@ -577,6 +576,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->setPosition(d)) {
             ALOGE("OverlayImpl p3 failed to setpos");
             return false;
@@ -589,11 +589,8 @@ template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->setTransform(param)) {
             ALOGE("OverlayImpl p0 failed to setparam");
             return false;
@@ -601,6 +598,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->setTransform(param)) {
             ALOGE("OverlayImpl p1 failed to setparam");
             return false;
@@ -608,6 +606,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->setTransform(param)) {
             ALOGE("OverlayImpl p2 failed to setparam");
             return false;
@@ -615,6 +614,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->setTransform(param)) {
             ALOGE("OverlayImpl p3 failed to setparam");
             return false;
@@ -628,11 +628,8 @@ bool OverlayImpl<P0, P1, P2, P3>::setSource(
         const utils::PipeArgs args,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->setSource(args)) {
             ALOGE("OverlayImpl p0 failed to setsrc");
             return false;
@@ -640,6 +637,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setSource(
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->setSource(args)) {
             ALOGE("OverlayImpl p1 failed to setsrc");
             return false;
@@ -647,6 +645,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setSource(
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->setSource(args)) {
             ALOGE("OverlayImpl p2 failed to setsrc");
             return false;
@@ -654,6 +653,7 @@ bool OverlayImpl<P0, P1, P2, P3>::setSource(
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->setSource(args)) {
             ALOGE("OverlayImpl p3 failed to setsrc");
             return false;
@@ -666,11 +666,8 @@ template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
+        OVASSERT(mPipe0, "%s: OverlayImpl pipe0 is null", __FUNCTION__);
         if(!mPipe0->queueBuffer(fd, offset)) {
             ALOGE("OverlayImpl p0 failed to queueBuffer");
             return false;
@@ -678,6 +675,7 @@ bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
     }
 
     if (utils::OV_PIPE1 & dest) {
+        OVASSERT(mPipe1, "%s: OverlayImpl pipe1 is null", __FUNCTION__);
         if(!mPipe1->queueBuffer(fd, offset)) {
             ALOGE("OverlayImpl p1 failed to queueBuffer");
             return false;
@@ -685,6 +683,7 @@ bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
     }
 
     if (utils::OV_PIPE2 & dest) {
+        OVASSERT(mPipe2, "%s: OverlayImpl pipe2 is null", __FUNCTION__);
         if(!mPipe2->queueBuffer(fd, offset)) {
             ALOGE("OverlayImpl p2 failed to queueBuffer");
             return false;
@@ -692,6 +691,7 @@ bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
     }
 
     if (utils::OV_PIPE3 & dest) {
+        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
         if(!mPipe3->queueBuffer(fd, offset)) {
             ALOGE("OverlayImpl p3 failed to queueBuffer");
             return false;
@@ -706,6 +706,7 @@ void OverlayImpl<P0, P1, P2, P3>::dump() const
     OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
             "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
             __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+
     ALOGE("== Dump OverlayImpl dump start ROT p0 ==");
     mRotP0->dump();
     ALOGE("== Dump OverlayImpl dump end ROT p0 ==");
@@ -728,8 +729,6 @@ void OverlayImpl<P0, P1, P2, P3>::dump() const
     mPipe3->dump();
     ALOGE("== Dump OverlayImpl dump end p3 ==");
 }
-
-
 } // overlay
 
 #endif // OVERLAY_IMPL_H
