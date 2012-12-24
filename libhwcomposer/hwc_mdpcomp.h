@@ -61,6 +61,12 @@ enum {
     MDPCOMP_ABORT,
 };
 
+// MDP Comp per frame status
+enum State {
+    MDPCOMP_ON = 0,
+    MDPCOMP_OFF,
+};
+
 //This class manages the status of 4 MDP pipes and keeps
 //track of Variable pipe mode.
 class PipeMgr {
@@ -98,16 +104,10 @@ private:
 
 
 class MDPComp {
-    enum State {
-        MDPCOMP_ON = 0,
-        MDPCOMP_OFF,
-    };
-
     enum {
         MDPCOMP_LAYER_BLEND = 1,
         MDPCOMP_LAYER_DOWNSCALE = 2,
-        MDPCOMP_LAYER_SKIP = 4,
-        MDPCOMP_LAYER_UNSUPPORTED_MEM = 8,
+        MDPCOMP_LAYER_UNSUPPORTED_MEM = 4,
     };
 
     struct mdp_pipe_info {
@@ -139,10 +139,13 @@ class MDPComp {
     static IdleInvalidator *idleInvalidator;
     static struct frame_info sCurrentFrame;
     static PipeMgr sPipeMgr;
-    static int sSkipCount;
+    static bool sUnsupportedLayersPresent;
     static int sMaxLayers;
     static bool sDebugLogs;
     static bool sIdleFallBack;
+    static ovutils::eOverlayState ov_state;
+    static int sYUVLayerIndex;
+    static bool sSecuredVidPresent;
 
 public:
     /* Handler to invoke frame redraw on Idle Timer expiry */
@@ -158,8 +161,17 @@ public:
     /* draw */
     static int draw(hwc_context_t *ctx, hwc_layer_list_t *list);
 
+    /* get mdpcomp status */
+    static bool isUsed() { return (sMDPCompState == MDPCOMP_ON); };
+
     /* store frame stats */
-    static void setStats(int skipCt) { sSkipCount  = skipCt;};
+    static inline void setStats(int skipCt, int extCt, int extCC,
+                                                        int YUVLayerIndex, bool
+                                                        securedVideo) {
+        sUnsupportedLayersPresent  = (skipCt | extCt | extCC) ? true : false;
+        sYUVLayerIndex = YUVLayerIndex;
+        sSecuredVidPresent = securedVideo;
+    };
 
 private:
 
@@ -213,6 +225,11 @@ private:
     static bool isEnabled() { return sMaxLayers ? true : false; };
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
+    /* Calculate the scaled destination rectangle for dynamic FB resolution */
+    static void calculate_scaled_destination(hwc_context_t* ctx, int &top,
+                                           int &left, int &width, int &height);
+    /* set video buffer specific datat */
+    static void SetVidInfo(hwc_layer_t *layer, ovutils::eMdpFlags &mdpFlags);
 };
 }; //namespace
 #endif

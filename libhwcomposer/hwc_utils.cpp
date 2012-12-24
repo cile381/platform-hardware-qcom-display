@@ -190,7 +190,8 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
             pipLayerIndex);
     ExtOnly::setStats(extCount, extLayerIndex, isExtBlockPresent);
     CopyBit::setStats(skipCount);
-    MDPComp::setStats(skipCount);
+    MDPComp::setStats(skipCount, extCount, (ccLayerIndex != -1), yuvLayerIndex,
+            yuvSecure);
 
     ctx->numHwLayers = list->numHwLayers;
     return;

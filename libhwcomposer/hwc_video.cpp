@@ -120,8 +120,17 @@ void VideoOverlay::markFlags(hwc_layer_t *layer) {
 
 /* Helpers */
 bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
-    overlay::Overlay& ov = *(ctx->mOverlay);
     private_handle_t *hnd = (private_handle_t *)layer->handle;
+
+    bool isSecured = hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_BUFFER;
+
+    if(!isSecured  && !ctx->externalDisplay) {
+        //MDP comp handles this case and when not possible
+        //we should let GPU handle it
+        return false;
+    }
+
+    overlay::Overlay& ov = *(ctx->mOverlay);
     ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
 
     ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;

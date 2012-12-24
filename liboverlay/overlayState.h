@@ -243,7 +243,7 @@ template <> struct StateTraits<utils::OV_BYPASS_1_LAYER>
     typedef overlay::NullPipe pipe1;   // place holder
     typedef overlay::NullPipe pipe2;   // place holder
 
-    typedef NullRotator rot0;
+    typedef Rotator rot0;
     typedef NullRotator rot1;
     typedef NullRotator rot2;
 
@@ -256,8 +256,8 @@ template <> struct StateTraits<utils::OV_BYPASS_2_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe1;
     typedef overlay::NullPipe pipe2;   // place holder
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
     typedef NullRotator rot2;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2> ovimpl;
@@ -269,9 +269,9 @@ template <> struct StateTraits<utils::OV_BYPASS_3_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe1;
     typedef overlay::GenericPipe<utils::PRIMARY> pipe2;
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
-    typedef NullRotator rot2;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
+    typedef Rotator rot2;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2> ovimpl;
 };
