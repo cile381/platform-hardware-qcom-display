@@ -76,7 +76,7 @@ void initContext(hwc_context_t *ctx);
 void closeContext(hwc_context_t *ctx);
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
-        const int fbWidth, const int fbHeight);
+        const int fbWidth, const int fbHeight, const int orient);
 
 // Waits for the fb_post to be called
 void wait4fbPost(hwc_context_t* ctx);
@@ -140,6 +140,14 @@ inline void getLayerResolution(const hwc_layer_t* layer,
     width = displayFrame.right - displayFrame.left;
     height = displayFrame.bottom - displayFrame.top;
 }
+
+template <class T>
+inline void swap(T& a, T& b) {
+    T tmp = a;
+    a = b;
+    b = tmp;
+}
+
 }; //qhwc namespace
 
 struct vsync_state {
