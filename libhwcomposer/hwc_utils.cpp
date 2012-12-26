@@ -280,19 +280,6 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
     }
 }
 
-// Reset flags
-// Reset fbPanDone flag to false
-void resetFlags(hwc_context_t* ctx) {
-    framebuffer_device_t *fbDev = ctx->mFbDev;
-    if(fbDev) {
-        private_module_t* m = reinterpret_cast<private_module_t*>(
-                fbDev->common.module);
-        pthread_mutex_lock(&m->fbPanLock);
-        m->fbPanDone = false;
-        pthread_mutex_unlock(&m->fbPanLock);
-    }
-}
-
 void wait4fbPost(hwc_context_t* ctx) {
     framebuffer_device_t *fbDev = ctx->mFbDev;
     if(fbDev) {
