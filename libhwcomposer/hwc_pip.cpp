@@ -148,7 +148,8 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             displayFrame.right > fbWidth ||
             displayFrame.bottom > fbHeight) {
 
-        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight);
+        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight,
+                layer->transform);
 
         //Update calculated width and height
         dcrop.w = sourceCrop.right - sourceCrop.left;
@@ -228,7 +229,8 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             displayFrame.right > fbWidth ||
             displayFrame.bottom > fbHeight) {
 
-        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight);
+        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight,
+                layer->transform);
 
         //Update calculated width and height
         dcrop.w = sourceCrop.right - sourceCrop.left;
