@@ -52,6 +52,15 @@ char const*const BLUE_LED_FILE
 char const*const LCD_FILE
         = "/sys/class/leds/lcd-backlight/brightness";
 
+char const*const RED_ON_MS_FILE
+        = "/sys/class/leds/red/device/on_ms";
+
+char const*const RED_OFF_MS_FILE
+        = "/sys/class/leds/red/device/off_ms";
+
+char const*const RED_BLINK_FILE
+        = "/sys/class/leds/red/device/blink";
+
 /**
  * device methods
  */
@@ -116,7 +125,7 @@ set_speaker_light_locked(struct light_device_t* dev,
 {
     int len;
     int alpha, red, green, blue;
-    int blink, freq, pwm;
+    int blink;
     int onMS, offMS;
     unsigned int colorRGB;
 
@@ -143,44 +152,25 @@ set_speaker_light_locked(struct light_device_t* dev,
     green = (colorRGB >> 8) & 0xFF;
     blue = colorRGB & 0xFF;
 
-    // R, G, B value is among 0, 1, 2
-    if (red > 128)  red = 2;
-    else if (red <= 128 && red > 0) red = 1;
-    if (green > 128)  green = 2;
-    else if (green <= 128 && green > 0) green = 1;
-    if (blue > 128)  blue = 2;
-    else if (blue <= 128 && blue > 0) red = 1;
-
     write_int(RED_LED_FILE, red);
     write_int(GREEN_LED_FILE, green);
     write_int(BLUE_LED_FILE, blue);
 
-    // TODO
     if (onMS > 0 && offMS > 0) {
-        int totalMS = onMS + offMS;
-
-        // the LED appears to blink about once per second if freq is 20
-        // 1000ms / 20 = 50
-        freq = totalMS / 50;
-        // pwm specifies the ratio of ON versus OFF
-        // pwm = 0 -> always off
-        // pwm = 255 => always on
-        pwm = (onMS * 255) / totalMS;
-
-        // the low 4 bits are ignored, so round up if necessary
-        if (pwm > 0 && pwm < 16)
-            pwm = 16;
-
+        /* the led need 260 ms to ramp up (and vice versa),
+           so subsract 260 ms on both onMS and offMS for closer period */
+        onMS = (onMS < 260)? 0 : onMS - 250;
+        offMS = (offMS < 260)? 0 : offMS - 250;
         blink = 1;
     } else {
         blink = 0;
-        freq = 0;
-        pwm = 0;
     }
 
     if (blink) {
-        write_int(RED_LED_FILE, freq);
+        write_int(RED_ON_MS_FILE, onMS);
+        write_int(RED_OFF_MS_FILE, offMS);
     }
+    write_int(RED_BLINK_FILE, blink);
 
     return 0;
 }
