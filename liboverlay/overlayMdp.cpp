@@ -387,9 +387,10 @@ bool MdpCtrl::setVisualParams(const MetaData_t& data) {
 
     if (needUpdate) {
         display_pp_compute_params(&params, &mOVInfo.overlay_pp_cfg);
+        return true;
      }
 #endif
-    return true;
+    return false;
 }
 
 } // overlay

@@ -103,7 +103,7 @@ public:
     bool close() { return true; }
     bool start(const utils::PipeArgs& args) { return true; }
     bool commit() { return true; }
-    bool setVisualParams(const MetaData_t& data) { return true; }
+    bool setVisualParams(const MetaData_t& data) { return false; }
     bool setCrop(const utils::Dim& d) { return true; }
     bool setPosition(const utils::Dim& dim) { return true; }
     bool setTransform(const utils::eTransform& param) { return true; }

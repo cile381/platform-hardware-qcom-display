@@ -219,20 +219,14 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         if(metadata->operation & PP_PARAM_SHARPNESS) {
             metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].sharpness;
         }
-        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+        if(ov.setVisualParams(*metadata, ovutils::OV_PIPE0))
+            ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     }
 
     //Ensure that VG pipe is allocated in cases where buffer-type
     //is video while format is RGB
     ovutils::setMdpFlags(mdpFlags,
             ovutils::OV_MDP_PIPE_SHARE);
-
-    /* Set the metaData if any */
-    if(!metadata)
-        ALOGE("%s:NULL metadata!", __FUNCTION__);
-    else{
-        ov.setVisualParams(*metadata, ovutils::OV_PIPE0);
-    }
 
     ovutils::PipeArgs parg(mdpFlags,
             info,
@@ -249,7 +243,6 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
          * from metadata operation if present.
          */
         metadata->operation &= ~(ctx->mPpParams[VIDEO_LAYER_0].ops);
-        ctx->mPpParams[VIDEO_LAYER_0].isValid = false;
     }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
