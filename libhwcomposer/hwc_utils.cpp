@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
 #include "hwc_service.h"
+#include "comptype.h"
 
 namespace qhwc {
 
@@ -43,6 +44,8 @@ static void openFramebufferDevice(hwc_context_t *ctx)
 void initContext(hwc_context_t *ctx)
 {
     openFramebufferDevice(ctx);
+    qdutils::QCCompositionType::getInstance().setFbResolution(ctx->mFbDev->width
+                                                         , ctx->mFbDev->height);
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mHwcService = hwcService::HWComposerService::getInstance();
     ctx->mHwcService->setHwcContext(ctx);

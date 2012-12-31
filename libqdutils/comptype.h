@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
-
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -53,8 +53,33 @@ class QCCompositionType : public Singleton <QCCompositionType>
         QCCompositionType();
         ~QCCompositionType() { }
         int getCompositionType() {return mCompositionType;}
+        void setFbResolution(int32_t width, int32_t height){
+            if(width>0 && height>0)
+            {
+                fb_width = width;
+                fb_height = height;
+
+                // For MDP3 targets, for panels larger than qHD resolution
+                // Set GPU Composition or performance reasons.
+                char property[PROPERTY_VALUE_MAX];
+                if (property_get("debug.sf.hw", property, NULL) > 0) {
+                    if(atoi(property) != 0) {
+                        property_get("debug.composition.type", property, NULL);
+                        if ((strncmp(property, "dyn", 3) == 0) &&
+                            (qdutils::MDPVersion::getInstance().getMDPVersion()
+                                                         < 400) &&
+                            ((fb_width > 540 && fb_height > 960)||
+                             (fb_width > 960 && fb_height > 540))){
+                                mCompositionType = COMPOSITION_TYPE_GPU;
+                        }
+                    }
+                }
+            }
+        }
     private:
         int mCompositionType;
+        int32_t fb_width;
+        int32_t fb_height;
 
 };
 
@@ -62,6 +87,7 @@ inline QCCompositionType::QCCompositionType()
 {
     char property[PROPERTY_VALUE_MAX];
     mCompositionType = 0;
+    fb_width = fb_height = -1;
     if (property_get("debug.sf.hw", property, NULL) > 0) {
         if(atoi(property) == 0) {
             mCompositionType = COMPOSITION_TYPE_CPU;
