@@ -175,10 +175,13 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
           //YUV layer, check, if copybit can be used
           // mark the video layer to gpu when all layer is
           // going to gpu in case of dynamic composition.
-          if (useCopybitForYUV && useCopybitForRGB) {
-              list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
-              sCopyBitDraw = true;
-          }
+            if (useCopybitForYUV && useCopybitForRGB) {
+                list->hwLayers[i].compositionType = HWC_USE_COPYBIT;
+                sCopyBitDraw = true;
+            } else {
+                list->hwLayers[i].compositionType = HWC_USE_GPU;
+                sCopyBitDraw = false;
+            }
        } else if (hnd->bufferType == BUFFER_TYPE_UI) {
           //RGB layer, check, if copybit can be used
           if (useCopybitForRGB) {
