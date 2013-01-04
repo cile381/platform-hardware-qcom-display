@@ -178,9 +178,12 @@ bool Overlay::setVisualParams(const MetaData_t& data, utils::eDest dest) {
         if(!mOv->setVisualParams(data, dest)) {
             ALOGE("Overlay %s failed", __FUNCTION__);
             return false;
+        } else {
+            return true;
         }
+    } else {
+        return false;
     }
-    return true;
 }
 
 void Overlay::dump() const
