@@ -213,7 +213,7 @@ inline bool M3DExtPipe<CHAN>::setPosition(const utils::Dim& d) {
     utils::Whf _whf(mM3d.getScreenInfo().mFBWidth,
             mM3d.getScreenInfo().mFBHeight, 0,
             mM3Dfmt, 0);
-    if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
+    if(!utils::getPositionS3D<CHAN>(_whf, d, _dim)) {
         ALOGE("M3DExtPipe setPosition err in getPositionS3D");
         _dim = d;
     }
@@ -355,7 +355,7 @@ inline bool S3DExtPipe<CHAN>::setPosition(const utils::Dim& d)
     utils::Whf _whf(mS3d.getScreenInfo().mFBWidth,
             mS3d.getScreenInfo().mFBHeight, 0,
             mS3Dfmt, 0);
-    if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
+    if(!utils::getPositionS3D<CHAN>(_whf, d, _dim)) {
         ALOGE("S3DExtPipe setPosition err in getPositionS3D");
         _dim = d;
     }
@@ -450,8 +450,9 @@ inline bool S3DPrimaryPipe<CHAN>::setPosition(const utils::Dim& d)
     // which means format is HAL_3D_OUT_SBS_MASK
     // HAL_3D_OUT_SBS_MASK is 0x1000 >> 12 == 0x1 as the orig
     // code suggets
-    utils::Whf _whf(d.w, d.h, 0, mS3Dfmt, 0);
-    if(!utils::getPositionS3D<CHAN>(_whf, _dim)) {
+    utils::Whf _whf(mS3d.getScreenInfo().mFBWidth,
+            mS3d.getScreenInfo().mFBHeight, 0, mS3Dfmt, 0);
+    if(!utils::getPositionS3D<CHAN>(_whf, d, _dim)) {
         ALOGE("S3DPrimaryPipe setPosition err in getPositionS3D");
         _dim = d;
     }

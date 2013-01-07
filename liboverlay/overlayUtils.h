@@ -767,17 +767,17 @@ inline uint32_t getColorFormat(uint32_t format)
 
 // FB0
 template <int CHAN>
-inline Dim getPositionS3DImpl(const Whf& whf)
+inline Dim getPositionS3DImpl(const Whf& whf, const Dim& in)
 {
     switch (whf.format_3d & OUTPUT_3D_MASK)
     {
         case HAL_3D_OUT_SBS_MASK:
             // x, y, w, h
-            return Dim(0, 0, whf.w/2, whf.h);
+            return Dim(in.x/2, in.y, in.w/2, in.h);
         case HAL_3D_OUT_TOP_BOT_MASK:
-            return Dim(0, 0, whf.w, whf.h/2);
+            return Dim(in.x, in.y/2, in.w, in.h/2);
         case HAL_3D_OUT_MONOS_MASK:
-            return Dim(0, 0, whf.w, whf.h);
+            return Dim(in.x, in.y, in.w, in.h);
         case HAL_3D_OUT_INTERL_MASK:
             // FIXME error?
             ALOGE("%s HAL_3D_OUT_INTERLEAVE_MASK", __FUNCTION__);
@@ -790,16 +790,16 @@ inline Dim getPositionS3DImpl(const Whf& whf)
 }
 
 template <>
-inline Dim getPositionS3DImpl<utils::OV_CHAN1>(const Whf& whf)
+inline Dim getPositionS3DImpl<utils::OV_CHAN1>(const Whf& whf, const Dim& in)
 {
     switch (whf.format_3d & OUTPUT_3D_MASK)
     {
         case HAL_3D_OUT_SBS_MASK:
-            return Dim(whf.w/2, 0, whf.w/2, whf.h);
+            return Dim(in.x/2+whf.w/2, in.y, in.w/2, in.h);
         case HAL_3D_OUT_TOP_BOT_MASK:
-            return Dim(0, whf.h/2, whf.w, whf.h/2);
+            return Dim(in.x, in.y/2+whf.h/2, in.w, in.h/2);
         case HAL_3D_OUT_MONOS_MASK:
-            return Dim(0, 0, whf.w, whf.h);
+            return Dim(in.x, in.y, in.w, in.h);
         case HAL_3D_OUT_INTERL_MASK:
             // FIXME error?
             ALOGE("%s HAL_3D_OUT_INTERLEAVE_MASK", __FUNCTION__);
@@ -812,8 +812,8 @@ inline Dim getPositionS3DImpl<utils::OV_CHAN1>(const Whf& whf)
 }
 
 template <int CHAN>
-inline bool getPositionS3D(const Whf& whf, Dim& out) {
-    out = getPositionS3DImpl<CHAN>(whf);
+inline bool getPositionS3D(const Whf& whf, const Dim& in, Dim& out) {
+    out = getPositionS3DImpl<CHAN>(whf,in);
     return (out != Dim());
 }
 
@@ -822,11 +822,11 @@ inline Dim getCropS3DImpl(const Dim& in, uint32_t fmt) {
     switch (fmt & INPUT_3D_MASK)
     {
         case HAL_3D_IN_SIDE_BY_SIDE_L_R:
-            return Dim(0, 0, in.w/2, in.h);
+            return Dim(in.x, in.y, in.w/2, in.h);
         case HAL_3D_IN_SIDE_BY_SIDE_R_L:
-            return Dim(in.w/2, 0, in.w/2, in.h);
+            return Dim(in.x+in.w/2, in.y, in.w/2, in.h);
         case HAL_3D_IN_TOP_BOTTOM:
-            return Dim(0, 0, in.w, in.h/2);
+            return Dim(in.x, in.y, in.w, in.h/2);
         case HAL_3D_IN_INTERLEAVE:
             ALOGE("%s HAL_3D_IN_INTERLEAVE", __FUNCTION__);
             break;
@@ -842,11 +842,11 @@ inline Dim getCropS3DImpl<utils::OV_CHAN1>(const Dim& in, uint32_t fmt) {
     switch (fmt & INPUT_3D_MASK)
     {
         case HAL_3D_IN_SIDE_BY_SIDE_L_R:
-            return Dim(in.w/2, 0, in.w/2, in.h);
+            return Dim(in.x+in.w/2, in.y, in.w/2, in.h);
         case HAL_3D_IN_SIDE_BY_SIDE_R_L:
-            return Dim(0, 0, in.w/2, in.h);
+            return Dim(in.x, in.y, in.w/2, in.h);
         case HAL_3D_IN_TOP_BOTTOM:
-            return Dim(0, in.h/2, in.w, in.h/2);
+            return Dim(in.x, in.y+in.h/2, in.w, in.h/2);
         case HAL_3D_IN_INTERLEAVE:
             ALOGE("%s HAL_3D_IN_INTERLEAVE", __FUNCTION__);
             break;
