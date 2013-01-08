@@ -146,6 +146,7 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
     int extLayerIndex = -1; //ext-only or block except closed caption
     int extCount = 0; //ext-only except closed caption
     bool isExtBlockPresent = false; //is BLOCK layer present
+    bool yuvSecure = false;
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
         private_handle_t *hnd =
@@ -154,8 +155,10 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
         if (UNLIKELY(isYuvBuffer(hnd))) {
             yuvCount++;
             yuvLayerIndex = i;
+            yuvSecure = isSecureBuffer(hnd);
             //Animating
-            if (isSkipLayer(&list->hwLayers[i])) {
+            //Do not mark as SKIP if it is secure buffer
+            if (isSkipLayer(&list->hwLayers[i]) && !yuvSecure) {
                 isYuvLayerSkip = true;
             }
         } else if(UNLIKELY(isExtCC(hnd))) {
@@ -181,6 +184,7 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
                 if ((metadata->operation & PP_PARAM_INTERLACED) &&
                                               metadata->interlaced) {
                    //TODO update above condition for 3D vidos
+                } else if(yuvSecure){
                 } else {
                    isYuvLayerSkip = true;
                 }
