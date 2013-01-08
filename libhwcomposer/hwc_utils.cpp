@@ -44,8 +44,8 @@ static void openFramebufferDevice(hwc_context_t *ctx)
 void initContext(hwc_context_t *ctx)
 {
     openFramebufferDevice(ctx);
-    qdutils::QCCompositionType::getInstance().setFbResolution(ctx->mFbDev->width
-                                                         , ctx->mFbDev->height);
+    qdutils::QCCompositionType::getInstance().changeTargetCompositionType(
+              ctx->mFbDev->width,ctx->mFbDev->height);
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mHwcService = hwcService::HWComposerService::getInstance();
     ctx->mHwcService->setHwcContext(ctx);

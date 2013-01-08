@@ -34,6 +34,12 @@
 #include <utils/Singleton.h>
 #include <cutils/properties.h>
 #include <mdp_version.h>
+#include <sys/sysinfo.h>
+
+#define RAM_SIZE 512*1024*1024
+#define TARGET_WIDTH 540
+#define TARGET_HEIGHT 960
+
 using namespace android;
 namespace qdutils {
 // Enum containing the supported composition types
@@ -53,12 +59,20 @@ class QCCompositionType : public Singleton <QCCompositionType>
         QCCompositionType();
         ~QCCompositionType() { }
         int getCompositionType() {return mCompositionType;}
-        void setFbResolution(int32_t width, int32_t height){
+        void changeTargetCompositionType(int32_t width, int32_t height){
             if(width>0 && height>0)
             {
                 fb_width = width;
                 fb_height = height;
-
+                struct sysinfo info;
+                unsigned long int ramSize = -1;
+                if (sysinfo(&info)) {
+                   ALOGE("%s: Problem in reading sysinfo()", __FUNCTION__);
+                }
+                else {
+                   ALOGV("%s: total RAM = %lu", __FUNCTION__, info.totalram );
+                   ramSize = info.totalram ;
+                }
                 // For MDP3 targets, for panels larger than qHD resolution
                 // Set GPU Composition or performance reasons.
                 char property[PROPERTY_VALUE_MAX];
@@ -67,19 +81,20 @@ class QCCompositionType : public Singleton <QCCompositionType>
                         property_get("debug.composition.type", property, NULL);
                         if ((strncmp(property, "dyn", 3) == 0) &&
                             (qdutils::MDPVersion::getInstance().getMDPVersion()
-                                                         < 400) &&
-                            ((fb_width > 540 && fb_height > 960)||
-                             (fb_width > 960 && fb_height > 540))){
+                                                         < MDP_V4_0) &&
+                        ((fb_width > TARGET_WIDTH &&
+                        fb_height > TARGET_HEIGHT)||(fb_width > TARGET_HEIGHT
+                        &&fb_height > TARGET_WIDTH)||(ramSize <= RAM_SIZE))){
                                 mCompositionType = COMPOSITION_TYPE_GPU;
                         }
                     }
                 }
             }
         }
-    private:
-        int mCompositionType;
-        int32_t fb_width;
-        int32_t fb_height;
+   private:
+       int mCompositionType;
+       int32_t fb_width;
+       int32_t fb_height;
 
 };
 
