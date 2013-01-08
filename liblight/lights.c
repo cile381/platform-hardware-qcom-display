@@ -38,6 +38,7 @@ static pthread_once_t g_init = PTHREAD_ONCE_INIT;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct light_state_t g_notification;
 static struct light_state_t g_battery;
+static struct light_state_t g_low_battery;
 static int g_attention = 0;
 
 char const*const RED_LED_FILE
@@ -178,10 +179,12 @@ set_speaker_light_locked(struct light_device_t* dev,
 static void
 handle_speaker_battery_locked(struct light_device_t* dev)
 {
-    if (is_lit(&g_battery)) {
-        set_speaker_light_locked(dev, &g_battery);
-    } else {
+    if (is_lit(&g_low_battery)) {
+        set_speaker_light_locked(dev, &g_low_battery);
+    } else if (is_lit(&g_notification)) {
         set_speaker_light_locked(dev, &g_notification);
+    } else {
+        set_speaker_light_locked(dev, &g_battery);
     }
 }
 
@@ -191,6 +194,17 @@ set_light_battery(struct light_device_t* dev,
 {
     pthread_mutex_lock(&g_lock);
     g_battery = *state;
+    handle_speaker_battery_locked(dev);
+    pthread_mutex_unlock(&g_lock);
+    return 0;
+}
+
+static int
+set_light_low_battery(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    pthread_mutex_lock(&g_lock);
+    g_low_battery = *state;
     handle_speaker_battery_locked(dev);
     pthread_mutex_unlock(&g_lock);
     return 0;
@@ -251,6 +265,8 @@ static int open_lights(const struct hw_module_t* module, char const* name,
         set_light = set_light_backlight;
     else if (0 == strcmp(LIGHT_ID_BATTERY, name))
         set_light = set_light_battery;
+    else if (0 == strcmp(LIGHT_ID_LOW_BATTERY, name))
+        set_light = set_light_low_battery;
     else if (0 == strcmp(LIGHT_ID_NOTIFICATIONS, name))
         set_light = set_light_notifications;
     else if (0 == strcmp(LIGHT_ID_ATTENTION, name))
