@@ -31,6 +31,7 @@
 #include <comptype.h>
 #include <ui/Region.h>
 #include <hardware/hwcomposer.h>
+#include <genlock.h>
 #include "egl_handles.h"
 
 namespace qdutils {
@@ -48,6 +49,7 @@ public:
   static bool isUpdatingFB(int compositionType);
   static int qcomuiClearRegion(Region region, EGLDisplay dpy);
   static int getS3DCompositionFormat(int hints);
+  static void unlock_lastGpuSupportedBuffer(void *handle);
 };
 }//namespace qdutils
 #endif /* end of include guard: QCOM_UTIL_H*/

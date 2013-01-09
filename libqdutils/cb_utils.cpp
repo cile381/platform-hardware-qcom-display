@@ -140,4 +140,8 @@ int CBUtils::getS3DCompositionFormat(int hints) {
         return 0;
 }
 
+void CBUtils::unlock_lastGpuSupportedBuffer(void *handle) {
+    genlock_unlock_buffer((native_handle_t*)handle);
+}
+
 } //namespace
