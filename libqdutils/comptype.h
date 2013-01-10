@@ -81,11 +81,17 @@ class QCCompositionType : public Singleton <QCCompositionType>
                         property_get("debug.composition.type", property, NULL);
                         if ((strncmp(property, "dyn", 3) == 0) &&
                             (qdutils::MDPVersion::getInstance().getMDPVersion()
-                                                         < MDP_V4_0) &&
-                        ((fb_width > TARGET_WIDTH &&
-                        fb_height > TARGET_HEIGHT)||(fb_width > TARGET_HEIGHT
-                        &&fb_height > TARGET_WIDTH)||(ramSize <= RAM_SIZE))){
+                                                         < MDP_V4_0)) {
+                            if(((property_get("debug.sf.gpufor720p",
+                                                  property, NULL) > 0) &&
+                                                   (atoi(property)!=0) &&
+                                       ((fb_width > TARGET_WIDTH &&
+                                        fb_height > TARGET_HEIGHT)
+                                       ||(fb_width > TARGET_HEIGHT &&
+                                        fb_height > TARGET_WIDTH)))
+                                  || (ramSize <= RAM_SIZE)){
                                 mCompositionType = COMPOSITION_TYPE_GPU;
+                            }
                         }
                     }
                 }
