@@ -83,6 +83,9 @@ void initContext(hwc_context_t *ctx)
             ctx->mCopyBit[HWC_DISPLAY_PRIMARY] = new CopyBit();
     }
 
+    // This will be instantiated when there is a screen record layer
+    ctx->mScreenRecordCopyBit = NULL;
+
     ctx->mExtDisplay = new ExternalDisplay(ctx);
     for (uint32_t i = 0; i <= HWC_NUM_DISPLAY_TYPES; i++)
         ctx->mLayerCache[i] = new LayerCache();
@@ -175,6 +178,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].yuvCount = 0;
     ctx->listStats[dpy].yuvIndex = -1;
     ctx->listStats[dpy].skipCount = 0;
+    ctx->listStats[dpy].screenRecordLayerIndex = -1;
     ctx->listStats[dpy].needsAlphaScale = false;
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
@@ -194,6 +198,10 @@ void setListStats(hwc_context_t *ctx,
         if (UNLIKELY(isYuvBuffer(hnd))) {
             ctx->listStats[dpy].yuvCount++;
             ctx->listStats[dpy].yuvIndex = i;
+        }
+        if (UNLIKELY(isScreenRecordTarget(hnd))) {
+            ctx->listStats[dpy].screenRecordLayerIndex = i;
+            ctx->listStats[dpy].numAppLayers--;
         }
     }
 }
@@ -362,6 +370,42 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         list->retireFenceFd = releaseFd;
     }
     return ret;
+}
+
+int hwc_record_screen(hwc_context_t *ctx, hwc_display_contents_1_t* list,
+                                            int dpy) {
+    int err = 0;
+    if(!ctx) {
+         ALOGE("%s: null context ", __FUNCTION__);
+         return -1;
+    }
+    size_t screenRecordIndex = ctx->listStats[dpy].screenRecordLayerIndex;
+    hwc_layer_1_t *screenRecordLayer = &list->hwLayers[screenRecordIndex];
+    //target buffer
+    private_handle_t *renderBuffer =
+                                (private_handle_t *)screenRecordLayer->handle;
+    if (!renderBuffer) {
+        ALOGE("%s: Screen Record Target layer handle is NULL", __FUNCTION__);
+        return false;
+    }
+    // iterate through the list of layers
+    int copybitLayerCount = 0;
+    for (int i = 0; i < (ctx->listStats[dpy].numAppLayers); i++) {
+        // Check here if the layer needs to be composed on the screen
+        // record target
+        hwc_layer_1_t *layer = &list->hwLayers[i];
+        err = ctx->mScreenRecordCopyBit->drawLayerUsingCopybit(ctx,
+                                    &(list->hwLayers[i]), renderBuffer, dpy);
+        copybitLayerCount++;
+        if(err < 0) {
+            ALOGE("%s : drawLayerUsingCopybit failed", __FUNCTION__);
+        }
+    }
+
+    if (copybitLayerCount) {
+        ctx->mScreenRecordCopyBit->finish();
+    }
+    return 0;
 }
 
 void LayerCache::resetLayerCache(int num) {

@@ -38,14 +38,17 @@ public:
     //Draws layer if the layer is set for copybit in prepare
     bool draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
                                                         int dpy, int* fd);
+    // Helper functions for copybit composition
+    int  drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
+                                       private_handle_t *renderBuffer, int dpy);
+
+    // trigger the copybit composition
+    int finish();
     // resets the values
     void reset();
 private:
     // holds the copybit device
     struct copybit_device_t *mEngine;
-    // Helper functions for copybit composition
-    int  drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
-                                       private_handle_t *renderBuffer, int dpy);
     bool canUseCopybitForYUV (hwc_context_t *ctx);
     bool canUseCopybitForRGB (hwc_context_t *ctx,
                                      hwc_display_contents_1_t *list, int dpy);

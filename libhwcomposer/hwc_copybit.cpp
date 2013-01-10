@@ -84,8 +84,11 @@ bool CopyBit::canUseCopybitForRGB(hwc_context_t *ctx,
 
     if ((compositionType & qdutils::COMPOSITION_TYPE_C2D) ||
         (compositionType & qdutils::COMPOSITION_TYPE_DYN)) {
-         if(ctx->listStats[dpy].yuvCount) {
-             //Overlay up & running. Dont use COPYBIT for RGB layers.
+         if(ctx->listStats[dpy].yuvCount ||
+                                ctx->listStats[dpy].screenRecordLayerIndex){
+             //Overlay up & running or there is a screenRecording going on
+             //Dont use COPYBIT for RGB layers.
+
              return false;
          }
     }
@@ -235,6 +238,15 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     }
     return true;
 }
+
+int CopyBit::finish()
+{
+    copybit_device_t *copybit = getCopyBitDevice();
+    // Sync mode
+    copybit->finish(copybit);
+    return true;
+}
+
 
 int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
                                      private_handle_t *renderBuffer, int dpy)
