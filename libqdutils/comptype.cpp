@@ -31,6 +31,7 @@
 #include <utils/Singleton.h>
 #include "comptype.h"
 #include <cutils/log.h>
+#include "soc_id.h"
 ANDROID_SINGLETON_STATIC_INSTANCE(qdutils::QCCompositionType);
 namespace qdutils {
 
@@ -82,6 +83,7 @@ void QCCompositionType::changeTargetCompositionType(int32_t width, int32_t heigh
          }
          // For MDP3 targets, for panels larger than qHD resolution
          // Set GPU Composition or performance reasons.
+         int soc_id = qdutils::SOCId::getInstance().getSOCId();
          char property[PROPERTY_VALUE_MAX];
          if (property_get("debug.sf.hw", property, NULL) > 0) {
              if(atoi(property) != 0) {
@@ -90,14 +92,16 @@ void QCCompositionType::changeTargetCompositionType(int32_t width, int32_t heigh
                   (qdutils::MDPVersion::getInstance().getMDPVersion()
                    < MDP_V4_0)) {
                      if(((property_get("debug.sf.gpufor720p",
-                                       property, NULL) > 0) &&
-                                       (atoi(property)!=0) &&
-                                       ((fb_width > TARGET_WIDTH &&
-                                        fb_height > TARGET_HEIGHT)
-                                       ||(fb_width > TARGET_HEIGHT &&
-                                        fb_height > TARGET_WIDTH)))
-                                  || (ramSize <= RAM_SIZE)){
-                                  mCompositionType = COMPOSITION_TYPE_GPU;
+                          property, NULL) > 0) &&
+                          (atoi(property)!=0) &&
+                          ((fb_width > TARGET_WIDTH &&
+                          fb_height > TARGET_HEIGHT)
+                          ||(fb_width > TARGET_HEIGHT &&
+                          fb_height > TARGET_WIDTH)))
+                          || ((ramSize <= RAM_SIZE) &&
+                          ((soc_id == 168)||
+                          (soc_id == 169)||(soc_id == 170)))){
+                          mCompositionType = COMPOSITION_TYPE_GPU;
                         }
                   }
              }
