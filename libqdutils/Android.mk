@@ -11,8 +11,8 @@ LOCAL_C_INCLUDES              += $(TOP)/hardware/qcom/display/libhwcomposer
 LOCAL_CFLAGS                  := $(common_flags)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES               := profiler.cpp mdp_version.cpp comptype.cpp \
-                                 idle_invalidator.cpp egl_handles.cpp \
-                                 cb_utils.cpp
+                                 soc_id.cpp idle_invalidator.cpp \
+                                 egl_handles.cpp cb_utils.cpp
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
