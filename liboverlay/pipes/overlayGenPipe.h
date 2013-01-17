@@ -275,7 +275,8 @@ inline bool GenericPipe<PANEL>::commit() {
         }
     }
     ret = mCtrlData.ctrl.commit();
-    pipeState = ret ? OPEN : CLOSED;
+    if(isClosed())
+        pipeState = ret ? OPEN : CLOSED;
     return ret;
 }
 
