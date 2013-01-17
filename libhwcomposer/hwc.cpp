@@ -99,6 +99,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         CopyBit::prepare(ctx, list);
         if(VideoOverlay::prepare(ctx, list)) {
             ctx->overlayInUse = true;
+            //Nothing here
         } else if(ExtOnly::prepare(ctx, list)) {
             ctx->overlayInUse = true;
         } else if(UIMirrorOverlay::prepare(ctx, list)) {
@@ -188,17 +189,14 @@ static int hwc_set(hwc_composer_device_t *dev,
             MDPComp::draw(ctx, list);
         }
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
-        if(ctx->mMDP.hasOverlay) {
-            if(ctx->mExtDisplay->getExternalDisplay()) {
-                wait4fbPost(ctx);
-                //Can draw to HDMI only when fb_post is reached
-                UIMirrorOverlay::draw(ctx);
-                //HDMI commit and primary commit (PAN) happening in parallel
+	if(ctx->mMDP.hasOverlay) {
+            wait4fbPost(ctx);
+            //Can draw to HDMI only when fb_post is reached
+            UIMirrorOverlay::draw(ctx);
+            //HDMI commit and primary commit (PAN) happening in parallel
+            if(ctx->mExtDisplay->getExternalDisplay())
                 ctx->mExtDisplay->commit();
-            }
-        }
-        //Virtual barrier for threads to finish, if using overlay on primary
-        if(ctx->overlayInUse || ctx->overlayWasInUse) {
+            //Virtual barrier for threads to finish
             wait4Pan(ctx);
 	}
     } else {
@@ -206,7 +204,6 @@ static int hwc_set(hwc_composer_device_t *dev,
         ctx->qbuf->unlockAll();
     }
     ctx->qbuf->unlockAllPrevious();
-    ctx->overlayWasInUse = ctx->overlayInUse;
     return ret;
 }
 
