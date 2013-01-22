@@ -188,6 +188,8 @@ static int hwc_set(hwc_composer_device_t *dev,
             CopyBit::draw(ctx, list, (EGLDisplay)dpy, (EGLSurface)sur);
             MDPComp::draw(ctx, list);
         }
+        // This is required to take care of GPU/C2D to Overlay transition
+        resetFlags(ctx);
         eglSwapBuffers((EGLDisplay)dpy, (EGLSurface)sur);
 	if(ctx->mMDP.hasOverlay) {
             wait4fbPost(ctx);
@@ -197,8 +199,9 @@ static int hwc_set(hwc_composer_device_t *dev,
             if(ctx->mExtDisplay->getExternalDisplay())
                 ctx->mExtDisplay->commit();
             //Virtual barrier for threads to finish
-            wait4Pan(ctx);
-	}
+            if(ctx->overlayInUse)
+                wait4Pan(ctx);
+        }
     } else {
         ctx->mOverlay->setState(ovutils::OV_CLOSED);
         ctx->qbuf->unlockAll();
