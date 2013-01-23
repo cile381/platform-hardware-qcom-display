@@ -216,15 +216,16 @@ template <> struct StateTraits<utils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV>
 
 template <> struct StateTraits<utils::OV_UI_MIRROR>
 {
-    typedef overlay::UIMirrorPipe pipe0;
+
+    typedef overlay::NullPipe pipe0;   // place holder
     typedef overlay::NullPipe pipe1;   // place holder
-    typedef overlay::NullPipe pipe2;   // place holder
+    typedef overlay::UIMirrorPipe pipe2;
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef Rotator rot0;
+    typedef NullRotator rot0;
     typedef NullRotator rot1;
-    typedef NullRotator rot2;
     typedef NullRotator rot3;
+    typedef Rotator rot2;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2, pipe3> ovimpl;
 };
@@ -574,7 +575,7 @@ inline OverlayImplBase* OverlayState::handle_CLOSED_to_xxx(
             OverlayImplBase* /*ignored*/) {
     //If going from CLOSED to CLOSED, nothing to do.
     if(TO_STATE == utils::OV_CLOSED) return NULL;
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(utils::OV_CLOSED),
             utils::getStateString(TO_STATE));
     OverlayImplBase* ov = new typename StateTraits<TO_STATE>::ovimpl;
@@ -595,7 +596,7 @@ inline OverlayImplBase* OverlayState::handle_xxx_to_CLOSED(OverlayImplBase* ov)
 {
     //If going from CLOSED to CLOSED, nothing to do.
     if(FROM_STATE == utils::OV_CLOSED) return NULL;
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(FROM_STATE),
             utils::getStateString(utils::OV_CLOSED));
     OVASSERT(ov, "%s: ov is null", __FUNCTION__);
@@ -614,7 +615,7 @@ inline OverlayImplBase* OverlayState::handle_from_to<
         utils::OV_2D_VIDEO_ON_PANEL_TV>(
         OverlayImplBase* ov) {
     OVASSERT(ov, "%s: ov is null", __FUNCTION__);
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL),
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL_TV));
     // Create new ovimpl based on new state
@@ -646,7 +647,7 @@ inline OverlayImplBase* OverlayState::handle_from_to<
         utils::OV_2D_VIDEO_ON_PANEL>(
         OverlayImplBase* ov) {
     OVASSERT(ov, "%s: ov is null", __FUNCTION__);
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL_TV),
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL));
 
@@ -679,7 +680,7 @@ inline OverlayImplBase* OverlayState::handle_from_to<
         utils::OV_2D_VIDEO_ON_TV>(
         OverlayImplBase* ov) {
     OVASSERT(ov, "%s: ov is null", __FUNCTION__);
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL_TV),
             utils::getStateString(utils::OV_2D_VIDEO_ON_TV));
 
@@ -710,7 +711,7 @@ inline OverlayImplBase* OverlayState::handle_from_to<
         utils::OV_2D_VIDEO_ON_PANEL_TV>(
         OverlayImplBase* ov) {
     OVASSERT(ov, "%s: ov is null", __FUNCTION__);
-    ALOGD("FROM_STATE = %s TO_STATE = %s",
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
             utils::getStateString(utils::OV_2D_VIDEO_ON_TV),
             utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL_TV));
 
@@ -728,6 +729,142 @@ inline OverlayImplBase* OverlayState::handle_from_to<
     newov->copyOvPipe(ov, utils::OV_PIPE2);
     //copy pipe3/rot3 (FB)
     newov->copyOvPipe(ov, utils::OV_PIPE3);
+    // All pipes are copied or deleted so no more need for previous ovimpl
+    delete ov;
+    ov = 0;
+    return newov;
+}
+
+/* Transition from OV_UI_MIRROR to OV_2D_TRUE_UI_MIRROR */
+template<>
+inline OverlayImplBase* OverlayState::handle_from_to<
+        utils::OV_UI_MIRROR,
+        utils::OV_2D_TRUE_UI_MIRROR>(
+        OverlayImplBase* ov) {
+    OVASSERT(ov, "%s: ov is null", __FUNCTION__);
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
+            utils::getStateString(utils::OV_UI_MIRROR),
+            utils::getStateString(utils::OV_2D_TRUE_UI_MIRROR));
+
+    // Create new ovimpl based on new state
+    typedef StateTraits<utils::OV_2D_TRUE_UI_MIRROR> NewState;
+    OverlayImplBase* newov = new NewState::ovimpl;
+
+    //copy pipe2/rot2 (UIMirroringPipe)
+    newov->copyOvPipe(ov, utils::OV_PIPE2);
+    //close old pipes 0/1
+    ov->closePipe(utils::OV_PIPE0);
+    ov->closePipe(utils::OV_PIPE1);
+
+    //create new pipes 0/1
+    RotatorBase* rot0 = new NewState::rot0;
+    RotatorBase* rot1 = new NewState::rot1;
+
+    newov->initPipe(rot0, utils::OV_PIPE0);
+    newov->initPipe(rot1, utils::OV_PIPE1);
+
+    // All pipes are copied or deleted so no more need for previous ovimpl
+    delete ov;
+    ov = 0;
+    return newov;
+}
+
+/* Transition from OV_2D_TRUE_UI_MIRROR to OV_UI_MIRROR */
+template<>
+inline OverlayImplBase* OverlayState::handle_from_to<
+        utils::OV_2D_TRUE_UI_MIRROR,
+        utils::OV_UI_MIRROR>(
+        OverlayImplBase* ov) {
+    OVASSERT(ov, "%s: ov is null", __FUNCTION__);
+    ALOGD_IF(DEBUG_OVERLAY, "FROM_STATE = %s TO_STATE = %s",
+            utils::getStateString(utils::OV_2D_TRUE_UI_MIRROR),
+            utils::getStateString(utils::OV_UI_MIRROR));
+
+    // Create new ovimpl based on new state
+    typedef StateTraits<utils::OV_UI_MIRROR> NewState;
+    OverlayImplBase* newov = new NewState::ovimpl;
+
+    //copy pipe2/rot2 (UIMirroringPipe)
+    newov->copyOvPipe(ov, utils::OV_PIPE2);
+    //close old pipes 0/1
+    ov->closePipe(utils::OV_PIPE0);
+    ov->closePipe(utils::OV_PIPE1);
+
+    //create new pipes 0/1
+    RotatorBase* rot0 = new NewState::rot0;
+    RotatorBase* rot1 = new NewState::rot1;
+
+    newov->initPipe(rot0, utils::OV_PIPE0);
+    newov->initPipe(rot1, utils::OV_PIPE1);
+
+    // All pipes are copied or deleted so no more need for previous ovimpl
+    delete ov;
+    ov = 0;
+    return newov;
+}
+
+/* Transition from OV_2D_VIDEO_ON_PANEL to OV_2D_TRUE_UI_MIRROR */
+template<>
+inline OverlayImplBase* OverlayState::handle_from_to<
+        utils::OV_2D_VIDEO_ON_PANEL,
+        utils::OV_2D_TRUE_UI_MIRROR>(
+        OverlayImplBase* ov) {
+    OVASSERT(ov, "%s: ov is null", __FUNCTION__);
+    ALOGE("TRUE MIRROR FROM_STATE = %s TO_STATE = %s",
+            utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL),
+            utils::getStateString(utils::OV_2D_TRUE_UI_MIRROR));
+
+    // Create new ovimpl based on new state
+    typedef StateTraits<utils::OV_2D_TRUE_UI_MIRROR> NewState;
+    OverlayImplBase* newov = new NewState::ovimpl;
+
+    //copy pipe0/rot0 (PrimaryVideo pipe)
+    newov->copyOvPipe(ov, utils::OV_PIPE0);
+    //close old pipes 1/2
+    ov->closePipe(utils::OV_PIPE1);
+    ov->closePipe(utils::OV_PIPE2);
+
+    //create new pipes 1/2
+    RotatorBase* rot1 = new NewState::rot1;
+    RotatorBase* rot2 = new NewState::rot2;
+
+    newov->initPipe(rot1, utils::OV_PIPE1);
+    newov->initPipe(rot2, utils::OV_PIPE2);
+
+    // All pipes are copied or deleted so no more need for previous ovimpl
+    delete ov;
+    ov = 0;
+    return newov;
+}
+
+/* Transition from OV_2D_TRUE_UI_MIRROR to OV_2D_VIDEO_ON_PANEL*/
+template<>
+inline OverlayImplBase* OverlayState::handle_from_to<
+        utils::OV_2D_TRUE_UI_MIRROR,
+        utils::OV_2D_VIDEO_ON_PANEL>(
+        OverlayImplBase* ov) {
+    OVASSERT(ov, "%s: ov is null", __FUNCTION__);
+    ALOGE("FROM_STATE = %s TO_STATE = %s",
+            utils::getStateString(utils::OV_2D_TRUE_UI_MIRROR),
+            utils::getStateString(utils::OV_2D_VIDEO_ON_PANEL));
+
+    // Create new ovimpl based on new state
+    typedef StateTraits<utils::OV_2D_VIDEO_ON_PANEL> NewState;
+    OverlayImplBase* newov = new NewState::ovimpl;
+
+    //copy pipe0/rot0 (Primary Video pipe)
+    newov->copyOvPipe(ov, utils::OV_PIPE0);
+    //close old pipes 1/2
+    ov->closePipe(utils::OV_PIPE1);
+    ov->closePipe(utils::OV_PIPE2);
+
+    //create new pipes 0/1
+    RotatorBase* rot1 = new NewState::rot1;
+    RotatorBase* rot2 = new NewState::rot2;
+
+    newov->initPipe(rot1, utils::OV_PIPE1);
+    newov->initPipe(rot2, utils::OV_PIPE2);
+
     // All pipes are copied or deleted so no more need for previous ovimpl
     delete ov;
     ov = 0;
