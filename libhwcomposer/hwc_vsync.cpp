@@ -90,7 +90,7 @@ static void *vsync_loop(void *param)
     hwc_procs* proc = (hwc_procs*)ctx->device.reserved_proc[0];
 
     do {
-        int hdmiconnected = ctx->mExtDisplay->getExternalDisplay();
+        int hdmiconnected = ctx->externalDisplay;
 
         // vsync for primary OR HDMI ?
         if(ctx->mExtDisplay->isHDMIConfigured() &&
