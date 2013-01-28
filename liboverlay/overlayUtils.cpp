@@ -143,7 +143,7 @@ int FrameBufferInfo::getHeight() const {
 
 bool FrameBufferInfo::supportTrueMirroring() const {
     char value[PROPERTY_VALUE_MAX] = {0};
-    property_get("hw.true_mirror", value, "0");
+    property_get("hw.trueMirrorSupported", value, "0");
     int trueMirroringSupported = atoi(value);
     return (trueMirroringSupported && mBorderFillSupported);
 }
