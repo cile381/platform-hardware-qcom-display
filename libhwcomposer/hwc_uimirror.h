@@ -46,7 +46,7 @@ class UIMirrorOverlay {
 
 inline void UIMirrorOverlay::reset() {
     sIsUiMirroringOn = false;
-    sState = ovutils::OV_CLOSED;
+    sState = ovutils::OV_FB;
 }
 
 }; //namespace qhwc
