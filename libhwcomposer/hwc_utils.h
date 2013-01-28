@@ -175,8 +175,6 @@ struct hwc_context_t {
     bool hdmi_pending;
     char  mHDMIEvent[512];
 
-    // Post-processing parameters
-    overlay::PPMetaData mPpParams[PP_MAX_VG_PIPES];
 
     // used for signalling the commit Ext Disp thread
     bool mExtCommit;
