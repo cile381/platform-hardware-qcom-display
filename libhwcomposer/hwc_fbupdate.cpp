@@ -63,8 +63,8 @@ bool FBUpdate::configure(hwc_context_t *ctx, hwc_layer_1_t *layer, int dpy)
         }
         ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
 
-        //Request an RGB pipe
-        ovutils::eDest dest = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, dpy);
+        //Request a VG pipe
+        ovutils::eDest dest = ov.nextPipe(ovutils::OV_MDP_PIPE_VG, dpy);
         if(dest == ovutils::OV_INVALID) { //None available
             return false;
         }
