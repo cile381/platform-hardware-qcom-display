@@ -116,7 +116,7 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         hwc_display_contents_1_t *list) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
 
-    if (LIKELY(list && list->numHwLayers > 1) &&
+    if (LIKELY(list && list->numHwLayers > 0) &&
         ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isActive) {
 
         uint32_t last = list->numHwLayers - 1;
