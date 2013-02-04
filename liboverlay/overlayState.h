@@ -763,6 +763,9 @@ inline OverlayImplBase* OverlayState::handle_from_to<
     newov->initPipe(rot0, utils::OV_PIPE0);
     newov->initPipe(rot1, utils::OV_PIPE1);
 
+    //copy pipe3/rot3 (FB)
+    newov->copyOvPipe(ov, utils::OV_PIPE3);
+
     // All pipes are copied or deleted so no more need for previous ovimpl
     delete ov;
     ov = 0;
@@ -796,6 +799,9 @@ inline OverlayImplBase* OverlayState::handle_from_to<
 
     newov->initPipe(rot0, utils::OV_PIPE0);
     newov->initPipe(rot1, utils::OV_PIPE1);
+
+    //copy pipe3/rot3 (FB)
+    newov->copyOvPipe(ov, utils::OV_PIPE3);
 
     // All pipes are copied or deleted so no more need for previous ovimpl
     delete ov;
@@ -831,6 +837,9 @@ inline OverlayImplBase* OverlayState::handle_from_to<
     newov->initPipe(rot1, utils::OV_PIPE1);
     newov->initPipe(rot2, utils::OV_PIPE2);
 
+    //copy pipe3/rot3 (FB)
+    newov->copyOvPipe(ov, utils::OV_PIPE3);
+
     // All pipes are copied or deleted so no more need for previous ovimpl
     delete ov;
     ov = 0;
@@ -864,6 +873,9 @@ inline OverlayImplBase* OverlayState::handle_from_to<
 
     newov->initPipe(rot1, utils::OV_PIPE1);
     newov->initPipe(rot2, utils::OV_PIPE2);
+
+    //copy pipe3/rot3 (FB)
+    newov->copyOvPipe(ov, utils::OV_PIPE3);
 
     // All pipes are copied or deleted so no more need for previous ovimpl
     delete ov;
