@@ -191,6 +191,10 @@ void setListStats(hwc_context_t *ctx,
         //We disregard FB being skip for now! so the else if
         } else if (isSkipLayer(&list->hwLayers[i])) {
             ctx->listStats[dpy].skipCount++;
+        } else if (UNLIKELY(isYuvBuffer(hnd))) {
+            int& yuvCount = ctx->listStats[dpy].yuvCount;
+            ctx->listStats[dpy].yuvIndices[yuvCount] = i;
+            yuvCount++;
         }
 
         if(!ctx->listStats[dpy].needsAlphaScale)
@@ -200,14 +204,19 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].yuvCount++;
             ctx->listStats[dpy].yuvIndex = i;
         }
+
         if (UNLIKELY(isScreenRecordTarget(hnd))) {
             ctx->listStats[dpy].screenRecordLayerIndex = i;
             ctx->listStats[dpy].numAppLayers--;
         }
+
         if(UNLIKELY(isExtOnly(hnd))){
             ctx->listStats[dpy].numAppLayers--;
             ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
+
+        if(!ctx->listStats[dpy].needsAlphaScale)
+            ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
     }
 }
 
