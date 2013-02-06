@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2012, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -10,7 +10,7 @@
  *       copyright notice, this list of conditions and the following
  *       disclaimer in the documentation and/or other materials provided
  *       with the distribution.
- *     * Neither the name of The Linux Foundation nor the names of its
+ *     * Neither the name of Code Aurora Forum, Inc. nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
  *
@@ -59,8 +59,13 @@ public:
     virtual android::status_t setHPDStatus(int enable);
     virtual android::status_t setResolutionMode(int resMode);
     virtual android::status_t setActionSafeDimension(int w, int h);
-    void setHwcContext(hwc_context_t *hwcCtx);
 
+    // Secure Intent Hooks
+    virtual android::status_t setOpenSecureStart();
+    virtual android::status_t setOpenSecureEnd();
+    virtual android::status_t setCloseSecureStart();
+    virtual android::status_t setCloseSecureEnd();
+    void setHwcContext(hwc_context_t *hwcCtx);
 private:
     static HWComposerService *sHwcService;
     hwc_context_t *mHwcContext;
