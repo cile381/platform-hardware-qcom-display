@@ -83,6 +83,7 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
 
     if(ctx->mSecureConfig == true) {
         // This will tear down External Display Device.
+        ctx->mOverlay->setState(ovutils::OV_CLOSED);
         return 0;
     }
 
