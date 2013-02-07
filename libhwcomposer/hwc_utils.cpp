@@ -180,6 +180,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].skipCount = 0;
     ctx->listStats[dpy].screenRecordLayerIndex = -1;
     ctx->listStats[dpy].needsAlphaScale = false;
+    ctx->listStats[dpy].extOnlyLayerIndex = -1;
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
@@ -202,6 +203,10 @@ void setListStats(hwc_context_t *ctx,
         if (UNLIKELY(isScreenRecordTarget(hnd))) {
             ctx->listStats[dpy].screenRecordLayerIndex = i;
             ctx->listStats[dpy].numAppLayers--;
+        }
+        if(UNLIKELY(isExtOnly(hnd))){
+            ctx->listStats[dpy].numAppLayers--;
+            ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
     }
 }
@@ -405,6 +410,35 @@ int hwc_record_screen(hwc_context_t *ctx, hwc_display_contents_1_t* list,
     if (copybitLayerCount) {
         ctx->mScreenRecordCopyBit->finish();
     }
+    return 0;
+}
+
+// Sets up the ext only layer
+int hwc_prepare_ext_only(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+    int numAppLayers = ctx->listStats[HWC_DISPLAY_EXTERNAL].numAppLayers;
+    int extOnlyLayerIndex =
+                        ctx->listStats[HWC_DISPLAY_EXTERNAL].extOnlyLayerIndex;
+
+    if(!ctx) {
+        ALOGE("%s: ctx is NULL", __FUNCTION__);
+        return -1;
+    }
+    if(extOnlyLayerIndex == -1)
+        return -1;;
+
+    // Mark all layers as HWC_OVERLAY, so that SF does not draw that
+    for(size_t i = 0 ;i < (list->numHwLayers-1); i++) {
+        hwc_layer_1_t *layer = &list->hwLayers[i];
+        layer->compositionType = HWC_OVERLAY;
+    }
+    // Configure ext only layer thru mFBUpdate
+    hwc_layer_1_t *extOnlyLayer = &list->hwLayers[extOnlyLayerIndex];
+    // Set the display position to full screen
+    extOnlyLayer->displayFrame.top = 0;
+    extOnlyLayer->displayFrame.left = 0;
+    extOnlyLayer->displayFrame.right = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].xres;
+    extOnlyLayer->displayFrame.bottom = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].yres;
+    ctx->mFBUpdate[HWC_DISPLAY_EXTERNAL]->prepare(ctx, extOnlyLayer);
     return 0;
 }
 
