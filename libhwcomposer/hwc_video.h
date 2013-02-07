@@ -90,7 +90,7 @@ inline void VideoOverlay::reset() {
     sIsYuvLayerSkip = false;
     sCCLayerIndex = -1;
     sIsModeOn = false;
-    sState = ovutils::OV_CLOSED;
+    sState = ovutils::OV_FB;
     sLayerS3DFormat = 0;
 }
 
