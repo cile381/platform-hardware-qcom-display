@@ -27,10 +27,6 @@
 
 struct private_handle_t;
 
-namespace overlay {
-class Overlay;
-}
-
 enum {
     // flag to indicate we'll post this buffer
     PRIV_USAGE_LOCKED_FOR_POST = 0x80000000,
@@ -55,7 +51,6 @@ struct private_module_t {
     uint32_t swapInterval;
     uint32_t currentOffset;
     bool fbPostDone;
-    overlay::Overlay *overlay;
     pthread_mutex_t fbPostLock;
     //Condition to inform HWC that fb_post called
     pthread_cond_t fbPostCond;

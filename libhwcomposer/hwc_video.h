@@ -75,7 +75,7 @@ inline void VideoOverlay::reset() {
     sIsYuvLayerSkip = false;
     sCCLayerIndex = -1;
     sIsModeOn = false;
-    sState = ovutils::OV_FB;
+    sState = ovutils::OV_CLOSED;
 }
 
 inline bool VideoOverlay::isModeOn() {

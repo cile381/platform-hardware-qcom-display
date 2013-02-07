@@ -74,7 +74,7 @@ inline void ExtOnly::reset() {
     sExtIndex = -1;
     sIsExtBlock = false;
     sIsModeOn = false;
-    sState = ovutils::OV_FB;
+    sState = ovutils::OV_CLOSED;
 }
 
 }; //namespace qhwc
