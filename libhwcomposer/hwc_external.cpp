@@ -452,25 +452,19 @@ void ExternalDisplay::processUEventOffline(const char *str) {
     const char *s1 = str + (strlen(str)-strlen(DEVICE_NODE_FB1));
     // check if it is for FB1
     if(strncmp(s1,DEVICE_NODE_FB1, strlen(DEVICE_NODE_FB1))== 0) {
-        if(mExternalDisplay == EXTERN_DISPLAY_FB1){
-            if(isHDMIConfigured()) {
-                enableHDMIVsync(EXTERN_DISPLAY_NONE);
-                closeFrameBuffer();
-                resetInfo();
-            } else {
-                closeFrameBuffer();
-            }
-            setExternalDisplay(EXTERN_DISPLAY_NONE);
-            triggerRefresh();
+        if(isHDMIConfigured()) {
+            enableHDMIVsync(EXTERN_DISPLAY_NONE);
+            closeFrameBuffer();
+            resetInfo();
+        } else {
+            closeFrameBuffer();
         }
     }
     else if(strncmp(s1, DEVICE_NODE_FB2, strlen(DEVICE_NODE_FB2)) == 0) {
-        if(mExternalDisplay == EXTERN_DISPLAY_FB2){
-            closeFrameBuffer();
-            setExternalDisplay(EXTERN_DISPLAY_NONE);
-            triggerRefresh();
-        }
+        closeFrameBuffer();
     }
+    setExternalDisplay(EXTERN_DISPLAY_NONE);
+    triggerRefresh();
 }
 
 void ExternalDisplay::configureWFDDisplay(int fbIndex) {
