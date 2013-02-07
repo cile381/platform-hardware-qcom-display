@@ -33,6 +33,7 @@
 #include "hwc_external.h"
 #include "hwc_mdpcomp.h"
 #include "hwc_extonly.h"
+#include "qcom_ui.h"
 
 using namespace qhwc;
 
@@ -109,6 +110,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
                  // fail in non-overlay targets.
             ctx->overlayInUse = false;
         }
+
+        qdutils::CBUtils::checkforGPULayer(list);
     }
 
     return 0;
