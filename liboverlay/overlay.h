@@ -45,18 +45,18 @@ public:
 
     /* Following is the same as the pure virt interface in ov impl  */
 
-    bool setSource(const utils::PipeArgs args,
-            utils::eDest dest);
+    bool setSource(const utils::PipeArgs args[utils::MAX_PIPES],
+            utils::eDest dest = utils::OV_PIPE_ALL);
     bool setCrop(const utils::Dim& d,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
     bool setTransform(const int orientation,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
     bool setPosition(const utils::Dim& dim,
             utils::eDest dest = utils::OV_PIPE_ALL);
     bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
 
     bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
 
     void dump() const;
 

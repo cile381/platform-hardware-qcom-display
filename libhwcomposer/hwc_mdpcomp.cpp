@@ -265,7 +265,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
         }
 
         // Determine pipe to set based on pipe index
-        ovutils::eDest dest = ovutils::OV_PIPE0;
+        ovutils::eDest dest = ovutils::OV_PIPE_ALL;
         if (nPipeIndex == 0) {
             dest = ovutils::OV_PIPE0;
         } else if (nPipeIndex == 1) {
@@ -328,7 +328,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
                                isFG,
                                ovutils::ROT_FLAGS_NONE);
 
-        if (!ov.setSource(parg, dest)) {
+        ovutils::PipeArgs pargs[MAX_PIPES] = { parg, parg, parg };
+        if (!ov.setSource(pargs, dest)) {
             ALOGE("%s: setSource failed", __FUNCTION__);
             return -1;
         }

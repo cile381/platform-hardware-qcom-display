@@ -120,7 +120,8 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_FLAGS_NONE);
-    ov.setSource(parg, ovutils::OV_PIPE0);
+    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
+    ov.setSource(pargs, ovutils::OV_PIPE0);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h
@@ -198,8 +199,10 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_1,
             isFgFlag,
             ovutils::ROT_FLAGS_NONE);
+    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
+
     // Use pipe 1, pipe 0 is used for primary video
-    ov.setSource(parg, ovutils::OV_PIPE1);
+    ov.setSource(pargs, ovutils::OV_PIPE1);
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     // x,y,w,h

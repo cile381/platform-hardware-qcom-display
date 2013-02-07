@@ -80,7 +80,7 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
             unsigned int size = hnd->size/m->numBuffers;
             ovutils::Whf info(alignedW, hnd->height, hnd->format, size);
             // Determine the RGB pipe for UI depending on the state
-            ovutils::eDest dest = ovutils::OV_PIPE0;
+            ovutils::eDest dest = ovutils::OV_PIPE_ALL;
             switch (sState) {
                 case ovutils::OV_2D_TRUE_UI_MIRROR:
                 case ovutils::OV_UI_MIRROR:
@@ -110,7 +110,8 @@ bool UIMirrorOverlay::configure(hwc_context_t *ctx, hwc_layer_list_t *list)
                     ovutils::ZORDER_0,
                     ovutils::IS_FG_SET,
                     ovutils::ROT_0_ENABLED);
-            ov.setSource(parg, dest);
+            ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
+            ov.setSource(pargs, dest);
 
             // x,y,w,h
             ovutils::Dim dcrop(0, 0, m->info.xres, m->info.yres);

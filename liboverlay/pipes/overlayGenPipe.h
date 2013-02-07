@@ -204,7 +204,6 @@ inline bool GenericPipe<PANEL>::setSource(
 
     mRot->setSource(newargs.whf);
     mRot->setFlags(newargs.mdpFlags);
-    mCtrlData.data.setFlags(newargs.mdpFlags);
     return mCtrlData.ctrl.setSource(newargs);
 }
 
