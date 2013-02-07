@@ -127,9 +127,6 @@ public:
     /* get overlay id in the mdp struct */
     int getPipeId() const;
 
-    /* sets flags specified by user */
-    void setFlags(int mdpFlags);
-
     /* queue buffer to the overlay */
     bool queueBuffer(int fd, uint32_t offset);
 
@@ -220,10 +217,6 @@ inline Data::~Data() { close(); }
 inline void Data::setPipeId(int id) { mMdp.setPipeId(id); }
 
 inline int Data::getPipeId() const { return mMdp.getPipeId(); }
-
-inline void Data::setFlags(int mdpFlags) {
-    mMdp.setFlags(mdpFlags);
-}
 
 inline bool Data::init(uint32_t fbnum) {
     if(!mMdp.init(fbnum)) {

@@ -56,8 +56,7 @@ public:
      * */
     virtual bool init(RotatorBase* rot0,
             RotatorBase* rot1,
-            RotatorBase* rot2,
-            RotatorBase* rot3) = 0;
+            RotatorBase* rot2) = 0;
 
     /* Close all pipes
      * To close just one pipe, use closePipe()
@@ -67,28 +66,28 @@ public:
     /*
      * Commit changes to the overlay
      * */
-    virtual bool commit(utils::eDest dest) = 0;
+    virtual bool commit(utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Queue buffer with fd from an offset*/
     virtual bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest) = 0;
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Crop existing destination using Dim coordinates */
     virtual bool setCrop(const utils::Dim& d,
-            utils::eDest dest) = 0;
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Set new position using Dim */
     virtual bool setPosition(const utils::Dim& dim,
-            utils::eDest dest) = 0;
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Set parameters - usually needed for Rotator, but would
      * be passed down the stack as well */
     virtual bool setTransform(const utils::eTransform& param,
-            utils::eDest dest) = 0;
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Set new source including orientation */
-    virtual bool setSource(const utils::PipeArgs args,
-            utils::eDest dest) = 0;
+    virtual bool setSource(const utils::PipeArgs[utils::MAX_PIPES],
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Dump underlying state */
     virtual void dump() const = 0;
@@ -112,13 +111,12 @@ public:
 * Each pipe is not specific to a display (primary/external). The order in the
 * template params, will setup the priorities of the pipes.
 * */
-template <class P0, class P1=NullPipe, class P2=NullPipe, class P3=NullPipe>
+template <class P0, class P1=NullPipe, class P2=NullPipe>
 class OverlayImpl : public OverlayImplBase {
 public:
     typedef P0 pipe0;
     typedef P1 pipe1;
     typedef P2 pipe2;
-    typedef P3 pipe3;
 
     /* ctor */
     OverlayImpl();
@@ -135,27 +133,25 @@ public:
 
     virtual bool init(RotatorBase* rot0,
             RotatorBase* rot1,
-            RotatorBase* rot2,
-            RotatorBase* rot3);
+            RotatorBase* rot2);
     virtual bool close();
     virtual bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setCrop(const utils::Dim& d,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setPosition(const utils::Dim& dim,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setTransform(const utils::eTransform& param,
-            utils::eDest dest);
-    virtual bool setSource(const utils::PipeArgs args,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
+    virtual bool setSource(const utils::PipeArgs[utils::MAX_PIPES],
+            utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest);
+            utils::eDest dest = utils::OV_PIPE_ALL);
     virtual void dump() const;
 
 private:
     P0* mPipe0;
     P1* mPipe1;
     P2* mPipe2;
-    P3* mPipe3;
     // More Px here in the future as needed
 
     /*  */
@@ -167,7 +163,6 @@ private:
     RotatorBase* mRotP0;
     RotatorBase* mRotP1;
     RotatorBase* mRotP2;
-    RotatorBase* mRotP3;
 };
 
 
@@ -176,26 +171,26 @@ private:
 
 /**** OverlayImpl ****/
 
-template <class P0, class P1, class P2, class P3>
-OverlayImpl<P0, P1, P2, P3>::OverlayImpl() :
-    mPipe0(0), mPipe1(0), mPipe2(0), mPipe3(0),
-    mRotP0(0), mRotP1(0), mRotP2(0), mRotP3(0)
+template <class P0, class P1, class P2>
+OverlayImpl<P0, P1, P2>::OverlayImpl() :
+    mPipe0(0), mPipe1(0), mPipe2(0),
+    mRotP0(0), mRotP1(0), mRotP2(0)
 {
     //Do not create a pipe here.
     //Either initPipe can create a pipe OR
     //copyOvPipe can assign a pipe.
 }
 
-template <class P0, class P1, class P2, class P3>
-OverlayImpl<P0, P1, P2, P3>::~OverlayImpl()
+template <class P0, class P1, class P2>
+OverlayImpl<P0, P1, P2>::~OverlayImpl()
 {
     //Do not delete pipes.
     //closePipe will close and delete.
 }
 
 /* Init only one pipe/rot pair per call */
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::initPipe(RotatorBase* rot, utils::eDest dest)
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::initPipe(RotatorBase* rot, utils::eDest dest)
 {
     OVASSERT(rot, "%s: OverlayImpl rot is null", __FUNCTION__);
     OVASSERT(utils::isValidDest(dest), "%s: OverlayImpl invalid dest=%d",
@@ -266,34 +261,13 @@ bool OverlayImpl<P0, P1, P2, P3>::initPipe(RotatorBase* rot, utils::eDest dest)
         return ret;
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        ALOGE_IF(DEBUG_OVERLAY, "init pipe3");
-
-        mRotP3 = rot;
-        ret = mRotP3->init();
-        if(!ret) {
-            ALOGE("%s: OverlayImpl rot3 failed to init", __FUNCTION__);
-            return false;
-        }
-
-        mPipe3 = new P3();
-        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
-        ret = mPipe3->init(rot);
-        if(!ret) {
-            ALOGE("%s: OverlayImpl pipe3 failed to init", __FUNCTION__);
-            return false;
-        }
-
-        return ret;
-    }
-
     // Should have returned by here
     return false;
 }
 
 /* Close pipe/rot for all specified dest */
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::closePipe(utils::eDest dest)
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::closePipe(utils::eDest dest)
 {
     OVASSERT(utils::isValidDest(dest), "%s: OverlayImpl invalid dest=%d",
             __FUNCTION__, dest);
@@ -358,40 +332,19 @@ bool OverlayImpl<P0, P1, P2, P3>::closePipe(utils::eDest dest)
         mRotP2 = 0;
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        // Close pipe3
-        OVASSERT(mPipe3, "%s: OverlayImpl pipe3 is null", __FUNCTION__);
-        ALOGE_IF(DEBUG_OVERLAY, "Close pipe3");
-        if (!mPipe3->close()) {
-            ALOGE("%s: OverlayImpl failed to close pipe3", __FUNCTION__);
-            return false;
-        }
-        delete mPipe3;
-        mPipe3 = 0;
-
-        // Close the rotator for pipe3
-        OVASSERT(mRotP3, "%s: OverlayImpl rot3 is null", __FUNCTION__);
-        if (!mRotP3->close()) {
-            ALOGE("%s: OverlayImpl failed to close rot for pipe3", __FUNCTION__);
-        }
-        delete mRotP3;
-        mRotP3 = 0;
-    }
-
     return true;
 }
 
 /* Copy pipe/rot from ov for all specified dest */
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::copyOvPipe(OverlayImplBase* ov,
         utils::eDest dest)
 {
     OVASSERT(ov, "%s: OverlayImpl ov is null", __FUNCTION__);
     OVASSERT(utils::isValidDest(dest), "%s: OverlayImpl invalid dest=%d",
             __FUNCTION__, dest);
 
-    OverlayImpl<P0, P1, P2, P3>* ovimpl =
-            static_cast<OverlayImpl<P0, P1, P2, P3>*>(ov);
+    OverlayImpl<P0, P1, P2>* ovimpl = static_cast<OverlayImpl<P0, P1, P2>*>(ov);
 
     if (utils::OV_PIPE0 & dest) {
         mPipe0 = ovimpl->mPipe0;
@@ -414,22 +367,14 @@ bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
         ovimpl->mRotP2 = 0;
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        mPipe3 = ovimpl->mPipe3;
-        mRotP3 = ovimpl->mRotP3;
-        ovimpl->mPipe3 = 0;
-        ovimpl->mRotP3 = 0;
-    }
-
     return true;
 }
 
 /* Init all pipes/rot */
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::init(RotatorBase* rot0,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::init(RotatorBase* rot0,
         RotatorBase* rot1,
-        RotatorBase* rot2,
-        RotatorBase* rot3)
+        RotatorBase* rot2)
 {
     if (!this->initPipe(rot0, utils::OV_PIPE0)) {
         if (!this->close()) {
@@ -452,18 +397,12 @@ bool OverlayImpl<P0, P1, P2, P3>::init(RotatorBase* rot0,
         return false;
     }
 
-    if (!this->initPipe(rot3, utils::OV_PIPE3)) {
-        if (!this->close()) {
-            ALOGE("%s: failed to close at least one pipe", __FUNCTION__);
-        }
-        return false;
-    }
     return true;
 }
 
 /* Close all pipes/rot */
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::close()
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::close()
 {
     if (!this->closePipe(utils::OV_PIPE_ALL)) {
         return false;
@@ -472,12 +411,12 @@ bool OverlayImpl<P0, P1, P2, P3>::close()
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::commit(utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->commit()) {
@@ -500,22 +439,15 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->commit()) {
-            ALOGE("OverlayImpl p3 failed to commit");
-            return false;
-        }
-    }
-
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest)
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::setCrop(const utils::Dim& d, utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->setCrop(d)) {
@@ -538,22 +470,16 @@ bool OverlayImpl<P0, P1, P2, P3>::setCrop(const utils::Dim& d, utils::eDest dest
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->setCrop(d)) {
-            ALOGE("OverlayImpl p3 failed to crop");
-            return false;
-        }
-    }
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::setPosition(const utils::Dim& d,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->setPosition(d)) {
@@ -576,22 +502,16 @@ bool OverlayImpl<P0, P1, P2, P3>::setPosition(const utils::Dim& d,
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->setPosition(d)) {
-            ALOGE("OverlayImpl p3 failed to setpos");
-            return false;
-        }
-    }
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::setTransform(const utils::eTransform& param,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->setTransform(param)) {
@@ -614,61 +534,49 @@ bool OverlayImpl<P0, P1, P2, P3>::setTransform(const utils::eTransform& param,
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->setTransform(param)) {
-            ALOGE("OverlayImpl p3 failed to setparam");
-            return false;
-        }
-    }
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::setSource(
-        const utils::PipeArgs args,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::setSource(
+        const utils::PipeArgs args[utils::MAX_PIPES],
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
-        if(!mPipe0->setSource(args)) {
+        if(!mPipe0->setSource(args[0])) {
             ALOGE("OverlayImpl p0 failed to setsrc");
             return false;
         }
     }
 
     if (utils::OV_PIPE1 & dest) {
-        if(!mPipe1->setSource(args)) {
+        if(!mPipe1->setSource(args[1])) {
             ALOGE("OverlayImpl p1 failed to setsrc");
             return false;
         }
     }
 
     if (utils::OV_PIPE2 & dest) {
-        if(!mPipe2->setSource(args)) {
+        if(!mPipe2->setSource(args[2])) {
             ALOGE("OverlayImpl p2 failed to setsrc");
             return false;
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->setSource(args)) {
-            ALOGE("OverlayImpl p3 failed to setsrc");
-            return false;
-        }
-    }
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
+template <class P0, class P1, class P2>
+bool OverlayImpl<P0, P1, P2>::queueBuffer(int fd, uint32_t offset,
         utils::eDest dest)
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
         if(!mPipe0->queueBuffer(fd, offset)) {
@@ -691,21 +599,15 @@ bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
         }
     }
 
-    if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->queueBuffer(fd, offset)) {
-            ALOGE("OverlayImpl p3 failed to queueBuffer");
-            return false;
-        }
-    }
     return true;
 }
 
-template <class P0, class P1, class P2, class P3>
-void OverlayImpl<P0, P1, P2, P3>::dump() const
+template <class P0, class P1, class P2>
+void OverlayImpl<P0, P1, P2>::dump() const
 {
-    OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
-            "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
-            __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
     ALOGE("== Dump OverlayImpl dump start ROT p0 ==");
     mRotP0->dump();
     ALOGE("== Dump OverlayImpl dump end ROT p0 ==");
@@ -724,9 +626,6 @@ void OverlayImpl<P0, P1, P2, P3>::dump() const
     ALOGE("== Dump OverlayImpl dump start p2 ==");
     mPipe2->dump();
     ALOGE("== Dump OverlayImpl dump end p2 ==");
-    ALOGE("== Dump OverlayImpl dump start p3 ==");
-    mPipe3->dump();
-    ALOGE("== Dump OverlayImpl dump end p3 ==");
 }
 
 
