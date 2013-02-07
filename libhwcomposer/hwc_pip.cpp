@@ -143,8 +143,7 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_FLAGS_NONE);
-    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
-    ov.setSource(pargs, ovutils::OV_PIPE0);
+    ov.setSource(parg, ovutils::OV_PIPE0);
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
         /* Done with setting HSIC values. Clear the
@@ -253,10 +252,9 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
             ovutils::ZORDER_1,
             isFgFlag,
             ovutils::ROT_DOWNSCALE_ENABLED);
-    ovutils::PipeArgs pargs[ovutils::MAX_PIPES] = { parg, parg, parg };
 
     // Use pipe 1, pipe 0 is used for primary video
-    ov.setSource(pargs, ovutils::OV_PIPE1);
+    ov.setSource(parg, ovutils::OV_PIPE1);
 
     if(metadata && ctx->mPpParams[VIDEO_LAYER_1].isValid){
         /* Done with setting HSIC values. Clear the
