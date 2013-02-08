@@ -49,24 +49,13 @@ namespace qhwc {
 
 class ExternalDisplay
 {
-    //Type of external display -  OFF, HDMI, WFD
-    enum external_display_type {
-        EXT_TYPE_NONE,
-        EXT_TYPE_HDMI,
-        EXT_TYPE_WIFI
-    };
-
-    // Mirroring state
-    enum external_mirroring_state {
-        EXT_MIRRORING_OFF,
-        EXT_MIRRORING_ON,
-    };
     public:
     ExternalDisplay(hwc_context_t* ctx);
     ~ExternalDisplay();
     int getModeCount() const;
     void getEDIDModes(int *out) const;
     int getExternalDisplay() const;
+    bool isExternalDispPending() const;
     void setExternalDisplay(int connected);
     bool commit();
     int enableHDMIVsync(int enable);
@@ -75,7 +64,9 @@ class ExternalDisplay
     void setActionSafeDimension(int w, int h);
     void processUEventOnline(const char *str);
     void processUEventOffline(const char *str);
+    void configureExtDisplay();
     bool isHDMIConfigured();
+    bool isExternalDispPending() { return mExternalPending; }
 
     private:
     bool readResolution();
@@ -96,8 +87,10 @@ class ExternalDisplay
     int mFd;
     int mCurrentMode;
     int mExternalDisplay;
+    int mExternalPending;
     int mResolutionMode;
     char mEDIDs[128];
+    char mUEventStr[128];
     int mEDIDModes[64];
     int mModeCount;
     hwc_context_t *mHwcContext;
