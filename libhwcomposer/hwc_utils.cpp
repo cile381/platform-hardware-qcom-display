@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, The Linux Foundation All rights reserved.
+ * Copyright (C) 2012-2013, The Linux Foundation All rights reserved.
+ *
+ * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +18,7 @@
  */
 
 #include <sys/ioctl.h>
+#include <binder/IServiceManager.h>
 #include <EGL/egl.h>
 #include <cutils/properties.h>
 #include <gralloc_priv.h>
@@ -25,7 +28,12 @@
 #include "hwc_mdpcomp.h"
 #include "mdp_version.h"
 #include "external.h"
+#include "hwc_qclient.h"
 #include "QService.h"
+
+using namespace qClient;
+using namespace qService;
+using namespace android;
 
 namespace qhwc {
 
@@ -55,7 +63,6 @@ void initContext(hwc_context_t *ctx)
     openFramebufferDevice(ctx);
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
-    ctx->mQService = qService::QService::getInstance(ctx);
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
@@ -66,6 +73,14 @@ void initContext(hwc_context_t *ctx)
     pthread_mutex_init(&(ctx->vstate.lock), NULL);
     pthread_cond_init(&(ctx->vstate.cond), NULL);
     ctx->vstate.enable = false;
+
+    //Right now hwc starts the service but anybody could do it, or it could be
+    //independent process as well.
+    QService::init();
+    sp<IQClient> client = new QClient(ctx);
+    interface_cast<IQService>(
+            defaultServiceManager()->getService(
+            String16("display.qservice")))->connect(client);
 
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);

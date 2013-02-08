@@ -7,8 +7,7 @@ LOCAL_MODULE_TAGS             := optional
 LOCAL_C_INCLUDES              := $(common_includes) $(kernel_includes)
 LOCAL_SHARED_LIBRARIES        := $(common_libs) libEGL liboverlay libgenlock \
                                  libexternal libqdutils libhardware_legacy \
-                                 libdl libmemalloc libqservice
-
+                                 libdl libmemalloc libqservice libbinder
 LOCAL_CFLAGS                  := $(common_flags) -DLOG_TAG=\"hwcomposer\"
 LOCAL_ADDITIONAL_DEPENDENCIES := $(common_deps)
 LOCAL_SRC_FILES               := hwc.cpp          \
@@ -18,5 +17,6 @@ LOCAL_SRC_FILES               := hwc.cpp          \
                                  hwc_vsync.cpp    \
                                  hwc_fbupdate.cpp \
                                  hwc_mdpcomp.cpp  \
+                                 hwc_qclient.cpp
 
 include $(BUILD_SHARED_LIBRARY)
