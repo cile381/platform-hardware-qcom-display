@@ -184,6 +184,7 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
                 if ((metadata->operation & PP_PARAM_INTERLACED) &&
                                               metadata->interlaced) {
                    //TODO update above condition for 3D vidos
+                } else if(yuvSecure){
                 } else {
                    isYuvLayerSkip = true;
                 }
