@@ -38,6 +38,7 @@ public:
     void getEDIDModes(int *out) const;
     void setExternalDisplay(bool connected, int extFbNum = 0);
     bool isExternalConnected() { return mConnected;};
+    void  setExtDpyNum(int extDpyNum) { mExtDpyNum = extDpyNum;};
     bool post();
     void setHPD(uint32_t startEnd);
     void setEDIDMode(int resMode);
@@ -82,6 +83,7 @@ private:
     fb_var_screeninfo mVInfo;
     int mHdmiFbNum;
     int mWfdFbNum;
+    int mExtDpyNum;
 };
 
 }; //qhwc

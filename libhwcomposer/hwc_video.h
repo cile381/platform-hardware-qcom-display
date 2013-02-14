@@ -45,12 +45,12 @@ private:
     //Marks layer flags if this feature is used
     static void markFlags(hwc_layer_1_t *yuvLayer);
     //Flags if this feature is on.
-    static bool sIsModeOn[HWC_NUM_DISPLAY_TYPES];
-    static ovutils::eDest sDest[HWC_NUM_DISPLAY_TYPES];
+    static bool sIsModeOn[HWC_NUM_DISPLAY_TYPES+1];
+    static ovutils::eDest sDest[HWC_NUM_DISPLAY_TYPES+1];
 };
 
 inline void VideoOverlay::reset() {
-    for(uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+    for(uint32_t i = 0; i <= HWC_NUM_DISPLAY_TYPES; i++) {
         sIsModeOn[i] = false;
         sDest[i] = ovutils::OV_INVALID;
     }
