@@ -44,6 +44,7 @@ enum {
     GET_EXT_DISPLAY_RESOLUTION_MODES,
     GET_EXT_DISPLAY_RESOLUTION_MODE_COUNT,
     SET_PP_PARAMS,
+    SET_PQCSTATE
 };
 
 class IHWComposer : public android::IInterface
@@ -66,6 +67,7 @@ public:
     virtual android::status_t setCloseSecureEnd() = 0;
     virtual android::status_t setPPParams(qhwc::VideoPPData pParams,
                                 qhwc::PP_Video_Layer_Type numVideoLayer) = 0;
+    virtual android::status_t setPQCState(int value) = 0;
 };
 
 // ----------------------------------------------------------------------------

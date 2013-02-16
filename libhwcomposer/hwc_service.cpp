@@ -191,6 +191,28 @@ status_t HWComposerService::setPPParams(qhwc::VideoPPData pParams,
     return NO_ERROR;
 }
 
+status_t HWComposerService::setPQCState(int value) {
+     if((value == qhwc::PQC_START) || (value == qhwc::PQC_STOP)) {
+        mHwcContext->mPQCState = value;
+        //Invalidate
+        hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+        if(!proc) {
+            ALOGE("%s: HWC proc not registered", __FUNCTION__);
+            return false;
+        } else {
+            /* Trigger redraw */
+            ALOGE("%s: HWC Invalidate!!", __FUNCTION__);
+            proc->invalidate(proc);
+            return true;
+        }
+    }
+    else{
+        ALOGE("invalid Value : %d",value);
+        return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
 HWComposerService* HWComposerService::getInstance()
 {
     if(!sHwcService) {
@@ -211,4 +233,5 @@ void HWComposerService::setHwcContext(hwc_context_t *hwcCtx) {
         mHwcContext = hwcCtx;
     }
 }
+
 }

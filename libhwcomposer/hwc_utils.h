@@ -71,6 +71,13 @@ enum {
     HWC_LAYER_RESERVED_1 = 0x00000008
 };
 
+/* PictureQualityControlStatus */
+enum PQCStatus {
+    PQC_START = 0,
+    PQC_STOP = 1,
+    PQC_CLOSEPIPES = 2,
+    PQC_INPROGRESS = 3
+};
 
 // -----------------------------------------------------------------------------
 // Utility functions - implemented in hwc_utils.cpp
@@ -93,6 +100,8 @@ void wait4CommitSignal(hwc_context_t* ctx);
 
 // Waits for the commit to finish on ext display
 void wait4ExtCommitDone(hwc_context_t* ctx);
+
+int commitOnPrimary(hwc_context_t* ctx);
 
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_t* l) {
@@ -149,6 +158,7 @@ inline void getLayerResolution(const hwc_layer_t* layer,
     width = displayFrame.right - displayFrame.left;
     height = displayFrame.bottom - displayFrame.top;
 }
+
 }; //qhwc namespace
 
 struct vsync_state {
@@ -200,13 +210,16 @@ struct hwc_context_t {
     // Post-processing parameters
     qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
 
+    // To Stop and Start FrameWork Updates on Display
+    int mPQCState;
+
     // used for signalling the commit Ext Disp thread
     bool mExtCommit;
     pthread_mutex_t mExtCommitLock;
     pthread_cond_t mExtCommitCond;
 
     // used for signalling the composition thread
-    // from the       extDispCommit thread
+    // from the extDispCommit thread
     bool mExtCommitDone;
     pthread_mutex_t mExtCommitDoneLock;
     pthread_cond_t mExtCommitDoneCond;
