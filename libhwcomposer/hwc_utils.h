@@ -92,6 +92,7 @@ struct ListStats {
     int extOnlyLayerIndex;
     int yuvIndices[MAX_NUM_LAYERS];
     bool needsAlphaScale;
+    bool isDisplayAnimating;
 };
 
 struct LayerProp {
@@ -259,6 +260,8 @@ struct hwc_context_t {
     qhwc::LayerProp *layerProp[HWC_NUM_DISPLAY_TYPES+1];
     qhwc::MDPComp *mMDPComp;
 
+
+    int deviceOrientation;
     //Securing in progress indicator
     bool mSecuring;
     //External Display configuring progress indicator

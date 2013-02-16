@@ -29,6 +29,9 @@ namespace ovutils = overlay::utils;
 //Static Members
 bool VideoOverlay::sIsModeOn[] = {false};
 ovutils::eDest VideoOverlay::sDest[] = {ovutils::OV_INVALID};
+ovutils::Dim VideoOverlay::sPrevPosition;
+ovutils::Dim VideoOverlay::sPrevCrop;
+int VideoOverlay::sPrevTransform = 0;
 
 //Cache stats, figure out the state, config overlay
 bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
@@ -51,6 +54,17 @@ bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     }
 
     if(yuvIndex == -1 || ctx->listStats[dpy].yuvCount != 1) {
+        // reset the stale destination values
+        ovutils::Dim d(0,0,0,0);
+        sPrevCrop = d;
+        sPrevPosition = d;
+        sPrevTransform = 0;
+        return false;
+    }
+
+    if(isSkipLayer(&list->hwLayers[yuvIndex]) &&
+                                (dpy == HWC_DISPLAY_PRIMARY)) {
+        //Skip layer on primary, return
         return false;
     }
 
@@ -119,7 +133,11 @@ bool VideoOverlay::configure(hwc_context_t *ctx, int dpy,
     }
 
     ovutils::eIsFg isFgFlag = ovutils::IS_FG_OFF;
-    if (ctx->listStats[dpy].numAppLayers == 1) {
+    bool setIsFG = false;
+    if (ctx->deviceOrientation && ctx->listStats[dpy].isDisplayAnimating && dpy)
+        setIsFG = true;
+
+    if (ctx->listStats[dpy].numAppLayers == 1 || setIsFG) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
@@ -149,32 +167,66 @@ bool VideoOverlay::configure(hwc_context_t *ctx, int dpy,
     const int fbWidth = ctx->dpyAttr[dpy].xres;
     const int fbHeight = ctx->dpyAttr[dpy].yres;
 
-    if( displayFrame.left < 0 ||
+    if(dpy == HWC_DISPLAY_PRIMARY) {
+        if( displayFrame.left < 0 ||
             displayFrame.top < 0 ||
             displayFrame.right > fbWidth ||
             displayFrame.bottom > fbHeight) {
-        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight,
-                transform);
+            calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight,
+                                 transform);
+        }
+
+        // source crop x,y,w,h
+        ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
+                           sourceCrop.right - sourceCrop.left,
+                           sourceCrop.bottom - sourceCrop.top);
+        //Only for Primary
+        ov.setCrop(dcrop, dest);
+
+        ov.setTransform(orient, dest);
+
+        // position x,y,w,h
+        ovutils::Dim dpos(displayFrame.left,
+                          displayFrame.top,
+                          displayFrame.right - displayFrame.left,
+                          displayFrame.bottom - displayFrame.top);
+        ov.setPosition(dpos, dest);
+    } else if(dpy) { // External display
+        if(!ctx->listStats[dpy].isDisplayAnimating) {
+            if( displayFrame.left < 0 ||
+                displayFrame.top < 0 ||
+                displayFrame.right > fbWidth ||
+                displayFrame.bottom > fbHeight) {
+                calculate_crop_rects(sourceCrop, displayFrame, fbWidth,
+                                     fbHeight, transform);
+            }
+
+            // source crop x,y,w,h
+            ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
+                               sourceCrop.right - sourceCrop.left,
+                               sourceCrop.bottom - sourceCrop.top);
+
+            ov.setCrop(dcrop, dest);
+            sPrevCrop = dcrop;
+            ov.setTransform(orient, dest);
+            sPrevTransform = orient;
+
+            // position x,y,w,h
+            ovutils::Dim dpos(displayFrame.left,
+                              displayFrame.top,
+                              displayFrame.right - displayFrame.left,
+                              displayFrame.bottom - displayFrame.top);
+            ov.setPosition(dpos, dest);
+            sPrevPosition = dpos;
+        } else {
+            ov.setCrop(sPrevCrop, dest);
+            ov.setTransform(sPrevTransform, dest);
+            ov.setPosition(sPrevPosition, dest);
+        }
     }
 
-    // source crop x,y,w,h
-    ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
-            sourceCrop.right - sourceCrop.left,
-            sourceCrop.bottom - sourceCrop.top);
-    //Only for Primary
-    ov.setCrop(dcrop, dest);
-
-    ov.setTransform(orient, dest);
-
-    // position x,y,w,h
-    ovutils::Dim dpos(displayFrame.left,
-            displayFrame.top,
-            displayFrame.right - displayFrame.left,
-            displayFrame.bottom - displayFrame.top);
-    ov.setPosition(dpos, dest);
-
     if (!ov.commit(dest)) {
-        ALOGE("%s: commit fails", __FUNCTION__);
+        ALOGE("VideoOverlay::%s: commit fails for dpy[%d]", __FUNCTION__, dpy);
         return false;
     }
     return true;
