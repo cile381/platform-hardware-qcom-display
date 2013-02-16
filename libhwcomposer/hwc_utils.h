@@ -89,6 +89,7 @@ struct ListStats {
     //Video specific
     int yuvCount;
     int yuvIndex;
+    int screenRecordLayerIndex; //holds the screen record target layer index
     bool needsAlphaScale;
 };
 
@@ -145,8 +146,10 @@ void dumpsys_log(android::String8& buf, const char* fmt, ...);
 //Sync point impl.
 int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                                                     int fd);
+// Captures the current screen
+int hwc_record_screen(hwc_context_t *ctx, hwc_display_contents_1_t* list,
+                                            int dpy);
 
-// Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
 }
@@ -168,6 +171,11 @@ static inline bool isBufferLocked(const private_handle_t* hnd) {
 //Return true if buffer is for external display only
 static inline bool isExtOnly(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY));
+}
+
+//Return true if buffer is marked as screen capture surface
+static inline bool isScreenRecordTarget(const private_handle_t* hnd) {
+   return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_SCREEN_RECORD));
 }
 
 //Return true if buffer is for external display only with a BLOCK flag.
@@ -228,6 +236,9 @@ struct hwc_context_t {
 
     //CopyBit objects
     qhwc::CopyBit *mCopyBit[HWC_NUM_DISPLAY_TYPES+1];
+
+    //CopyBit Object used for screen recording
+    qhwc::CopyBit *mScreenRecordCopyBit;
 
     //Overlay object - NULL for non overlay devices
     overlay::Overlay *mOverlay;

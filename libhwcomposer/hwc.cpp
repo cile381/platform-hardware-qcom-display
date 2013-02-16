@@ -133,6 +133,22 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         if(fbLayer->handle) {
             setListStats(ctx, list, dpy);
             reset_layer_prop(ctx, dpy);
+            int index = ctx->listStats[dpy].screenRecordLayerIndex;
+            // if there is a screen recording layer on primary, mark it as
+            // HWC_OVERLAY and draw that using c2d in hwc_set
+            if(index != -1) {
+                hwc_layer_1_t *layer = &list->hwLayers[index];
+                layer->compositionType = HWC_OVERLAY;
+                if(ctx->mScreenRecordCopyBit == NULL) {
+                    ctx->mScreenRecordCopyBit = new CopyBit();
+                }
+            } else {
+                if(ctx->mScreenRecordCopyBit) {
+                    delete ctx->mScreenRecordCopyBit;
+                    ctx->mScreenRecordCopyBit = NULL;
+                }
+            }
+
             int ret = ctx->mMDPComp->prepare(ctx, list);
             if(!ret) {
                 // IF MDPcomp fails use this route
@@ -161,6 +177,13 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
             if(fbLayer->handle) {
                 setListStats(ctx, list, dpy);
                 reset_layer_prop(ctx, dpy);
+                // if there is a screen recording layer on external, mark it as
+                // HWC_OVERLAY and ignore it hwc_set_external
+                int index = ctx->listStats[dpy].screenRecordLayerIndex;
+                if(index != -1) {
+                    hwc_layer_1_t *layer = &list->hwLayers[index];
+                    layer->compositionType = HWC_OVERLAY;
+                }
                 VideoOverlay::prepare(ctx, list, dpy);
                 ctx->mFBUpdate[dpy]->prepare(ctx, fbLayer);
                 ctx->mLayerCache[dpy]->updateLayerCache(list);
@@ -174,7 +197,6 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
             // Mark all application layers as OVERLAY so that
             // GPU will not compose. This is done for power
             // optimization
-            
         }
     }
     return 0;
@@ -346,6 +368,12 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                 ALOGE("%s: ctx->mFbDev->post fail!", __FUNCTION__);
                 return -1;
             }
+        }
+
+        // Screen recording feature
+        int index = ctx->listStats[dpy].screenRecordLayerIndex;
+        if(index != -1 && (ctx->listStats[dpy].numAppLayers)) {
+            hwc_record_screen(ctx, list, dpy);
         }
     }
     return ret;

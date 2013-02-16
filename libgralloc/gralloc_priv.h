@@ -79,6 +79,9 @@ enum {
      * but still need to be protected from screen captures
      */
     GRALLOC_USAGE_PRIVATE_CP_BUFFER       =       0x00400000,
+
+    /* Screen Record Surface*/
+    GRALLOC_USAGE_PRIVATE_SCREEN_RECORD   =       0x00800000,
 };
 
 enum {
@@ -165,6 +168,8 @@ struct private_handle_t : public native_handle {
             PRIV_FLAGS_VIDEO_ENCODER      = 0x00010000,
             PRIV_FLAGS_CAMERA_WRITE       = 0x00020000,
             PRIV_FLAGS_CAMERA_READ        = 0x00040000,
+            // Screen Capture Surface
+            PRIV_FLAGS_SCREEN_RECORD      = 0x00080000,
         };
 
         // file-descriptors

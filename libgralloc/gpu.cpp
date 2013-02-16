@@ -178,6 +178,10 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
             }
         }
 
+        if (usage & GRALLOC_USAGE_PRIVATE_SCREEN_RECORD) {
+            flags |= private_handle_t::PRIV_FLAGS_SCREEN_RECORD;
+        }
+
         if (usage & GRALLOC_USAGE_HW_VIDEO_ENCODER ) {
             flags |= private_handle_t::PRIV_FLAGS_VIDEO_ENCODER;
         }
