@@ -133,11 +133,12 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         if(fbLayer->handle) {
             setListStats(ctx, list, dpy);
             reset_layer_prop(ctx, dpy);
-            int index = ctx->listStats[dpy].screenRecordLayerIndex;
+            int scrLayerIndex = ctx->listStats[dpy].screenRecordLayerIndex;
+            int extOnlyLayerIndex = ctx->listStats[dpy].extOnlyLayerIndex;
             // if there is a screen recording layer on primary, mark it as
             // HWC_OVERLAY and draw that using c2d in hwc_set
-            if(index != -1) {
-                hwc_layer_1_t *layer = &list->hwLayers[index];
+            if(scrLayerIndex != -1) {
+                hwc_layer_1_t *layer = &list->hwLayers[scrLayerIndex];
                 layer->compositionType = HWC_OVERLAY;
                 if(ctx->mScreenRecordCopyBit == NULL) {
                     ctx->mScreenRecordCopyBit = new CopyBit();
@@ -147,6 +148,12 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
                     delete ctx->mScreenRecordCopyBit;
                     ctx->mScreenRecordCopyBit = NULL;
                 }
+            }
+            // ext only layer present..
+            // Mark it as HWC_OVERLAY
+            if(extOnlyLayerIndex != -1) {
+                hwc_layer_1_t *layer = &list->hwLayers[extOnlyLayerIndex];
+                layer->compositionType = HWC_OVERLAY;
             }
 
             int ret = ctx->mMDPComp->prepare(ctx, list);
@@ -179,16 +186,22 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                 reset_layer_prop(ctx, dpy);
                 // if there is a screen recording layer on external, mark it as
                 // HWC_OVERLAY and ignore it hwc_set_external
-                int index = ctx->listStats[dpy].screenRecordLayerIndex;
-                if(index != -1) {
-                    hwc_layer_1_t *layer = &list->hwLayers[index];
+                int scrLayerIndex = ctx->listStats[dpy].screenRecordLayerIndex;
+                if(scrLayerIndex != -1) {
+                    hwc_layer_1_t *layer = &list->hwLayers[scrLayerIndex];
                     layer->compositionType = HWC_OVERLAY;
                 }
-                VideoOverlay::prepare(ctx, list, dpy);
-                ctx->mFBUpdate[dpy]->prepare(ctx, fbLayer);
-                ctx->mLayerCache[dpy]->updateLayerCache(list);
-                if(ctx->mCopyBit[dpy])
-                    ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+                int extOnlyLayerIndex = ctx->listStats[dpy].extOnlyLayerIndex;
+                // ext only layer present..
+                if(extOnlyLayerIndex != -1) {
+                    hwc_prepare_ext_only(ctx, list);
+                } else {
+                    VideoOverlay::prepare(ctx, list, dpy);
+                    ctx->mFBUpdate[dpy]->prepare(ctx, fbLayer);
+                    ctx->mLayerCache[dpy]->updateLayerCache(list);
+                    if(ctx->mCopyBit[dpy])
+                        ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+                }
                 ctx->mExtDispConfiguring = false;
             }
         } else {
@@ -401,13 +414,23 @@ static int hwc_set_external(hwc_context_t *ctx,
             ret = -1;
         }
 
-        private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
-        if(fbLayer->compositionType == HWC_FRAMEBUFFER_TARGET &&
-                !(fbLayer->flags & HWC_SKIP_LAYER) && hnd &&
-                (list->numHwLayers > 1)) {
-            if (!ctx->mFBUpdate[dpy]->draw(ctx, fbLayer)) {
+        int extOnlyLayerIndex =
+            ctx->listStats[HWC_DISPLAY_EXTERNAL].extOnlyLayerIndex;
+        if (extOnlyLayerIndex != -1) {
+            hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
+            if (!ctx->mFBUpdate[dpy]->draw(ctx, extLayer)) {
                 ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
                 ret = -1;
+            }
+        } else {
+            private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
+            if(fbLayer->compositionType == HWC_FRAMEBUFFER_TARGET &&
+               !(fbLayer->flags & HWC_SKIP_LAYER) && hnd &&
+               (list->numHwLayers > 1)) {
+                if (!ctx->mFBUpdate[dpy]->draw(ctx, fbLayer)) {
+                    ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
+                    ret = -1;
+                }
             }
         }
         if (!ctx->mExtDisplay->post()) {

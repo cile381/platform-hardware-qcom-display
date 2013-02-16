@@ -90,6 +90,7 @@ struct ListStats {
     int yuvCount;
     int yuvIndex;
     int screenRecordLayerIndex; //holds the screen record target layer index
+    int extOnlyLayerIndex;
     bool needsAlphaScale;
 };
 
@@ -149,6 +150,8 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 // Captures the current screen
 int hwc_record_screen(hwc_context_t *ctx, hwc_display_contents_1_t* list,
                                             int dpy);
+// Sets up the ext only layer
+int hwc_prepare_ext_only(hwc_context_t *ctx, hwc_display_contents_1_t* list);
 
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
