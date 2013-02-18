@@ -219,12 +219,14 @@ template <> struct StateTraits<utils::OV_2D_PIP_VIDEO_ON_PANEL>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe0; //prim video
     typedef overlay::GenericPipe<utils::PRIMARY> pipe1; //PIP video
     typedef overlay::NullPipe pipe2;   // place holder
+    typedef overlay::FloatingPipe pipe3;   // FB pipe
 
     typedef Rotator rot0;
     typedef Rotator rot1;
     typedef NullRotator rot2;
+    typedef NullRotator rot3;
 
-    typedef overlay::OverlayImpl<pipe0, pipe1> ovimpl;
+    typedef overlay::OverlayImpl<pipe0, pipe1,pipe2,pipe3> ovimpl;
 };
 
 template <> struct StateTraits<utils::OV_UI_MIRROR>
