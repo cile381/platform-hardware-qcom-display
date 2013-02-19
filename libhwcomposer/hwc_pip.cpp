@@ -26,7 +26,7 @@
 namespace qhwc {
 
 //Static Members
-ovutils::eOverlayState VideoPIP::sState = ovutils::OV_CLOSED;
+ovutils::eOverlayState VideoPIP::sState = ovutils::OV_FB;
 int VideoPIP::sYuvCount = 0;
 int VideoPIP::sYuvLayerIndex = -1;
 bool VideoPIP::sIsYuvLayerSkip = false;
@@ -44,8 +44,8 @@ bool VideoPIP::prepare(hwc_context_t *ctx, hwc_layer_list_t *list) {
         return false;
     }
     chooseState(ctx);
-    //if the state chosen above is CLOSED, skip this block.
-    if(sState != ovutils::OV_CLOSED) {
+    //if the state chosen above is OV_FB, skip this block.
+    if(sState != ovutils::OV_FB) {
         hwc_layer_t *yuvLayer = &list->hwLayers[sYuvLayerIndex];
         hwc_layer_t *pipLayer = NULL;
 
@@ -74,7 +74,7 @@ void VideoPIP::chooseState(hwc_context_t *ctx) {
     ALOGD_IF(VIDEOPIP_DEBUG, "%s: old state = %s", __FUNCTION__,
             ovutils::getStateString(sState));
 
-    ovutils::eOverlayState newState = ovutils::OV_CLOSED;
+    ovutils::eOverlayState newState = ovutils::OV_FB;
 
     //Support 1 video layer
     if(sYuvCount == 2 && !ctx->externalDisplay) {
@@ -140,7 +140,7 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_0,
+            ovutils::ZORDER_1,
             isFgFlag,
             ovutils::ROT_FLAGS_NONE);
     ov.setSource(parg, ovutils::OV_PIPE0);
@@ -249,7 +249,7 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     //primary video
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_1,
+            ovutils::ZORDER_2,
             isFgFlag,
             ovutils::ROT_DOWNSCALE_ENABLED);
 
