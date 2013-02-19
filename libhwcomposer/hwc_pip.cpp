@@ -155,13 +155,14 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
+    hwc_rect_t displayFrame = layer->displayFrame;
+    set_ov_dimensions(ctx,VIDEO_LAYER_0,sourceCrop,displayFrame);
     // x,y,w,h
     ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
             sourceCrop.right - sourceCrop.left,
             sourceCrop.bottom - sourceCrop.top);
 
     ovutils::Dim dpos;
-    hwc_rect_t displayFrame = layer->displayFrame;
     dpos.x = displayFrame.left;
     dpos.y = displayFrame.top;
     dpos.w = (displayFrame.right - displayFrame.left);
@@ -190,6 +191,12 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
         dpos.w = displayFrame.right - displayFrame.left;
         dpos.h = displayFrame.bottom - displayFrame.top;
     }
+
+    ALOGD_IF(VIDEOPIP_DEBUG,"Crop values set for the main video are %d %d %d %d",
+            sourceCrop.left,sourceCrop.top,sourceCrop.right,sourceCrop.bottom);
+    ALOGD_IF(VIDEOPIP_DEBUG,
+            "Destination position values for the main video are %d %d %d %d",
+            displayFrame.left,displayFrame.top,displayFrame.right,displayFrame.bottom);
 
     //Only for Primary
     ov.setCrop(dcrop, ovutils::OV_PIPE0);
@@ -266,13 +273,14 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     }
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
+    hwc_rect_t displayFrame = layer->displayFrame;
+    set_ov_dimensions(ctx,VIDEO_LAYER_1,sourceCrop,displayFrame);
     // x,y,w,h
     ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
             sourceCrop.right - sourceCrop.left,
             sourceCrop.bottom - sourceCrop.top);
 
     ovutils::Dim dpos;
-    hwc_rect_t displayFrame = layer->displayFrame;
     dpos.x = displayFrame.left;
     dpos.y = displayFrame.top;
     dpos.w = (displayFrame.right - displayFrame.left);
@@ -302,6 +310,11 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
         dpos.h = displayFrame.bottom - displayFrame.top;
     }
 
+    ALOGD_IF(VIDEOPIP_DEBUG,"Crop values set for the pip video are %d %d %d %d",
+            sourceCrop.left,sourceCrop.top,sourceCrop.right,sourceCrop.bottom);
+    ALOGD_IF(VIDEOPIP_DEBUG,
+            "Destination position values for the pip video are %d %d %d %d",
+            displayFrame.left,displayFrame.top,displayFrame.right,displayFrame.bottom);
     //Only for Primary
     ov.setCrop(dcrop, ovutils::OV_PIPE1);
 

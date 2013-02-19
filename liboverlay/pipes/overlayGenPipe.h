@@ -235,7 +235,8 @@ inline bool GenericPipe<PANEL>::setTransform(
 template <int PANEL>
 inline bool GenericPipe<PANEL>::setPosition(const utils::Dim& d)
 {
-    return mCtrlData.ctrl.setPosition(d);
+    return mCtrlData.ctrl.setPosition(
+            mCtrlData.ctrl.getOSCPosition(d));
 }
 
 template <int PANEL>

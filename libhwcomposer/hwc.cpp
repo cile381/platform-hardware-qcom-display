@@ -140,6 +140,12 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
 
     ctx->externalDisplay = ctx->mExtDisplay->getExternalDisplay();
 
+    ovutils::OverScanCompensation::getInstance()->setDimension(
+            ctx->oscparams.left,
+            ctx->oscparams.top,
+            ctx->oscparams.right - ctx->oscparams.left,
+            ctx->oscparams.bottom - ctx->oscparams.top);
+
     if(ctx->externalDisplay)
         ovutils::setExtType(ctx->externalDisplay);
     if (ctx->hdmi_pending == true) {

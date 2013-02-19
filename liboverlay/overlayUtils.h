@@ -243,6 +243,8 @@ struct Whf {
     uint32_t size;
 };
 
+enum { MAX_PATH_LEN = 256 };
+
 class ActionSafe {
 private:
     ActionSafe() : mWidth(0.0f), mHeight(0.0f) { };
@@ -265,7 +267,43 @@ public:
     float getHeight() { return mHeight; }
 };
 
-enum { MAX_PATH_LEN = 256 };
+
+class OverScanCompensation {
+private:
+    OverScanCompensation() : mX(0), mY(0),
+                   mWidth(0), mHeight(0),
+                   mOSCSet(false){ };
+    int mX;
+    int mY;
+    int mWidth;
+    int mHeight;
+    bool mOSCSet;
+    static OverScanCompensation *sOverScanCompensation;
+public:
+    ~OverScanCompensation() { };
+    static OverScanCompensation* getInstance() {
+        if(!sOverScanCompensation) {
+            sOverScanCompensation = new OverScanCompensation();
+        }
+        return sOverScanCompensation;
+    }
+    void setDimension(int x, int y, int w, int h) {
+        mX = x;
+        mY = y;
+        mWidth = w;
+        mHeight = h;
+        mOSCSet = true;
+    }
+    bool isOSCDimensionsSet() {
+        return mOSCSet;
+    }
+    void getDimension(int&x, int&y, int &w, int&h) {
+        x = mX;
+        y = mY;
+        w = mWidth;
+        h = mHeight;
+    }
+};
 
 /**
  * Rotator flags: not to be confused with orientation flags.

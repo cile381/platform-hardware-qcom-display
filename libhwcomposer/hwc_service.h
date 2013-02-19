@@ -59,6 +59,12 @@ public:
     virtual android::status_t setPPParams(qhwc::VideoPPData pPPParams,
                             qhwc::PP_Video_Layer_Type numVideoLayer);
     virtual android::status_t setPQCState(int value);
+    virtual android::status_t setOverScanCompensationParams(
+            qhwc::OSRectDimensions oscparams);
+    virtual android::status_t setOverScanParams(
+            qhwc::PP_Video_Layer_Type numVideoLayer,
+            qhwc::OSRectDimensions ovsrcparams,
+            qhwc::OSRectDimensions ovdstparams);
 
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();

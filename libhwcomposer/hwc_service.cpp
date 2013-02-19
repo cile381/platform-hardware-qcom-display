@@ -213,6 +213,42 @@ status_t HWComposerService::setPQCState(int value) {
     return NO_ERROR;
 }
 
+status_t HWComposerService::setOverScanCompensationParams(
+        qhwc::OSRectDimensions oscparams) {
+    oscparams.isValid = true;
+    mHwcContext->oscparams = oscparams;
+    ALOGE_IF(HWC_SERVICE_DEBUG,
+    "Setting the overscancompensation values as left %d, top %d, right %d, bottom %d",
+            oscparams.left,oscparams.top,oscparams.right,oscparams.bottom);
+    return NO_ERROR;
+}
+
+status_t HWComposerService::setOverScanParams(
+        qhwc::PP_Video_Layer_Type numVideoLayer,
+        qhwc::OSRectDimensions ossrcparams,
+        qhwc::OSRectDimensions osdstparams) {
+
+    if(numVideoLayer < PP_MAX_VG_PIPES) {
+        ossrcparams.isValid = true;
+        mHwcContext->ossrcparams[numVideoLayer]= ossrcparams;
+        osdstparams.isValid = true;
+        mHwcContext->osdstparams[numVideoLayer]= osdstparams;
+        ALOGE_IF(HWC_SERVICE_DEBUG,
+        "Setting the overscan values for video-layer %d",numVideoLayer);
+        ALOGE_IF(HWC_SERVICE_DEBUG,
+        "Setting the overscan crop values as %d %d %d %d",
+                ossrcparams.left,ossrcparams.top,ossrcparams.right,ossrcparams.bottom);
+        ALOGE_IF(HWC_SERVICE_DEBUG,
+        "Setting the overscan dst values as %d %d %d %d",
+                osdstparams.left,osdstparams.top,osdstparams.right,osdstparams.bottom);
+    }
+    else{
+        ALOGE("invalid layer type : %d",numVideoLayer);
+        return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
 HWComposerService* HWComposerService::getInstance()
 {
     if(!sHwcService) {

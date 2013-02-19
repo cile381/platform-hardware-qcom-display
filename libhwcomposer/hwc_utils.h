@@ -85,6 +85,11 @@ void dumpLayer(hwc_layer_t const* l);
 void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list);
 void initContext(hwc_context_t *ctx);
 void closeContext(hwc_context_t *ctx);
+
+//Sets the overscan crop and dst values
+void set_ov_dimensions(hwc_context_t *ctx, int numVideoLayer,
+        hwc_rect& crop, hwc_rect_t& dst);
+
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
         const int fbWidth, const int fbHeight);
@@ -212,6 +217,13 @@ struct hwc_context_t {
 
     // To Stop and Start FrameWork Updates on Display
     int mPQCState;
+
+    //OverScanCompensation parameters
+    qhwc::OSRectDimensions oscparams;
+
+    //OverScan parameters
+    qhwc::OSRectDimensions ossrcparams[PP_MAX_VG_PIPES];
+    qhwc::OSRectDimensions osdstparams[PP_MAX_VG_PIPES];
 
     // used for signalling the commit Ext Disp thread
     bool mExtCommit;
