@@ -94,17 +94,39 @@ inline bool FloatingPipe::setupBorderfillPipe() {
     ovInfo.dst_rect.h = mBorderFill_rect_h;
     ovInfo.id = MSMFB_NEW_REQUEST;
 
-    // FD ini
+    // FD init
     OvFD fd;
     if(!utils::openDev(fd, utils::PRIMARY,
                 Res::fbPath, O_RDWR)){
         ALOGE("%s: Failed to init fbnum=%d", __func__, 0);
         return false;
     }
-    if(!mdp_wrapper::setOverlay(fd.getFD(), ovInfo)) {
-        ALOGE("%s: Failed to setOverlay", __func__);
+
+    msmfb_mixer_info_req  req;
+    mdp_mixer_info *minfo = NULL;
+
+    //Get the mixer configuration */
+    req.mixer_num = 0;
+    if (ioctl(fd.getFD(), MSMFB_MIXER_INFO, &req) == -1) {
+        ALOGE("ERROR: MSMFB_MIXER_INFO ioctl failed");
         fd.close();
         return false;
+    }
+
+    minfo = req.info;
+    for (int j = 0; j < req.cnt; j++) {
+        if(minfo->z_order == -1 && minfo->pndx > 4) {
+            ALOGE("%s MDP_RGB_BORDERFILL pipe is already connected : %d", __FUNCTION__, minfo->pndx);
+            ovInfo.id  = minfo->pndx;
+        }
+    }
+
+    if (static_cast<ssize_t>(ovInfo.id) == MSMFB_NEW_REQUEST) {
+        if(!mdp_wrapper::setOverlay(fd.getFD(), ovInfo)) {
+            ALOGE("%s: Failed to setOverlay", __func__);
+            fd.close();
+            return false;
+        }
     }
 
     ovData.id = ovInfo.id;
@@ -120,12 +142,13 @@ inline bool FloatingPipe::setupBorderfillPipe() {
 }
 
 inline bool FloatingPipe::close() {
+    bool ret = true;
     if(!mSessionOpen)
         return true;
 
     if(!mFloating.close()) {
         ALOGE("%s: Failed to close floating pipe", __func__);
-        return false;
+        ret = false;
     }
 
     if(mBorderFillId != -1) {
@@ -144,7 +167,7 @@ inline bool FloatingPipe::close() {
         mBorderFillId = -1;
     }
     mSessionOpen = false;
-    return true;
+    return ret;
 }
 inline bool FloatingPipe::commit() {
     bool ret = setupBorderfillPipe();
