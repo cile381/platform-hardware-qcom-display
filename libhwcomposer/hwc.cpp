@@ -414,7 +414,7 @@ static int hwc_set_external(hwc_context_t *ctx,
         }
 
         int extOnlyLayerIndex =
-            ctx->listStats[HWC_DISPLAY_EXTERNAL].extOnlyLayerIndex;
+            ctx->listStats[dpy].extOnlyLayerIndex;
         if (extOnlyLayerIndex != -1) {
             hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
             if (!ctx->mFBUpdate[dpy]->draw(ctx, extLayer)) {
