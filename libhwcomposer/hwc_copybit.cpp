@@ -85,7 +85,7 @@ bool CopyBit::canUseCopybitForRGB(hwc_context_t *ctx,
     if ((compositionType & qdutils::COMPOSITION_TYPE_C2D) ||
         (compositionType & qdutils::COMPOSITION_TYPE_DYN)) {
          if(ctx->listStats[dpy].yuvCount ||
-                                ctx->listStats[dpy].screenRecordLayerIndex){
+                            ctx->listStats[dpy].screenRecordLayerIndex != -1){
              //Overlay up & running or there is a screenRecording going on
              //Dont use COPYBIT for RGB layers.
 
