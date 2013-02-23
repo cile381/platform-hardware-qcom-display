@@ -88,9 +88,9 @@ struct ListStats {
     int fbLayerIndex; //Always last for now. = numAppLayers
     //Video specific
     int yuvCount;
-    int yuvIndex;
     int screenRecordLayerIndex; //holds the screen record target layer index
     int extOnlyLayerIndex;
+    int yuvIndices[MAX_NUM_LAYERS];
     bool needsAlphaScale;
 };
 
