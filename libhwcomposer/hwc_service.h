@@ -58,6 +58,7 @@ public:
     virtual android::status_t setActionSafeDimension(int w, int h);
     virtual android::status_t setPPParams(qhwc::VideoPPData pPPParams,
                             qhwc::PP_Video_Layer_Type numVideoLayer);
+    virtual android::status_t setPQCState(int value);
 
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();

@@ -88,6 +88,8 @@ void initContext(hwc_context_t *ctx)
     pthread_cond_init(&(ctx->vstate.cond), NULL);
     ctx->vstate.enable = false;
 
+    ctx->mPQCState = PQC_STOP;
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
     ALOGI("DYN composition threshold : %f", ctx->dynThreshold);
@@ -340,4 +342,18 @@ void wait4ExtCommitDone(hwc_context_t* ctx) {
         pthread_mutex_unlock(&ctx->mExtCommitDoneLock);
     }
 }
+
+int commitOnPrimary(hwc_context_t* ctx) {
+    framebuffer_device_t *fbDev = ctx->mFbDev;
+    if(fbDev) {
+        private_module_t* m = reinterpret_cast<private_module_t*>(
+                fbDev->common.module);
+        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
+            ALOGE("FBIOPUT_VSCREENINFO failed %d ", errno);
+            return -errno;
+        }
+    }
+    return 0;
+}
+
 };//namespace

@@ -21,6 +21,7 @@
 #include <cutils/log.h>
 #include <cutils/atomic.h>
 #include <EGL/egl.h>
+#include <GLES/gl.h>
 
 #include <sys/resource.h>
 #include <sys/prctl.h>
@@ -41,6 +42,7 @@
 #include "hwc_dump_layers.h"
 
 #define VSYNC_DEBUG 0
+#define PQC_DEBUG 0
 using namespace qhwc;
 
 static int hwc_device_open(const struct hw_module_t* module,
@@ -118,6 +120,18 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
 {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     ctx->overlayInUse = false;
+
+    if(ctx->mPQCState == PQC_START) {
+        /* PictureQualityControl Started. Close all the pipes */
+        ALOGE_IF(PQC_DEBUG,"%s, PQC Started. Closing the pipes", __FUNCTION__);
+        ctx->mOverlay->setState(ovutils::OV_CLOSED);
+        ctx->mPQCState = PQC_CLOSEPIPES;
+        return 0;
+    } else if(ctx->mPQCState == PQC_INPROGRESS) {
+        /* PQC in Progress. Donot update */
+        ALOGE_IF(PQC_DEBUG,"%s, PQC In progress", __FUNCTION__);
+        return 0;
+    }
 
     if(ctx->mSecureConfig == true) {
         // This will tear down External Display Device.
@@ -231,7 +245,18 @@ static int hwc_set(hwc_composer_device_t *dev,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    if (dpy && sur) {
+
+    if(ctx->mPQCState == PQC_CLOSEPIPES){
+        /* overlayState is OV_CLOSED. Call pan-update on primary */
+        ALOGE_IF(PQC_DEBUG,"%s, PQC Started. Commit on Primary",__FUNCTION__);
+        commitOnPrimary(ctx);
+        ctx->mPQCState = PQC_INPROGRESS;
+    } else if(ctx->mPQCState == PQC_INPROGRESS) {
+        /* PQC in Progress. Donot update */
+        ALOGE_IF(PQC_DEBUG,"%s, PQC In progress", __FUNCTION__);
+        glFinish();
+    } else if (dpy && sur ) {
+        ALOGE_IF(PQC_DEBUG,"%s, No PQC In progress", __FUNCTION__);
         if (LIKELY(list)) {
             HwcDebug::dumpLayers(list); // Dump layers for debugging.
             VideoOverlay::draw(ctx, list);

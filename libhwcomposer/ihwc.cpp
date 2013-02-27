@@ -157,6 +157,17 @@ public:
         result = reply.readInt32();
         return result;
     }
+
+    virtual status_t setPQCState(int value){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(value);
+        status_t result = remote()->transact(
+                          SET_PQCSTATE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
 };
 
 IMPLEMENT_META_INTERFACE(HWComposer, "android.display.IHWComposer");
@@ -256,6 +267,14 @@ status_t BnHWComposer::onTransact(
             reply->writeInt32(res);
             return NO_ERROR;
         } break;
+        case SET_PQCSTATE: {
+           int value;
+           CHECK_INTERFACE(IHWComposer, data, reply);
+           value = data.readInt32();
+           status_t res = setPQCState(value);
+           reply->writeInt32(res);
+           return NO_ERROR;
+       } break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
