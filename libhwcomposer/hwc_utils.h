@@ -233,6 +233,8 @@ struct hwc_context_t {
     mutable Locker mExtSetLock;
     //Vsync
     struct vsync_state vstate;
+    //Is HPD Enabled?
+    bool isHPDEnabled;
 };
 
 #endif //HWC_UTILS_H
