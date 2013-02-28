@@ -66,6 +66,7 @@ void MdpCtrl::reset() {
 #ifdef USES_POST_PROCESSING
     mPPChanged = false;
     memset(&mParams, 0, sizeof(struct compute_params));
+    memset(qseedData,0,sizeof(qseedData));
     mParams.params.conv_params.order = hsic_order_hsc_i;
     mParams.params.conv_params.interface = interface_rec601;
     mParams.params.conv_params.cc_matrix[0][0] = 1;

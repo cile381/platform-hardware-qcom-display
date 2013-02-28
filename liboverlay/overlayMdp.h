@@ -138,6 +138,7 @@ private:
     struct compute_params mParams;
     /* indicate if PP params have been changed */
     bool mPPChanged;
+    uint32_t qseedData[2];
 #endif
 };
 
