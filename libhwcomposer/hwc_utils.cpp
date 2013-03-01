@@ -25,6 +25,7 @@
 #include <fb_priv.h>
 #include <overlay.h>
 #include "hwc_utils.h"
+#include "hwc_video.h"
 #include "hwc_mdpcomp.h"
 #include "hwc_fbupdate.h"
 #include "mdp_version.h"
@@ -197,7 +198,18 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].skipCount++;
         }
 
-        if (UNLIKELY(isYuvBuffer(hnd))) {
+        if(UNLIKELY(isExtOnly(hnd))){
+            // since there can be only one external only layer, set the yuvIndex
+            // only for external so that buffer will not be queued for primary
+            if(UNLIKELY(isYuvBuffer(hnd)) && dpy) {
+                int& yuvCount = ctx->listStats[dpy].yuvCount;
+                ctx->listStats[dpy].yuvIndices[0] = i;
+                ctx->listStats[dpy].yuvCount = 1;
+            }
+            if (dpy == HWC_DISPLAY_PRIMARY)
+                ctx->listStats[dpy].numAppLayers--;
+            ctx->listStats[dpy].extOnlyLayerIndex = i;
+        } else if (UNLIKELY(isYuvBuffer(hnd))) {
             int& yuvCount = ctx->listStats[dpy].yuvCount;
             ctx->listStats[dpy].yuvIndices[yuvCount] = i;
             yuvCount++;
@@ -206,11 +218,6 @@ void setListStats(hwc_context_t *ctx,
         if (UNLIKELY(isScreenRecordTarget(hnd))) {
             ctx->listStats[dpy].screenRecordLayerIndex = i;
             ctx->listStats[dpy].numAppLayers--;
-        }
-
-        if(UNLIKELY(isExtOnly(hnd))){
-            ctx->listStats[dpy].numAppLayers--;
-            ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
 
         if(!ctx->listStats[dpy].needsAlphaScale)
@@ -440,10 +447,11 @@ int hwc_record_screen(hwc_context_t *ctx, hwc_display_contents_1_t* list,
 }
 
 // Sets up the ext only layer
-int hwc_prepare_ext_only(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
-    int numAppLayers = ctx->listStats[HWC_DISPLAY_EXTERNAL].numAppLayers;
-    int extOnlyLayerIndex =
-                        ctx->listStats[HWC_DISPLAY_EXTERNAL].extOnlyLayerIndex;
+int hwc_prepare_ext_only(hwc_context_t *ctx,
+                         hwc_display_contents_1_t* list,
+                         int dpy) {
+    int numAppLayers = ctx->listStats[dpy].numAppLayers;
+    int extOnlyLayerIndex = ctx->listStats[dpy].extOnlyLayerIndex;
 
     if(!ctx) {
         ALOGE("%s: ctx is NULL", __FUNCTION__);
@@ -459,12 +467,17 @@ int hwc_prepare_ext_only(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     }
     // Configure ext only layer thru mFBUpdate
     hwc_layer_1_t *extOnlyLayer = &list->hwLayers[extOnlyLayerIndex];
+    private_handle_t *hnd = (private_handle_t *)extOnlyLayer->handle;
     // Set the display position to full screen
     extOnlyLayer->displayFrame.top = 0;
     extOnlyLayer->displayFrame.left = 0;
-    extOnlyLayer->displayFrame.right = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].xres;
-    extOnlyLayer->displayFrame.bottom = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].yres;
-    ctx->mFBUpdate[HWC_DISPLAY_EXTERNAL]->prepare(ctx, extOnlyLayer);
+    extOnlyLayer->displayFrame.right = ctx->dpyAttr[dpy].xres;
+    extOnlyLayer->displayFrame.bottom = ctx->dpyAttr[dpy].yres;
+    if(isYuvBuffer(hnd)) {
+        VideoOverlay::prepare(ctx, list, dpy);
+    } else {
+        ctx->mFBUpdate[dpy]->prepare(ctx, extOnlyLayer);
+    }
     return 0;
 }
 

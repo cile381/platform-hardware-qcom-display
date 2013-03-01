@@ -193,7 +193,7 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                 int extOnlyLayerIndex = ctx->listStats[dpy].extOnlyLayerIndex;
                 // ext only layer present..
                 if(extOnlyLayerIndex != -1) {
-                    hwc_prepare_ext_only(ctx, list);
+                    hwc_prepare_ext_only(ctx, list, dpy);
                 } else {
                     VideoOverlay::prepare(ctx, list, dpy);
                     ctx->mFBUpdate[dpy]->prepare(ctx, fbLayer);
@@ -445,13 +445,17 @@ static int hwc_set_external(hwc_context_t *ctx,
             ret = -1;
         }
 
-        int extOnlyLayerIndex =
-            ctx->listStats[dpy].extOnlyLayerIndex;
+        int extOnlyLayerIndex = ctx->listStats[dpy].extOnlyLayerIndex;
+        // Queue the buffer only if the external only layer is UI [do not queue
+        // external only video layer], otherwise follow the normal flow.
         if (extOnlyLayerIndex != -1) {
-            hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
-            if (!ctx->mFBUpdate[dpy]->draw(ctx, extLayer)) {
-                ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
-                ret = -1;
+            // yuvIndices[0] will have the yuv index value of the ext only layer
+            if(extOnlyLayerIndex != ctx->listStats[dpy].yuvIndices[0]) {
+                hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
+                if (!ctx->mFBUpdate[dpy]->draw(ctx, extLayer)) {
+                    ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
+                    ret = -1;
+                }
             }
         } else {
             private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
