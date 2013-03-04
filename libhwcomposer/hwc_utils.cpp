@@ -199,15 +199,6 @@ void setListStats(hwc_context_t *ctx,
             yuvCount++;
         }
 
-        if(!ctx->listStats[dpy].needsAlphaScale)
-            ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
-
-        if (UNLIKELY(isYuvBuffer(hnd))) {
-            int& yuvCount = ctx->listStats[dpy].yuvCount;
-            ctx->listStats[dpy].yuvIndices[yuvCount] = i;
-            yuvCount++;
-        }
-
         if (UNLIKELY(isScreenRecordTarget(hnd))) {
             ctx->listStats[dpy].screenRecordLayerIndex = i;
             ctx->listStats[dpy].numAppLayers--;
