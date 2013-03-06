@@ -184,6 +184,7 @@ private:
 #ifdef USES_POST_PROCESSING
     /* PP Compute Params */
     struct compute_params params;
+    uint32_t qseedData[2];
 #endif
 };
 
