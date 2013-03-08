@@ -80,6 +80,7 @@ bool Ctrl::setCrop(const utils::Dim& d)
 }
 
 utils::ActionSafe* utils::ActionSafe::sActionSafe = NULL;
+utils::OverScanCompensation* utils::OverScanCompensation::sOverScanCompensation = NULL;
 
 bool Ctrl::setVisualParams(const MetaData_t& data)
 {
@@ -211,6 +212,57 @@ utils::Dim Ctrl::getAspectRatio(const utils::Dim& dim) const {
             (wRatio * fbWidth),          // width
             (hRatio * fbHeight),         // height
             inDim.o);                    // orientation
+}
+
+utils::Dim Ctrl::getOSCPosition(const utils::Dim& dim) const {
+
+    float prifbWidth  = utils::FrameBufferInfo::getInstance()->getWidth();
+    float prifbHeight = utils::FrameBufferInfo::getInstance()->getHeight();
+
+    int oscx = 0;
+    int oscy = 0;
+    int oscwidth = 0;
+    int oscheight = 0;
+
+    float x_ratio = ((float)dim.x/prifbWidth);
+    float y_ratio = ((float)dim.y/prifbHeight);
+    float w_ratio = ((float)dim.w/prifbWidth);
+    float h_ratio = ((float)dim.h/prifbHeight);
+
+    if(utils::OverScanCompensation::getInstance()->isOSCDimensionsSet()) {
+        utils::OverScanCompensation* oscinstance = utils::OverScanCompensation::getInstance();
+        oscinstance->getDimension(oscx,oscy,oscwidth,oscheight);
+
+        /* Don't rely too much on the osc values set via binder. Check for outliers */
+        if(oscx < 0 or oscx > prifbWidth)
+            oscx = 0;
+        if(oscy < 0 or oscy > prifbHeight)
+            oscy = 0;
+        if(oscwidth <= 0 or oscwidth >= prifbWidth)
+            oscwidth = prifbWidth;
+        if(oscheight <= 0 or oscheight >= prifbHeight)
+            oscheight = prifbHeight;
+        if(oscx + oscwidth > prifbWidth) {
+            oscx = 0;
+            oscwidth =  prifbWidth;
+        }
+        if(oscy + oscheight > prifbHeight) {
+            oscy = 0;
+            oscheight = prifbHeight;
+        }
+
+        utils::Dim oscdim;
+        oscdim.x = (x_ratio * oscwidth) + oscx;
+        oscdim.y = (y_ratio * oscheight) + oscy;
+        oscdim.w = (w_ratio * oscwidth);
+        oscdim.h = (h_ratio * oscheight);
+        oscdim.o = dim.o;
+
+        return oscdim;
+    } else {
+        return utils::Dim(dim);
+    }
+
 }
 
 void Ctrl::dump() const {

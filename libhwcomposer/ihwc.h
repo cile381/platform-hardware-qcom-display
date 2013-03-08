@@ -44,7 +44,9 @@ enum {
     GET_EXT_DISPLAY_RESOLUTION_MODES,
     GET_EXT_DISPLAY_RESOLUTION_MODE_COUNT,
     SET_PP_PARAMS,
-    SET_PQCSTATE
+    SET_PQCSTATE,
+    SET_OVERSCANCOMPENSATION_PARAMS,
+    SET_OVERSCAN_PARAMS,
 };
 
 class IHWComposer : public android::IInterface
@@ -68,6 +70,12 @@ public:
     virtual android::status_t setPPParams(qhwc::VideoPPData pParams,
                                 qhwc::PP_Video_Layer_Type numVideoLayer) = 0;
     virtual android::status_t setPQCState(int value) = 0;
+    virtual android::status_t setOverScanCompensationParams(
+            qhwc::OSRectDimensions oscparams) = 0;
+    virtual android::status_t setOverScanParams(
+            qhwc::PP_Video_Layer_Type numVideoLayer,
+            qhwc::OSRectDimensions ovsrcparams,
+            qhwc::OSRectDimensions ovdstparams) = 0;
 };
 
 // ----------------------------------------------------------------------------

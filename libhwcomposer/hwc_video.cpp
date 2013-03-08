@@ -247,6 +247,7 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     hwc_rect_t displayFrame = layer->displayFrame;
+    set_ov_dimensions(ctx,VIDEO_LAYER_0,sourceCrop,displayFrame);
 
     //Calculate the rect for primary based on whether the supplied position
     //is within or outside bounds.
@@ -268,6 +269,11 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             sourceCrop.bottom - sourceCrop.top);
     //Only for Primary
     ov.setCrop(dcrop, ovutils::OV_PIPE0);
+    ALOGD_IF(VIDEO_DEBUG,"Crop values set for the main video are %d %d %d %d",
+            sourceCrop.left,sourceCrop.top,sourceCrop.right,sourceCrop.bottom);
+    ALOGD_IF(VIDEO_DEBUG,
+            "Destination position values for the main video are %d %d %d %d",
+            displayFrame.left,displayFrame.top,displayFrame.right,displayFrame.bottom);
 
     ovutils::eTransform orient =
             static_cast<ovutils::eTransform>(layer->transform);

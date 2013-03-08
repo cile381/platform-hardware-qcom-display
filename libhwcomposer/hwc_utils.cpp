@@ -232,6 +232,28 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
     return;
 }
 
+void set_ov_dimensions(hwc_context_t *ctx, int numVideoLayer,
+        hwc_rect& crop, hwc_rect_t& dst) {
+    if(numVideoLayer < PP_MAX_VG_PIPES) {
+        if(ctx->ossrcparams[numVideoLayer].isValid) {
+            crop.left = ctx->ossrcparams[numVideoLayer].left;
+            crop.top = ctx->ossrcparams[numVideoLayer].top;
+            crop.right = ctx->ossrcparams[numVideoLayer].right;
+            crop.bottom = ctx->ossrcparams[numVideoLayer].bottom;
+
+            dst.left = ctx->osdstparams[numVideoLayer].left;
+            dst.top = ctx->osdstparams[numVideoLayer].top;
+            dst.right = ctx->osdstparams[numVideoLayer].right;
+            dst.bottom = ctx->osdstparams[numVideoLayer].bottom;
+
+            if(numVideoLayer == qhwc::VIDEO_LAYER_0)
+                ALOGD("Setting the overscan params for primary video");
+            else
+                ALOGD("Setting the overscan params for pip video");
+        }
+    }
+}
+
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
         const int fbWidth, const int fbHeight) {

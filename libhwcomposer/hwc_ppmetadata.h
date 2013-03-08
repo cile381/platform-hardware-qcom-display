@@ -43,7 +43,15 @@ typedef struct _VideoPPData {
     uint32_t sharpness;
     bool isValid;
 } VideoPPData;
-// ----------------------------------------------------------------------------
+
+typedef struct _OSRectDimensions {
+    int left;
+    int top;
+    int right;
+    int bottom;
+    bool isValid;
+} OSRectDimensions;
+
 }; // namespace qhwc
 
 #endif // HWC_PPMETADATA_H

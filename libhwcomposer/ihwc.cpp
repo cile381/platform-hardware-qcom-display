@@ -168,6 +168,41 @@ public:
         return result;
     }
 
+    virtual android::status_t setOverScanCompensationParams(
+            qhwc::OSRectDimensions oscparams) {
+        Parcel data,reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(oscparams.left);
+        data.writeInt32(oscparams.top);
+        data.writeInt32(oscparams.right);
+        data.writeInt32(oscparams.bottom);
+        status_t result = remote()->transact(
+                SET_OVERSCANCOMPENSATION_PARAMS,data,&reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t setOverScanParams(
+            qhwc::PP_Video_Layer_Type numVideoLayer,
+            qhwc::OSRectDimensions ovsrcparams,
+            qhwc::OSRectDimensions ovdstparams) {
+        Parcel data,reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(numVideoLayer);
+        data.writeInt32(ovsrcparams.left);
+        data.writeInt32(ovsrcparams.top);
+        data.writeInt32(ovsrcparams.right);
+        data.writeInt32(ovsrcparams.bottom);
+
+        data.writeInt32(ovdstparams.left);
+        data.writeInt32(ovdstparams.top);
+        data.writeInt32(ovdstparams.right);
+        data.writeInt32(ovdstparams.bottom);
+        status_t result = remote()->transact(
+                SET_OVERSCAN_PARAMS,data,&reply);
+        result = reply.readInt32();
+        return result;
+    }
 };
 
 IMPLEMENT_META_INTERFACE(HWComposer, "android.display.IHWComposer");
@@ -275,6 +310,36 @@ status_t BnHWComposer::onTransact(
            reply->writeInt32(res);
            return NO_ERROR;
        } break;
+        case SET_OVERSCANCOMPENSATION_PARAMS: {
+            qhwc::OSRectDimensions oscparams;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            oscparams.left = data.readInt32();
+            oscparams.top = data.readInt32();
+            oscparams.right = data.readInt32();
+            oscparams.bottom = data.readInt32();
+            status_t res = setOverScanCompensationParams(oscparams);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_OVERSCAN_PARAMS: {
+            qhwc::PP_Video_Layer_Type numVideoLayer;
+            qhwc::OSRectDimensions ovsrcparams;
+            qhwc::OSRectDimensions ovdstparams;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            numVideoLayer = (qhwc::PP_Video_Layer_Type)data.readInt32();
+            ovsrcparams.left = data.readInt32();
+            ovsrcparams.top = data.readInt32();
+            ovsrcparams.right = data.readInt32();
+            ovsrcparams.bottom = data.readInt32();
+
+            ovdstparams.left = data.readInt32();
+            ovdstparams.top = data.readInt32();
+            ovdstparams.right = data.readInt32();
+            ovdstparams.bottom = data.readInt32();
+            status_t res = setOverScanParams(numVideoLayer,ovsrcparams,ovdstparams);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
