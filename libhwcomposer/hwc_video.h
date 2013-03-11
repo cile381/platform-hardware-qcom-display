@@ -47,6 +47,11 @@ private:
     //Flags if this feature is on.
     static bool sIsModeOn[HWC_NUM_DISPLAY_TYPES+1];
     static ovutils::eDest sDest[HWC_NUM_DISPLAY_TYPES+1];
+    // store the previous destination parameters
+    static ovutils::Dim sPrevPosition;
+    static ovutils::Dim sPrevCrop;
+    static int sPrevTransform;
+
 };
 
 inline void VideoOverlay::reset() {

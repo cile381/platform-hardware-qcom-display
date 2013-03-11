@@ -96,6 +96,7 @@ void initContext(hwc_context_t *ctx)
     pthread_cond_init(&(ctx->vstate.cond), NULL);
     ctx->vstate.enable = false;
     ctx->mExtDispConfiguring = false;
+    ctx->deviceOrientation = 0;
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -180,6 +181,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].needsAlphaScale = false;
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].yuvCount = 0;
+    ctx->listStats[dpy].isDisplayAnimating = false;
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
@@ -193,7 +195,9 @@ void setListStats(hwc_context_t *ctx,
         //We disregard FB being skip for now! so the else if
         } else if (isSkipLayer(&list->hwLayers[i])) {
             ctx->listStats[dpy].skipCount++;
-        } else if (UNLIKELY(isYuvBuffer(hnd))) {
+        }
+
+        if (UNLIKELY(isYuvBuffer(hnd))) {
             int& yuvCount = ctx->listStats[dpy].yuvCount;
             ctx->listStats[dpy].yuvIndices[yuvCount] = i;
             yuvCount++;
@@ -211,6 +215,10 @@ void setListStats(hwc_context_t *ctx,
 
         if(!ctx->listStats[dpy].needsAlphaScale)
             ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
+
+        if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
+            ctx->listStats[dpy].isDisplayAnimating = true;
+        }
     }
 }
 
@@ -315,6 +323,9 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         if(atoi(property) == 0)
             swapzero = true;
     }
+    bool isExtAnimating = false;
+    if(dpy)
+       isExtAnimating = ctx->listStats[dpy].isDisplayAnimating;
 
     //Accumulate acquireFenceFds
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
@@ -367,9 +378,21 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
             //Populate releaseFenceFds.
             if(UNLIKELY(swapzero))
                 list->hwLayers[i].releaseFenceFd = -1;
-            else
+            else if(isExtAnimating) {
+                hwc_layer_1_t const* layer = &list->hwLayers[i];
+                private_handle_t *hnd = (private_handle_t *)layer->handle;
+                if(isYuvBuffer(hnd)) {
+                    list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+                } else
+                    list->hwLayers[i].releaseFenceFd = -1;
+            } else
                 list->hwLayers[i].releaseFenceFd = dup(releaseFd);
         }
+    }
+    // if external is animating, close the relaseFd
+    if(isExtAnimating) {
+        close(releaseFd);
+        releaseFd = -1;
     }
     if(UNLIKELY(swapzero)){
         list->retireFenceFd = -1;
