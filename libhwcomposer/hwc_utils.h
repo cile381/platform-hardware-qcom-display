@@ -56,6 +56,7 @@ class IFBUpdate;
 class MDPComp;
 class CopyBit;
 
+
 struct MDPInfo {
     int version;
     char panel;
@@ -97,6 +98,7 @@ struct LayerProp {
 // LayerProp::flag values
 enum {
     HWC_MDPCOMP = 0x00000001,
+    HWC_COPYBIT = 0x00000002,
 };
 
 class LayerCache {
@@ -132,10 +134,13 @@ void closeContext(hwc_context_t *ctx);
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
                          const hwc_rect_t& scissor, int orient);
+void getNonWormholeRegion(hwc_display_contents_1_t* list,
+                              hwc_rect_t& nwr);
 bool isSecuring(hwc_context_t* ctx);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
+int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -185,6 +190,9 @@ static inline bool isExtCC(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_CC));
 }
 
+template<typename T> inline T max(T a, T b) { return (a > b) ? a : b; }
+template<typename T> inline T min(T a, T b) { return (a < b) ? a : b; }
+
 // Initialize uevent thread
 void init_uevent_thread(hwc_context_t* ctx);
 // Initialize vsync thread
@@ -220,6 +228,7 @@ struct vsync_state {
     pthread_mutex_t lock;
     pthread_cond_t  cond;
     bool enable;
+    bool fakevsync;
 };
 
 // -----------------------------------------------------------------------------
