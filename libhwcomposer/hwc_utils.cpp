@@ -241,25 +241,15 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy) {
     int count = 0;
     int releaseFd = -1;
     int fbFd = -1;
-    bool swapzero = false;
     data.flags = MDP_BUF_SYNC_FLAG_WAIT;
     data.acq_fen_fd = acquireFd;
     data.rel_fen_fd = &releaseFd;
-    char property[PROPERTY_VALUE_MAX];
-    if(property_get("debug.egl.swapinterval", property, "1") > 0) {
-        if(atoi(property) == 0)
-            swapzero = true;
-    }
-
     //Accumulate acquireFenceFds
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
         if((list->hwLayers[i].compositionType == HWC_OVERLAY ||
             list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) &&
             list->hwLayers[i].acquireFenceFd != -1 ){
-            if(UNLIKELY(swapzero))
-                acquireFd[count++] = -1;
-            else
-                acquireFd[count++] = list->hwLayers[i].acquireFenceFd;
+            acquireFd[count++] = list->hwLayers[i].acquireFenceFd;
         }
     }
 
@@ -267,8 +257,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy) {
     fbFd = ctx->dpyAttr[dpy].fd;
 
     //Waits for acquire fences, returns a release fence
-    if(LIKELY(!swapzero))
-        ret = ioctl(fbFd, MSMFB_BUFFER_SYNC, &data);
+    ret = ioctl(fbFd, MSMFB_BUFFER_SYNC, &data);
     if(ret < 0) {
         ALOGE("ioctl MSMFB_BUFFER_SYNC failed, err=%s",
                 strerror(errno));
@@ -283,18 +272,10 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy) {
                 list->hwLayers[i].acquireFenceFd = -1;
             }
             //Populate releaseFenceFds.
-            if(UNLIKELY(swapzero))
-                list->hwLayers[i].releaseFenceFd = -1;
-            else
-                list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+            list->hwLayers[i].releaseFenceFd = dup(releaseFd);
         }
     }
-    if(UNLIKELY(swapzero)){
-        list->retireFenceFd = -1;
-        close(releaseFd);
-    } else {
-        list->retireFenceFd = releaseFd;
-    }
+    list->retireFenceFd = releaseFd;
     return ret;
 }
 
