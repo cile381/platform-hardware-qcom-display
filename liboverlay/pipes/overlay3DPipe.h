@@ -205,6 +205,9 @@ inline bool M3DExtPipe<CHAN>::setCrop(const utils::Dim& d) {
 
 template <int CHAN>
 inline bool M3DExtPipe<CHAN>::setPosition(const utils::Dim& d) {
+    utils::Dim dim;
+    dim = mM3d.getAspectRatio(d);
+
     utils::Dim _dim;
     // original setPositionHandleState has getPositionS3D(...,true)
     // which means format is HAL_3D_OUT_SBS_MASK
@@ -213,7 +216,7 @@ inline bool M3DExtPipe<CHAN>::setPosition(const utils::Dim& d) {
     utils::Whf _whf(mM3d.getScreenInfo().mFBWidth,
             mM3d.getScreenInfo().mFBHeight, 0,
             mM3Dfmt, 0);
-    if(!utils::getPositionS3D<CHAN>(_whf, d, _dim)) {
+    if(!utils::getPositionS3D<CHAN>(_whf, dim, _dim)) {
         ALOGE("M3DExtPipe setPosition err in getPositionS3D");
         _dim = d;
     }
