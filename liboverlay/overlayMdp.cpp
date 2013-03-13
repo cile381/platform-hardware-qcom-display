@@ -17,7 +17,7 @@
 
 #include "overlayUtils.h"
 #include "overlayMdp.h"
-
+#include <math.h>
 #undef ALOG_TAG
 #define ALOG_TAG "overlay"
 
@@ -161,9 +161,7 @@ int MdpCtrl::getDownscalefactor() {
 
     if (dst_w && dst_h)
     {
-        int w_ratio = src_w / dst_w;
-        int h_ratio = src_h / dst_h;
-        int dscale = (w_ratio > h_ratio) ? w_ratio : h_ratio;
+        uint32_t dscale = sqrt((src_w * src_h)/(dst_w * dst_h));
 
         if(dscale < 2) {
             // Down-scale to > 50% of orig.
