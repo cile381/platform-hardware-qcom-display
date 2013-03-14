@@ -23,6 +23,7 @@
 #include <fb_priv.h>
 #include "hwc_fbupdate.h"
 #include "external.h"
+#include <cutils/properties.h>
 
 namespace qhwc {
 
@@ -109,8 +110,25 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer)
                 displayFrame.top,
                 displayFrame.right - displayFrame.left,
                 displayFrame.bottom - displayFrame.top);
-        ov.setPosition(dpos, dest);
+        //read wfd property
+        char property_value[PROPERTY_VALUE_MAX];
+        property_get("hw.wfdON", property_value,"0");
+        int wfdEnable = atoi(property_value);
+        if(mDpy && wfdEnable) {
+            int width = 0, height = 0;
+            //query MDP configured attributes
+            ctx->mExtDisplay->getWfdAttr(width, height);
+            if(height != (int)ctx->dpyAttr[mDpy].yres) {
+                // FB_TARGET is configured for different resolution
+                // and MDP is configured for another
+                dpos.x = 0;
+                dpos.y = 0;
+                dpos.w = width;
+                dpos.h = height;
+            }
+        }
 
+        ov.setPosition(dpos, dest);
         ret = true;
         if (!ov.commit(dest)) {
             ALOGE("%s: commit fails", __FUNCTION__);

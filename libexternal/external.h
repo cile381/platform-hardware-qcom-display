@@ -45,7 +45,7 @@ public:
     void setActionSafeDimension(int w, int h);
     void processUEventOnline(const char *str);
     void processUEventOffline(const char *str);
-
+    void getWfdAttr(int& width, int& height);
 private:
     bool readResolution();
     int  parseResolution(char* edidStr, int* edidModes);

@@ -21,6 +21,7 @@
 #include "hwc_utils.h"
 #include "qdMetaData.h"
 #include "mdp_version.h"
+#include "external.h"
 
 namespace qhwc {
 
@@ -213,6 +214,36 @@ bool VideoOverlay::configure(hwc_context_t *ctx, int dpy,
                               displayFrame.top,
                               displayFrame.right - displayFrame.left,
                               displayFrame.bottom - displayFrame.top);
+
+            //read wfd property
+            char property_value[PROPERTY_VALUE_MAX];
+            property_get("hw.wfdON", property_value,"0");
+            int wfdEnable = atoi(property_value);
+            if(wfdEnable) {
+                int width = 0, height = 0;
+                //query MDP configured attributes
+                ctx->mExtDisplay->getWfdAttr(width, height);
+                if(height != (int)ctx->dpyAttr[dpy].yres) {
+                    // FB_TARGET is configured for different resolution
+                    // and MDP is configured for another
+                    // SF calculates dpos with respect to FB_TARGET resolution
+                    // Re-calculate dpos with respect to MDP resolution
+                    int fbWidth_fbt  = ctx->dpyAttr[dpy].xres;
+                    int fbHeight_fbt = ctx->dpyAttr[dpy].yres;
+
+                    // calculate position ratio
+                    float xRatio = (float)dpos.x/fbWidth_fbt;
+                    float yRatio = (float)dpos.y/fbHeight_fbt;
+                    float wRatio = (float)dpos.w/fbWidth_fbt;
+                    float hRatio = (float)dpos.h/fbHeight_fbt;
+
+                    // calculate the destination position
+                    dpos.x = (xRatio * width);
+                    dpos.y = (yRatio * height);
+                    dpos.w = (wRatio * width);
+                    dpos.h = (hRatio * height);
+                }
+            }
             ov.setPosition(dpos, dest);
             sPrevPosition = dpos;
         } else {

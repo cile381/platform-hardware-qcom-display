@@ -100,7 +100,10 @@ int ExternalDisplay::configureHDMIDisplay() {
     setExternalDisplay(true, mHdmiFbNum);
     return 0;
 }
-
+void ExternalDisplay::getWfdAttr(int& width, int& height) {
+    width = mVInfo.xres;
+    height = mVInfo.yres;
+}
 int ExternalDisplay::configureWFDDisplay() {
     int ret = 0;
     if(mConnectedFbNum == mHdmiFbNum) {
@@ -118,6 +121,8 @@ int ExternalDisplay::configureWFDDisplay() {
     }
     setDpyWfdAttr();
     setExternalDisplay(true, mWfdFbNum);
+    // set system property
+    property_set("hw.wfdON", "1");
     return 0;
 }
 
@@ -137,6 +142,8 @@ int ExternalDisplay::teardownWFDDisplay() {
         closeFrameBuffer();
         memset(&mVInfo, 0, sizeof(mVInfo));
         setExternalDisplay(false);
+        // set system property
+        property_set("hw.wfdON", "0");
     }
     return 0;
 }
@@ -611,11 +618,22 @@ bool ExternalDisplay::post()
     }
     return true;
 }
-
 void ExternalDisplay::setDpyWfdAttr() {
     if(mHwcContext) {
-        mHwcContext->dpyAttr[mExtDpyNum].xres = mVInfo.xres;
-        mHwcContext->dpyAttr[mExtDpyNum].yres = mVInfo.yres;
+        // query primary resolution and if it is more than wfd resolution
+        // configure to primary resolution (if primary is 1080p)
+        if(mHwcContext->dpyAttr[0].xres == 1080) {
+            if(mHwcContext->dpyAttr[0].xres > mVInfo.yres) {
+                // Configure Ext display Attributes to 1080p
+                mHwcContext->dpyAttr[mExtDpyNum].xres =
+                        mHwcContext->dpyAttr[0].yres;
+                mHwcContext->dpyAttr[mExtDpyNum].yres =
+                        mHwcContext->dpyAttr[0].xres;
+            }
+        } else {
+            mHwcContext->dpyAttr[mExtDpyNum].xres = mVInfo.xres;
+            mHwcContext->dpyAttr[mExtDpyNum].yres = mVInfo.yres;
+        }
         mHwcContext->dpyAttr[mExtDpyNum].vsync_period =
                 1000000000l /60;
         ALOGD_IF(DEBUG,"%s: wfd...connected..!",__FUNCTION__);
