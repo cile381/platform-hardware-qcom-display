@@ -144,7 +144,8 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
             ctx->oscparams.left,
             ctx->oscparams.top,
             ctx->oscparams.right - ctx->oscparams.left,
-            ctx->oscparams.bottom - ctx->oscparams.top);
+            ctx->oscparams.bottom - ctx->oscparams.top,
+            ctx->oscparams.isValid);
 
     if(ctx->externalDisplay)
         ovutils::setExtType(ctx->externalDisplay);

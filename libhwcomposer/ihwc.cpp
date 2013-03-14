@@ -176,6 +176,7 @@ public:
         data.writeInt32(oscparams.top);
         data.writeInt32(oscparams.right);
         data.writeInt32(oscparams.bottom);
+        data.writeInt32(oscparams.isValid);
         status_t result = remote()->transact(
                 SET_OVERSCANCOMPENSATION_PARAMS,data,&reply);
         result = reply.readInt32();
@@ -193,11 +194,13 @@ public:
         data.writeInt32(ovsrcparams.top);
         data.writeInt32(ovsrcparams.right);
         data.writeInt32(ovsrcparams.bottom);
+        data.writeInt32(ovsrcparams.isValid);
 
         data.writeInt32(ovdstparams.left);
         data.writeInt32(ovdstparams.top);
         data.writeInt32(ovdstparams.right);
         data.writeInt32(ovdstparams.bottom);
+        data.writeInt32(ovdstparams.isValid);
         status_t result = remote()->transact(
                 SET_OVERSCAN_PARAMS,data,&reply);
         result = reply.readInt32();
@@ -317,6 +320,7 @@ status_t BnHWComposer::onTransact(
             oscparams.top = data.readInt32();
             oscparams.right = data.readInt32();
             oscparams.bottom = data.readInt32();
+            oscparams.isValid = data.readInt32();
             status_t res = setOverScanCompensationParams(oscparams);
             reply->writeInt32(res);
             return NO_ERROR;
@@ -331,11 +335,13 @@ status_t BnHWComposer::onTransact(
             ovsrcparams.top = data.readInt32();
             ovsrcparams.right = data.readInt32();
             ovsrcparams.bottom = data.readInt32();
+            ovsrcparams.isValid = data.readInt32();
 
             ovdstparams.left = data.readInt32();
             ovdstparams.top = data.readInt32();
             ovdstparams.right = data.readInt32();
             ovdstparams.bottom = data.readInt32();
+            ovdstparams.isValid = data.readInt32();
             status_t res = setOverScanParams(numVideoLayer,ovsrcparams,ovdstparams);
             reply->writeInt32(res);
             return NO_ERROR;

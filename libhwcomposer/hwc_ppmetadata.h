@@ -21,6 +21,8 @@
 #ifndef HWC_PPMETADATA_H
 #define HWC_PPMETADATA_H
 
+#define DEBUG_METADATA 0
+
 namespace qhwc {
 // ----------------------------------------------------------------------------
 enum PP_Video_Layer_Type {
@@ -44,13 +46,52 @@ typedef struct _VideoPPData {
     bool isValid;
 } VideoPPData;
 
-typedef struct _OSRectDimensions {
-    int left;
-    int top;
-    int right;
-    int bottom;
-    bool isValid;
-} OSRectDimensions;
+struct OSRectDimensions {
+    OSRectDimensions(): left(0), top(0),
+        right(0), bottom(0), isValid(0){}
+    OSRectDimensions(int32_t _left, int32_t _top,
+            int32_t _right, int32_t _bottom):
+    left(_left), top(_top), right(_right), bottom(_bottom), isValid(0){}
+    OSRectDimensions(int32_t _left, int32_t _top,
+            int32_t _right, int32_t _bottom, int32_t _isValid):
+    left(_left), top(_top), right(_right), bottom(_bottom), isValid(_isValid){}
+
+    void dump() const {
+        if(isValid)
+            ALOGE_IF(DEBUG_METADATA,"OSRectDimensions are not set");
+        else {
+            ALOGE_IF(DEBUG_METADATA,"OSRectDimensions are left %u, top %u, "
+                    "right %u, bottom %u",left,top,right,bottom);
+        }
+    }
+
+    void set(int32_t _left, int32_t _top,int32_t _right, int32_t _bottom,
+            int32_t _isValid){
+        left = _left;
+        top = _top;
+        right = _right;
+        bottom = _bottom;
+        isValid = _isValid;
+    }
+
+    void set(OSRectDimensions& osrect){
+        left = osrect.left;
+        top = osrect.top;
+        right = osrect.right;
+        bottom = osrect.bottom;
+        isValid = osrect.isValid;
+    }
+
+    void set(int valid) {
+        isValid = valid;
+    }
+
+    int32_t left;
+    int32_t top;
+    int32_t right;
+    int32_t bottom;
+    int32_t isValid;
+};
 
 }; // namespace qhwc
 

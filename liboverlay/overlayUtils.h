@@ -287,12 +287,12 @@ public:
         }
         return sOverScanCompensation;
     }
-    void setDimension(int x, int y, int w, int h) {
+    void setDimension(int x, int y, int w, int h,bool OSCSet) {
         mX = x;
         mY = y;
         mWidth = w;
         mHeight = h;
-        mOSCSet = true;
+        mOSCSet = OSCSet;
     }
     bool isOSCDimensionsSet() {
         return mOSCSet;
