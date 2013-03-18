@@ -140,7 +140,7 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_1,
+            ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_FLAGS_NONE);
     ov.setSource(parg, ovutils::OV_PIPE0);
@@ -256,7 +256,7 @@ bool configPIPVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     //primary video
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_2,
+            ovutils::ZORDER_1,
             isFgFlag,
             ovutils::ROT_DOWNSCALE_ENABLED);
 
