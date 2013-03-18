@@ -215,10 +215,14 @@ status_t HWComposerService::setPQCState(int value) {
 
 status_t HWComposerService::setOverScanCompensationParams(
         qhwc::OSRectDimensions oscparams) {
-    oscparams.isValid = true;
-    mHwcContext->oscparams = oscparams;
+    mHwcContext->oscparams.set(oscparams);
+    if(mHwcContext->oscparams.isValid)
+        ALOGE_IF(HWC_SERVICE_DEBUG,"overscancompensation values are now set");
+    else
+        ALOGE_IF(HWC_SERVICE_DEBUG,"overscancompensation values are now unset");
     ALOGE_IF(HWC_SERVICE_DEBUG,
-    "Setting the overscancompensation values as left %d, top %d, right %d, bottom %d",
+    "Setting the overscancompensation values as"
+    "left %d, top %d, right %d, bottom %d",
             oscparams.left,oscparams.top,oscparams.right,oscparams.bottom);
     return NO_ERROR;
 }
@@ -229,18 +233,28 @@ status_t HWComposerService::setOverScanParams(
         qhwc::OSRectDimensions osdstparams) {
 
     if(numVideoLayer < PP_MAX_VG_PIPES) {
-        ossrcparams.isValid = true;
-        mHwcContext->ossrcparams[numVideoLayer]= ossrcparams;
-        osdstparams.isValid = true;
-        mHwcContext->osdstparams[numVideoLayer]= osdstparams;
+        mHwcContext->ossrcparams[numVideoLayer].set(ossrcparams);
+        mHwcContext->osdstparams[numVideoLayer].set(osdstparams);
+        if(mHwcContext->ossrcparams[numVideoLayer].isValid)
+            ALOGE_IF(HWC_SERVICE_DEBUG,"overscan crop values are now set");
+        else
+            ALOGE_IF(HWC_SERVICE_DEBUG,"overscan crop values are now unset");
+
+        if(mHwcContext->osdstparams[numVideoLayer].isValid)
+            ALOGE_IF(HWC_SERVICE_DEBUG,"overscan dst values are now set");
+        else
+            ALOGE_IF(HWC_SERVICE_DEBUG,"overscan dst values are now unset");
+
         ALOGE_IF(HWC_SERVICE_DEBUG,
         "Setting the overscan values for video-layer %d",numVideoLayer);
         ALOGE_IF(HWC_SERVICE_DEBUG,
         "Setting the overscan crop values as %d %d %d %d",
-                ossrcparams.left,ossrcparams.top,ossrcparams.right,ossrcparams.bottom);
+                ossrcparams.left,ossrcparams.top,ossrcparams.right,
+                ossrcparams.bottom);
         ALOGE_IF(HWC_SERVICE_DEBUG,
         "Setting the overscan dst values as %d %d %d %d",
-                osdstparams.left,osdstparams.top,osdstparams.right,osdstparams.bottom);
+                osdstparams.left,osdstparams.top,osdstparams.right,
+                osdstparams.bottom);
     }
     else{
         ALOGE("invalid layer type : %d",numVideoLayer);

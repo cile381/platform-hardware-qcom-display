@@ -76,6 +76,12 @@ void initContext(hwc_context_t *ctx)
 
     ctx->hdmi_pending = false;
 
+    ctx->oscparams.set(0);
+    for(int i=0; i<PP_MAX_VG_PIPES; i++){
+        ctx->ossrcparams[i].set(0);
+        ctx->osdstparams[i].set(0);
+    }
+
     ctx->mExtCommit = false;
     pthread_mutex_init(&(ctx->mExtCommitLock), NULL);
     pthread_cond_init(&(ctx->mExtCommitCond), NULL);
@@ -240,16 +246,17 @@ void set_ov_dimensions(hwc_context_t *ctx, int numVideoLayer,
             crop.top = ctx->ossrcparams[numVideoLayer].top;
             crop.right = ctx->ossrcparams[numVideoLayer].right;
             crop.bottom = ctx->ossrcparams[numVideoLayer].bottom;
+            ALOGD("Overscan crop values are %d %d %d %d",crop.left,
+                    crop.top,crop.right,crop.bottom);
+        }
 
+        if(ctx->osdstparams[numVideoLayer].isValid) {
             dst.left = ctx->osdstparams[numVideoLayer].left;
             dst.top = ctx->osdstparams[numVideoLayer].top;
             dst.right = ctx->osdstparams[numVideoLayer].right;
             dst.bottom = ctx->osdstparams[numVideoLayer].bottom;
-
-            if(numVideoLayer == qhwc::VIDEO_LAYER_0)
-                ALOGD("Setting the overscan params for primary video");
-            else
-                ALOGD("Setting the overscan params for pip video");
+            ALOGD("Overscan destination values are %d %d %d %d",dst.left,
+                    dst.top,dst.right,dst.bottom);
         }
     }
 }
