@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
  *
@@ -21,10 +21,13 @@
 #include "external.h"
 #include "qdMetaData.h"
 #include "mdp_version.h"
+#include <overlayRotator.h>
+
+using overlay::Rotator;
+using namespace overlay::utils;
+namespace ovutils = overlay::utils;
 
 namespace qhwc {
-
-namespace ovutils = overlay::utils;
 
 //==============MDPComp========================================================
 
@@ -34,8 +37,11 @@ bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
 
 MDPComp* MDPComp::getObject(const int& width) {
-    //For now. Later check for width > 2048
-    return new MDPCompLowRes();
+    if(width <= MAX_DISPLAY_DIM) {
+        return new MDPCompLowRes();
+    } else {
+        return new MDPCompHighRes();
+    }
 }
 
 void MDPComp::dump(android::String8& buf)
@@ -176,53 +182,26 @@ bool MDPComp::setupBasePipe(hwc_context_t *ctx) {
     return true;
 }
 
-void MDPComp::printInfo(hwc_layer_1_t* layer) {
-    hwc_rect_t sourceCrop = layer->sourceCrop;
-    hwc_rect_t displayFrame = layer->displayFrame;
-
-    int s_l = sourceCrop.left;
-    int s_t = sourceCrop.top;
-    int s_r = sourceCrop.right;
-    int s_b = sourceCrop.bottom;
-
-    int d_l = displayFrame.left;
-    int d_t = displayFrame.top;
-    int d_r = displayFrame.right;
-    int d_b = displayFrame.bottom;
-
-    ALOGD_IF(isDebug(), "src:[%d,%d,%d,%d] (%d x %d) \
-            dst:[%d,%d,%d,%d] (%d x %d)",
-            s_l, s_t, s_r, s_b, (s_r - s_l), (s_b - s_t),
-            d_l, d_t, d_r, d_b, (d_r - d_l), (d_b - d_t));
-}
-
-//=============MDPCompLowRes===================================================
-void MDPCompLowRes::reset(hwc_context_t *ctx,
+void MDPComp::reset(hwc_context_t *ctx,
         hwc_display_contents_1_t* list ) {
     //Reset flags and states
     unsetMDPCompLayerFlags(ctx, list);
-    mCurrentFrame.count = 0;
     if(mCurrentFrame.pipeLayer) {
+        for(int i = 0 ; i < mCurrentFrame.count; i++ ) {
+            if(mCurrentFrame.pipeLayer[i].pipeInfo) {
+                delete mCurrentFrame.pipeLayer[i].pipeInfo;
+                mCurrentFrame.pipeLayer[i].pipeInfo = NULL;
+                //We dont own the rotator
+                mCurrentFrame.pipeLayer[i].rot = NULL;
+            }
+        }
         free(mCurrentFrame.pipeLayer);
         mCurrentFrame.pipeLayer = NULL;
     }
+    mCurrentFrame.count = 0;
 }
 
-void MDPCompLowRes::setVidInfo(hwc_layer_1_t *layer,
-        ovutils::eMdpFlags &mdpFlags) {
-    private_handle_t *hnd = (private_handle_t *)layer->handle;
-    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
-
-    if(isSecureBuffer(hnd)) {
-        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
-    }
-    if(metadata && (metadata->operation & PP_PARAM_INTERLACED) &&
-                                              metadata->interlaced) {
-        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_DEINTERLACE);
-    }
-}
-
-bool MDPCompLowRes::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
+bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
 
     const int dpy = HWC_DISPLAY_PRIMARY;
     private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -247,7 +226,8 @@ bool MDPCompLowRes::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     int dst_h = dst.bottom - dst.top;
 
     if(dst.left < 0 || dst.top < 0 || dst.right > hw_w || dst.bottom > hw_h) {
-       qhwc::calculate_crop_rects(crop, dst, hw_w, hw_h, layer->transform);
+       hwc_rect_t scissor = {0, 0, hw_w, hw_h };
+       qhwc::calculate_crop_rects(crop, dst, scissor, layer->transform);
        crop_w = crop.right - crop.left;
        crop_h = crop.bottom - crop.top;
     }
@@ -261,155 +241,38 @@ bool MDPCompLowRes::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     return true;
 }
 
-/*
- * Configures pipe(s) for MDP composition
- */
-int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
-        MdpPipeInfo& mdp_info) {
-    int nPipeIndex = mdp_info.index;
+ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
     const int dpy = HWC_DISPLAY_PRIMARY;
-    private_handle_t *hnd = (private_handle_t *)layer->handle;
     overlay::Overlay& ov = *ctx->mOverlay;
+    ovutils::eDest mdp_pipe = ovutils::OV_INVALID;
 
-    if(!hnd) {
-        ALOGE("%s: layer handle is NULL", __FUNCTION__);
-        return -1;
-    }
+    switch(type) {
+        case MDPCOMP_OV_DMA:
+            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_DMA, dpy);
+            if(mdp_pipe != ovutils::OV_INVALID) {
+                return mdp_pipe;
+            }
+        case MDPCOMP_OV_ANY:
+        case MDPCOMP_OV_RGB:
+            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, dpy);
+            if(mdp_pipe != ovutils::OV_INVALID) {
+                return mdp_pipe;
+            }
 
-    int hw_w = ctx->dpyAttr[dpy].xres;
-    int hw_h = ctx->dpyAttr[dpy].yres;
-
-    hwc_rect_t sourceCrop = layer->sourceCrop;
-    hwc_rect_t displayFrame = layer->displayFrame;
-
-    const int src_w = sourceCrop.right - sourceCrop.left;
-    const int src_h = sourceCrop.bottom - sourceCrop.top;
-
-    hwc_rect_t crop = sourceCrop;
-    int crop_w = crop.right - crop.left;
-    int crop_h = crop.bottom - crop.top;
-
-    hwc_rect_t dst = displayFrame;
-    int dst_w = dst.right - dst.left;
-    int dst_h = dst.bottom - dst.top;
-
-    if(dst.left < 0 || dst.top < 0 ||
-            dst.right > hw_w || dst.bottom > hw_h) {
-        ALOGD_IF(isDebug(),"%s: Destination has negative coordinates",
-                __FUNCTION__);
-        qhwc::calculate_crop_rects(crop, dst, hw_w, hw_h, layer->transform);
-
-        //Update calulated width and height
-        crop_w = crop.right - crop.left;
-        crop_h = crop.bottom - crop.top;
-
-        dst_w = dst.right - dst.left;
-        dst_h = dst.bottom - dst.top;
-    }
-
-    if( (dst_w > hw_w)|| (dst_h > hw_h)) {
-        ALOGD_IF(isDebug(),"%s: Dest rect exceeds FB", __FUNCTION__);
-        printInfo(layer);
-        dst_w = hw_w;
-        dst_h = hw_h;
-    }
-
-    // Determine pipe to set based on pipe index
-    ovutils::eDest dest = (ovutils::eDest)mdp_info.index;
-
-    ovutils::eZorder zOrder = ovutils::ZORDER_0;
-
-    if(mdp_info.zOrder == 0 ) {
-        zOrder = ovutils::ZORDER_0;
-    } else if(mdp_info.zOrder == 1 ) {
-        zOrder = ovutils::ZORDER_1;
-    } else if(mdp_info.zOrder == 2 ) {
-        zOrder = ovutils::ZORDER_2;
-    } else if(mdp_info.zOrder == 3) {
-        zOrder = ovutils::ZORDER_3;
-    }
-
-    // Order order order
-    // setSource - just setting source
-    // setParameter - changes src w/h/f accordingly
-    // setCrop - ROI - src_rect
-    // setPosition - dst_rect
-    // commit - commit changes to mdp driver
-    // queueBuffer - not here, happens when draw is called
-
-    ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
-
-    ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
-
-    if(isYuvBuffer(hnd))
-        setVidInfo(layer, mdpFlags);
-
-    ovutils::setMdpFlags(mdpFlags,ovutils::OV_MDP_BACKEND_COMPOSITION);
-
-    if(layer->blending == HWC_BLENDING_PREMULT) {
-        ovutils::setMdpFlags(mdpFlags,
-                ovutils::OV_MDP_BLEND_FG_PREMULT);
-    }
-
-    ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0 ;
-
-    if(!(layer->transform & HWC_TRANSFORM_ROT_90)) {
-        if(layer->transform & HWC_TRANSFORM_FLIP_H) {
-            ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_FLIP_H);
-        }
-
-        if(layer->transform & HWC_TRANSFORM_FLIP_V) {
-            ovutils::setMdpFlags(mdpFlags,  ovutils::OV_MDP_FLIP_V);
-        }
-    } else {
-        orient = static_cast<ovutils::eTransform>(layer->transform);
-    }
-
-    ovutils::eRotFlags rotFlags = ovutils::ROT_FLAGS_NONE;
-    if(isYuvBuffer(hnd) && (ctx->mMDP.version >= qdutils::MDP_V4_2 &&
-                           ctx->mMDP.version < qdutils::MDSS_V5)) {
-        rotFlags = ovutils::ROT_DOWNSCALE_ENABLED;
-    }
-
-    ovutils::PipeArgs parg(mdpFlags,
-            info,
-            zOrder,
-            ovutils::IS_FG_OFF,
-            rotFlags);
-
-    ov.setSource(parg, dest);
-
-    ov.setTransform(orient, dest);
-
-    ovutils::Dim dcrop(crop.left, crop.top, crop_w, crop_h);
-    ov.setCrop(dcrop, dest);
-
-    ovutils::Dim dim(dst.left, dst.top, dst_w, dst_h);
-    ov.setPosition(dim, dest);
-
-    ALOGD_IF(isDebug(),"%s: MDP set: crop[%d,%d,%d,%d] dst[%d,%d,%d,%d] \
-            nPipe: %d zorder: %d",__FUNCTION__, dcrop.x,
-            dcrop.y,dcrop.w, dcrop.h, dim.x, dim.y, dim.w, dim.h,
-            mdp_info.index, mdp_info.zOrder);
-
-    if (!ov.commit(dest)) {
-        ALOGE("%s: commit failed", __FUNCTION__);
-        return -1;
-    }
-    return 0;
+            if(type == MDPCOMP_OV_RGB) {
+                //Requested only for RGB pipe
+                break;
+            }
+        case  MDPCOMP_OV_VG:
+            return ov.nextPipe(ovutils::OV_MDP_PIPE_VG, dpy);
+        default:
+            ALOGE("%s: Invalid pipe type",__FUNCTION__);
+            return ovutils::OV_INVALID;
+    };
+    return ovutils::OV_INVALID;
 }
 
-/*
- * MDPComp not possible when
- * 1. App layers > available pipes
- * 2. External display connected
- * 3. Composition is triggered by
- *    Idle timer expiry
- * 4. Rotation is  needed
- * 5. Overlay in use
- */
-
-bool MDPCompLowRes::isDoable(hwc_context_t *ctx,
+bool MDPComp::isDoable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     //Number of layers
     const int dpy = HWC_DISPLAY_PRIMARY;
@@ -417,10 +280,9 @@ bool MDPCompLowRes::isDoable(hwc_context_t *ctx,
 
     overlay::Overlay& ov = *ctx->mOverlay;
     int availablePipes = ov.availablePipes(dpy);
-    if (availablePipes > MAX_PIPES_PER_MIXER)
-        availablePipes = MAX_PIPES_PER_MIXER;
 
-    if(numAppLayers < 1 || numAppLayers > availablePipes) {
+    if(numAppLayers < 1 || numAppLayers > MAX_PIPES_PER_MIXER ||
+                           pipesNeeded(ctx, list) > availablePipes) {
         ALOGD_IF(isDebug(), "%s: Unsupported number of layers",__FUNCTION__);
         return false;
     }
@@ -445,7 +307,8 @@ bool MDPCompLowRes::isDoable(hwc_context_t *ctx,
         return false;
     }
 
-    if(ctx->listStats[dpy].needsAlphaScale) {
+    if(ctx->listStats[dpy].needsAlphaScale
+                     && ctx->mMDP.version < qdutils::MDSS_V5) {
         ALOGD_IF(isDebug(), "%s: frame needs alpha downscaling",__FUNCTION__);
         return false;
     }
@@ -457,51 +320,109 @@ bool MDPCompLowRes::isDoable(hwc_context_t *ctx,
         return false;
     }
 
-
     //MDP composition is not efficient if layer needs rotator.
     for(int i = 0; i < numAppLayers; ++i) {
         // As MDP h/w supports flip operation, use MDP comp only for
         // 180 transforms. Fail for any transform involving 90 (90, 270).
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        if((layer->transform & HWC_TRANSFORM_ROT_90)  && !isYuvBuffer(hnd)) {
+        if((layer->transform & HWC_TRANSFORM_ROT_90)  && (!isYuvBuffer(hnd)
+                                                            || !canRotate())) {
             ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
             return false;
         }
 
-        if(!isYuvBuffer(hnd) && !isWidthValid(ctx,layer))
+        if(!isYuvBuffer(hnd) && !isWidthValid(ctx,layer)) {
+            ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",__FUNCTION__);
             return false;
+        }
     }
     return true;
 }
 
-int MDPCompLowRes::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
+bool MDPComp::setup(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
     const int dpy = HWC_DISPLAY_PRIMARY;
+    if(!ctx) {
+        ALOGE("%s: invalid context", __FUNCTION__);
+        return -1;
+    }
+
+    if(!allocLayerPipes(ctx, list, mCurrentFrame)) {
+        ALOGD_IF(isDebug(), "%s: Falling back to FB", __FUNCTION__);
+        return false;
+    }
+
+    for (int index = 0 ; index < mCurrentFrame.count; index++) {
+        hwc_layer_1_t* layer = &list->hwLayers[index];
+        if(configure(ctx, layer, mCurrentFrame.pipeLayer[index]) != 0 ) {
+            ALOGD_IF(isDebug(), "%s: MDPComp failed to configure overlay for \
+                    layer %d",__FUNCTION__, index);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool MDPComp::prepare(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list) {
+    if(!isEnabled()) {
+        ALOGE_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
+        return false;
+    }
+
     overlay::Overlay& ov = *ctx->mOverlay;
-    int mdp_pipe = -1;
+    bool isMDPCompUsed = true;
 
-    switch(type) {
-        case MDPCOMP_OV_ANY:
-        case MDPCOMP_OV_RGB:
-            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, dpy);
-            if(mdp_pipe != ovutils::OV_INVALID) {
-                return mdp_pipe;
-            }
+    //reset old data
+    reset(ctx, list);
 
-            if(type == MDPCOMP_OV_RGB) {
-                //Requested only for RGB pipe
-                return -1;
-            }
-        case  MDPCOMP_OV_VG:
-            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_VG, dpy);
-            if(mdp_pipe != ovutils::OV_INVALID) {
-                return mdp_pipe;
-            }
-            return -1;
-        default:
-            ALOGE("%s: Invalid pipe type",__FUNCTION__);
-            return -1;
-    };
+    bool doable = isDoable(ctx, list);
+    if(doable) {
+        if(setup(ctx, list)) {
+            setMDPCompLayerFlags(ctx, list);
+        } else {
+            ALOGD_IF(isDebug(),"%s: MDP Comp Failed",__FUNCTION__);
+            isMDPCompUsed = false;
+        }
+    } else {
+        ALOGD_IF( isDebug(),"%s: MDP Comp not possible[%d]",__FUNCTION__,
+                doable);
+        isMDPCompUsed = false;
+    }
+
+    //Reset states
+    if(!isMDPCompUsed) {
+        //Reset current frame
+        reset(ctx, list);
+    }
+
+    mState = isMDPCompUsed ? MDPCOMP_ON : MDPCOMP_OFF;
+    return isMDPCompUsed;
+}
+
+//=============MDPCompLowRes===================================================
+
+/*
+ * Configures pipe(s) for MDP composition
+ */
+int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        PipeLayerPair& pipeLayerPair) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
+    MdpPipeInfoLowRes& mdp_info =
+            *(static_cast<MdpPipeInfoLowRes*>(pipeLayerPair.pipeInfo));
+    eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
+    eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
+    eIsFg isFg = IS_FG_OFF;
+    eDest dest = mdp_info.index;
+
+    return configureLowRes(ctx, layer, dpy, mdpFlags, zOrder, isFg, dest,
+            &pipeLayerPair.rot);
+}
+
+int MDPCompLowRes::pipesNeeded(hwc_context_t *ctx,
+                        hwc_display_contents_1_t* list) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
+    return ctx->listStats[dpy].numAppLayers;
 }
 
 bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
@@ -522,9 +443,11 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
             int nYuvIndex = ctx->listStats[dpy].yuvIndices[index];
             hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
             PipeLayerPair& info = currentFrame.pipeLayer[nYuvIndex];
-            MdpPipeInfo& pipe_info = info.pipeIndex;
+            info.pipeInfo = new MdpPipeInfoLowRes;
+            info.rot = NULL;
+            MdpPipeInfoLowRes& pipe_info = *(MdpPipeInfoLowRes*)info.pipeInfo;
             pipe_info.index = getMdpPipe(ctx, MDPCOMP_OV_VG);
-            if(pipe_info.index < 0) {
+            if(pipe_info.index == ovutils::OV_INVALID) {
                 ALOGD_IF(isDebug(), "%s: Unable to get pipe for Videos",
                         __FUNCTION__);
                 return false;
@@ -541,58 +464,16 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
             continue;
 
         PipeLayerPair& info = currentFrame.pipeLayer[index];
-        MdpPipeInfo& pipe_info = info.pipeIndex;
+        info.pipeInfo = new MdpPipeInfoLowRes;
+        info.rot = NULL;
+        MdpPipeInfoLowRes& pipe_info = *(MdpPipeInfoLowRes*)info.pipeInfo;
+
         pipe_info.index = getMdpPipe(ctx, MDPCOMP_OV_ANY);
-        if(pipe_info.index < 0) {
+        if(pipe_info.index == ovutils::OV_INVALID) {
             ALOGD_IF(isDebug(), "%s: Unable to get pipe for UI", __FUNCTION__);
             return false;
         }
         pipe_info.zOrder = index;
-    }
-    return true;
-}
-
-bool MDPCompLowRes::setup(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    int nPipeIndex, vsync_wait, isFG;
-    int numHwLayers = ctx->listStats[dpy].numAppLayers;
-
-    FrameInfo &currentFrame = mCurrentFrame;
-    currentFrame.count = 0;
-
-    if(currentFrame.pipeLayer) {
-        free(currentFrame.pipeLayer);
-        currentFrame.pipeLayer = NULL;
-    }
-
-    if(!ctx) {
-        ALOGE("%s: invalid context", __FUNCTION__);
-        return -1;
-    }
-
-    if(!allocLayerPipes(ctx, list, currentFrame)) {
-        //clean current frame data
-        currentFrame.count = 0;
-
-        if(currentFrame.pipeLayer) {
-            free(currentFrame.pipeLayer);
-            currentFrame.pipeLayer = NULL;
-        }
-
-        ALOGD_IF(isDebug(), "%s: Falling back to FB", __FUNCTION__);
-        return false;
-    }
-
-    for (int index = 0 ; index < currentFrame.count; index++) {
-        hwc_layer_1_t* layer = &list->hwLayers[index];
-        MdpPipeInfo& cur_pipe = currentFrame.pipeLayer[index].pipeIndex;
-
-        if(configure(ctx, layer, cur_pipe) != 0 ) {
-            ALOGD_IF(isDebug(), "%s: MDPComp failed to configure overlay for \
-                    layer %d with pipe index:%d",__FUNCTION__,
-                    index, cur_pipe.index);
-            return false;
-        }
     }
     return true;
 }
@@ -621,37 +502,41 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     for(int i = 0; i < numHwLayers; i++ )
     {
         hwc_layer_1_t *layer = &list->hwLayers[i];
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        if(!hnd) {
+            ALOGE("%s handle null", __FUNCTION__);
+            return false;
+        }
+
+        MdpPipeInfoLowRes& pipe_info =
+                *(MdpPipeInfoLowRes*)mCurrentFrame.pipeLayer[i].pipeInfo;
+        ovutils::eDest dest = pipe_info.index;
+        if(dest == ovutils::OV_INVALID) {
+            ALOGE("%s: Invalid pipe index (%d)", __FUNCTION__, dest);
+            return false;
+        }
 
         if(!(layerProp[i].mFlags & HWC_MDPCOMP)) {
             continue;
         }
 
-        MdpPipeInfo& pipe_info =
-                mCurrentFrame.pipeLayer[i].pipeIndex;
-        int index = pipe_info.index;
+        ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
+                using  pipe: %d", __FUNCTION__, layer,
+                hnd, dest );
 
-        if(index < 0) {
-            ALOGE("%s: Invalid pipe index (%d)", __FUNCTION__, index);
-            return false;
+        int fd = hnd->fd;
+        uint32_t offset = hnd->offset;
+        Rotator *rot = mCurrentFrame.pipeLayer[i].rot;
+        if(rot) {
+            if(!rot->queueBuffer(fd, offset))
+                return false;
+            fd = rot->getDstMemId();
+            offset = rot->getDstOffset();
         }
 
-        ovutils::eDest dest = (ovutils::eDest)index;
-
-        if (ctx ) {
-            private_handle_t *hnd = (private_handle_t *)layer->handle;
-            if(!hnd) {
-                ALOGE("%s handle null", __FUNCTION__);
-                return false;
-            }
-
-            ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
-                    using  pipe: %d", __FUNCTION__, layer,
-                    hnd, index );
-
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, dest)) {
-                ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
-                return false;
-            }
+        if (!ov.queueBuffer(fd, offset, dest)) {
+            ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
+            return false;
         }
 
         layerProp[i].mFlags &= ~HWC_MDPCOMP;
@@ -659,39 +544,204 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     return true;
 }
 
-bool MDPCompLowRes::prepare(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    if(!isEnabled()) {
-        ALOGE_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
+//=============MDPCompHighRes===================================================
+
+int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
+                        hwc_display_contents_1_t* list) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
+    int numAppLayers = ctx->listStats[dpy].numAppLayers;
+    int pipesNeeded = 0;
+
+    int hw_w = ctx->dpyAttr[dpy].xres;
+
+    for(int i = 0; i < numAppLayers; ++i) {
+        hwc_layer_1_t* layer = &list->hwLayers[i];
+        hwc_rect_t dst = layer->displayFrame;
+      if(dst.left > hw_w/2) {
+          pipesNeeded++;
+      } else if(dst.right <= hw_w/2) {
+          pipesNeeded++;
+      } else {
+          pipesNeeded += 2;
+      }
+    }
+    return pipesNeeded;
+}
+
+bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
+                        MdpPipeInfoHighRes& pipe_info, ePipeType type) {
+     const int dpy = HWC_DISPLAY_PRIMARY;
+     int hw_w = ctx->dpyAttr[dpy].xres;
+
+     hwc_rect_t dst = layer->displayFrame;
+     if(dst.left > hw_w/2) {
+         pipe_info.lIndex = ovutils::OV_INVALID;
+         pipe_info.rIndex = getMdpPipe(ctx, type);
+         if(pipe_info.rIndex == ovutils::OV_INVALID)
+             return false;
+     } else if (dst.right <= hw_w/2) {
+         pipe_info.rIndex = ovutils::OV_INVALID;
+         pipe_info.lIndex = getMdpPipe(ctx, type);
+         if(pipe_info.lIndex == ovutils::OV_INVALID)
+             return false;
+     } else {
+         pipe_info.rIndex = getMdpPipe(ctx, type);
+         pipe_info.lIndex = getMdpPipe(ctx, type);
+         if(pipe_info.rIndex == ovutils::OV_INVALID ||
+            pipe_info.lIndex == ovutils::OV_INVALID)
+             return false;
+     }
+     return true;
+}
+
+bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list,
+        FrameInfo& currentFrame) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
+    overlay::Overlay& ov = *ctx->mOverlay;
+    int layer_count = ctx->listStats[dpy].numAppLayers;
+
+    currentFrame.count = layer_count;
+    currentFrame.pipeLayer = (PipeLayerPair*)
+            malloc(sizeof(PipeLayerPair) * currentFrame.count);
+
+    if(isYuvPresent(ctx, dpy)) {
+        int nYuvCount = ctx->listStats[dpy].yuvCount;
+
+        for(int index = 0; index < nYuvCount; index ++) {
+            int nYuvIndex = ctx->listStats[dpy].yuvIndices[index];
+            hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
+            PipeLayerPair& info = currentFrame.pipeLayer[nYuvIndex];
+            info.pipeInfo = new MdpPipeInfoHighRes;
+            MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
+            if(!acquireMDPPipes(ctx, layer, pipe_info,MDPCOMP_OV_VG)) {
+                ALOGD_IF(isDebug(),"%s: Unable to get pipe for videos",
+                                                            __FUNCTION__);
+                //TODO: windback pipebook data on fail
+                return false;
+            }
+            pipe_info.zOrder = nYuvIndex;
+        }
+    }
+
+    for(int index = 0 ; index < layer_count ; index++ ) {
+        hwc_layer_1_t* layer = &list->hwLayers[index];
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+
+        if(isYuvBuffer(hnd))
+            continue;
+
+        PipeLayerPair& info = currentFrame.pipeLayer[index];
+        info.pipeInfo = new MdpPipeInfoHighRes;
+        MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
+
+        ePipeType type = MDPCOMP_OV_ANY;
+
+        if(!qhwc::needsScaling(layer) && !ctx->mDMAInUse
+                             && ctx->mMDP.version >= qdutils::MDSS_V5)
+            type = MDPCOMP_OV_DMA;
+
+        if(!acquireMDPPipes(ctx, layer, pipe_info, type)) {
+            ALOGD_IF(isDebug(), "%s: Unable to get pipe for UI", __FUNCTION__);
+            //TODO: windback pipebook data on fail
+            return false;
+        }
+        pipe_info.zOrder = index;
+    }
+    return true;
+}
+/*
+ * Configures pipe(s) for MDP composition
+ */
+int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        PipeLayerPair& pipeLayerPair) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
+    MdpPipeInfoHighRes& mdp_info =
+            *(static_cast<MdpPipeInfoHighRes*>(pipeLayerPair.pipeInfo));
+    eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
+    eIsFg isFg = IS_FG_OFF;
+    eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
+    eDest lDest = mdp_info.lIndex;
+    eDest rDest = mdp_info.rIndex;
+    return configureHighRes(ctx, layer, dpy, mdpFlagsL, zOrder, isFg, lDest,
+            rDest, &pipeLayerPair.rot);
+}
+
+bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+
+    if(!isEnabled() || !isUsed()) {
+        ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
+        return true;
+    }
+
+    if(!ctx || !list) {
+        ALOGE("%s: invalid contxt or list",__FUNCTION__);
         return false;
     }
 
+    /* reset Invalidator */
+    if(idleInvalidator)
+        idleInvalidator->markForSleep();
+
+    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
-    bool isMDPCompUsed = true;
-    bool doable = isDoable(ctx, list);
+    LayerProp *layerProp = ctx->layerProp[dpy];
 
-    if(doable) {
-        if(setup(ctx, list)) {
-            setMDPCompLayerFlags(ctx, list);
-        } else {
-            ALOGD_IF(isDebug(),"%s: MDP Comp Failed",__FUNCTION__);
-            isMDPCompUsed = false;
+    int numHwLayers = ctx->listStats[dpy].numAppLayers;
+    for(int i = 0; i < numHwLayers; i++ )
+    {
+        hwc_layer_1_t *layer = &list->hwLayers[i];
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        if(!hnd) {
+            ALOGE("%s handle null", __FUNCTION__);
+            return false;
         }
-    } else {
-        ALOGD_IF( isDebug(),"%s: MDP Comp not possible[%d]",__FUNCTION__,
-                doable);
-        isMDPCompUsed = false;
+
+        if(!(layerProp[i].mFlags & HWC_MDPCOMP)) {
+            continue;
+        }
+
+        MdpPipeInfoHighRes& pipe_info =
+                *(MdpPipeInfoHighRes*)mCurrentFrame.pipeLayer[i].pipeInfo;
+        Rotator *rot = mCurrentFrame.pipeLayer[i].rot;
+
+        ovutils::eDest indexL = pipe_info.lIndex;
+        ovutils::eDest indexR = pipe_info.rIndex;
+        int fd = hnd->fd;
+        int offset = hnd->offset;
+
+        if(rot) {
+            rot->queueBuffer(fd, offset);
+            fd = rot->getDstMemId();
+            offset = rot->getDstOffset();
+        }
+
+        //************* play left mixer **********
+        if(indexL != ovutils::OV_INVALID) {
+            ovutils::eDest destL = (ovutils::eDest)indexL;
+            ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
+                    using  pipe: %d", __FUNCTION__, layer, hnd, indexL );
+            if (!ov.queueBuffer(fd, offset, destL)) {
+                ALOGE("%s: queueBuffer failed for left mixer", __FUNCTION__);
+                return false;
+            }
+        }
+
+        //************* play right mixer **********
+        if(indexR != ovutils::OV_INVALID) {
+            ovutils::eDest destR = (ovutils::eDest)indexR;
+            ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
+                    using  pipe: %d", __FUNCTION__, layer, hnd, indexR );
+            if (!ov.queueBuffer(fd, offset, destR)) {
+                ALOGE("%s: queueBuffer failed for right mixer", __FUNCTION__);
+                return false;
+            }
+        }
+
+        layerProp[i].mFlags &= ~HWC_MDPCOMP;
     }
 
-    //Reset states
-    if(!isMDPCompUsed) {
-        //Reset current frame
-        reset(ctx, list);
-    }
-
-    mState = isMDPCompUsed ? MDPCOMP_ON : MDPCOMP_OFF;
-    return isMDPCompUsed;
+    return true;
 }
-
 }; //namespace
 
