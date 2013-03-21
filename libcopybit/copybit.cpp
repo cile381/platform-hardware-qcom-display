@@ -168,8 +168,6 @@ static void set_rects(struct copybit_context_t *dev,
     e->dst_rect.h  = clip.b - clip.t;
     //MDP3 can't handle the odd dst width and height
     // hence making even
-    e->dst_rect.x =  (e->dst_rect.x/2)*2;
-    e->dst_rect.y =  (e->dst_rect.y/2)*2;
     e->dst_rect.w =  (e->dst_rect.w/2)*2;
     e->dst_rect.h =  (e->dst_rect.h/2)*2;
 
