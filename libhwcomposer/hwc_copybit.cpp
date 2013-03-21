@@ -141,6 +141,19 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         // No copybit device found - cannot use copybit
         return false;
     }
+
+    //read wfd property
+    char property_value[PROPERTY_VALUE_MAX];
+    property_get("hw.wfdON", property_value,"0");
+    int wfdEnable = atoi(property_value);
+
+    if(dpy && wfdEnable && (1080 == ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres)) {
+      //Do not use C2D. Fall back to GPU
+      // This is required as C2D has issues in composing
+      // 1080p app buffers to WFD Framebuffer.
+      return false;
+    }
+
     int compositionType = qdutils::QCCompositionType::
                                     getInstance().getCompositionType();
 
