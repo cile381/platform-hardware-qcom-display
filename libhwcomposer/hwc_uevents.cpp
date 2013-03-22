@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include "hwc_utils.h"
 #include "hwc_fbupdate.h"
+#include "hwc_video.h"
 #include "hwc_copybit.h"
 #include "comptype.h"
 #include "external.h"
@@ -115,6 +116,11 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     delete ctx->mFBUpdate[dpy];
                     ctx->mFBUpdate[dpy] = NULL;
                 }
+                if(ctx->mVidOv[dpy]) {
+                    Locker::Autolock _l(ctx->mExtSetLock);
+                    delete ctx->mVidOv[dpy];
+                    ctx->mVidOv[dpy] = NULL;
+                }
                 if(ctx->mCopyBit[dpy]){
                     Locker::Autolock _l(ctx->mExtSetLock);
                     delete ctx->mCopyBit[dpy];
@@ -134,6 +140,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 ctx->mExtDisplay->processUEventOnline(udata);
                 ctx->mFBUpdate[dpy] =
                         IFBUpdate::getObject(ctx->dpyAttr[dpy].xres, dpy);
+                ctx->mVidOv[dpy] =
+                        IVideoOverlay::getObject(ctx->dpyAttr[dpy].xres, dpy);
                 ctx->dpyAttr[dpy].isPause = false;
                 if(usecopybit)
                     ctx->mCopyBit[dpy] = new CopyBit();
@@ -147,6 +155,9 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
         case EXTERNAL_PAUSE:
             {   // pause case
                 ALOGD("%s Received Pause event",__FUNCTION__);
+                // This is required to ensure that composition
+                // fall back to FB, closing all MDP pipes.
+                ctx->mExtDispConfiguring = true;
                 ctx->dpyAttr[dpy].isActive = true;
                 ctx->dpyAttr[dpy].isPause = true;
                 break;
