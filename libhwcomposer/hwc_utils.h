@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ *
+ * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,10 +37,6 @@
 //Fwrd decls
 struct hwc_context_t;
 struct framebuffer_device_t;
-
-namespace qService {
-class QService;
-}
 
 namespace overlay {
 class Overlay;
@@ -213,8 +211,7 @@ struct hwc_context_t {
     framebuffer_device_t *mFbDev;
     //Overlay object - NULL for non overlay devices
     overlay::Overlay *mOverlay;
-    //QService object
-    qService::QService *mQService;
+
     // External display related information
     qhwc::ExternalDisplay *mExtDisplay;
     qhwc::MDPInfo mMDP;
