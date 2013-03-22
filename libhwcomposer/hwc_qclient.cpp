@@ -49,7 +49,7 @@ QClient::~QClient()
     ALOGD_IF(QCLIENT_DEBUG,"QClient Destructor invoked");
 }
 
-void QClient::notifyCallback(uint32_t msg, uint32_t value) {
+status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
     switch(msg) {
         case IQService::SECURING:
             securing(value);
@@ -57,9 +57,13 @@ void QClient::notifyCallback(uint32_t msg, uint32_t value) {
         case IQService::UNSECURING:
             unsecuring(value);
             break;
+        case IQService::SCREEN_REFRESH:
+            return screenRefresh();
+            break;
         default:
-            return;
+            return NO_ERROR;
     }
+    return NO_ERROR;
 }
 
 void QClient::securing(uint32_t startEnd) {
@@ -80,4 +84,14 @@ void QClient::unsecuring(uint32_t startEnd) {
         mHwcContext->proc->invalidate(mHwcContext->proc);
 }
 
+android::status_t QClient::screenRefresh() {
+    status_t result = NO_INIT;
+#ifdef QCOM_BSP
+    if(mHwcContext->proc) {
+        mHwcContext->proc->invalidate(mHwcContext->proc);
+        result = NO_ERROR;
+    }
+#endif
+    return result;
+}
 }

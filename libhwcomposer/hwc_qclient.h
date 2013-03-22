@@ -45,10 +45,13 @@ class QClient : public BnQClient {
 public:
     QClient(hwc_context_t *ctx);
     virtual ~QClient();
-    virtual void notifyCallback(uint32_t msg, uint32_t value);
+    virtual android::status_t notifyCallback(uint32_t msg, uint32_t value);
+
 private:
     void securing(uint32_t startEnd);
     void unsecuring(uint32_t startEnd);
+    android::status_t screenRefresh();
+
     hwc_context_t *mHwcContext;
 };
 }; // namespace qClient
