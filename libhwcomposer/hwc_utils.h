@@ -31,6 +31,9 @@
 #include "qdMetaData.h"
 #include <overlayUtils.h>
 #include <hwc_ppmetadata.h>
+#ifdef USES_PLL_CALCULATION
+#include "pll_calc.h"
+#endif
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
@@ -38,6 +41,11 @@
 #define MAX_NUM_APP_LAYERS 32
 #define MAX_DISPLAY_DIM 2048
 #define PP_MAX_VG_PIPES 2
+#define LVDS_PLL_UPDATE "/sys/devices/virtual/graphics/fb0/lvds_pll_update"
+#define ref_pixclock 27000000
+#define NUM_HDMI_PRIMARY_PANEL_NAMES 2
+#define HDMI_PANEL "dtv panel"
+#define LVDS_TV_PANEL "lvds panel"
 
 //Fwrd decls
 struct hwc_context_t;
@@ -120,6 +128,22 @@ struct VsyncState {
 enum {
     HWC_MDPCOMP = 0x00000001,
     HWC_COPYBIT = 0x00000002,
+};
+enum {
+    MAX_FRAME_BUFFER_NAME_SIZE = 80
+};
+
+static const char *HDMIPrimaryPanelName[NUM_HDMI_PRIMARY_PANEL_NAMES] = {
+    HDMI_PANEL,
+    LVDS_TV_PANEL
+};
+
+/* PictureQualityControlStatus */
+enum PQCStatus {
+    PQC_START = 0,
+    PQC_STOP = 1,
+    PQC_CLOSEPIPES = 2,
+    PQC_INPROGRESS = 3
 };
 
 // Dymamic Resolution Change States
@@ -339,6 +363,68 @@ template<typename T> inline T min(T a, T b) { return (a < b) ? a : b; }
 void init_uevent_thread(hwc_context_t* ctx);
 // Initialize vsync thread
 void init_vsync_thread(hwc_context_t* ctx);
+static const char* getConfigTypeString(qhwc::CONFIG_CHANGE_TYPE configType) {
+    switch(configType) {
+        case qhwc::NO_CORRECTION:
+            return "NO_CORRECTION";
+        case qhwc::PIXEL_CLOCK_CORRECTION:
+            return "PIXEL_CLOCK_CORRECTION";
+        case qhwc::PICTURE_QUALITY_CORRECTION:
+            return "PICTURE_QUALITY_CORRECTION";
+        default:
+            return "UNKNOWN_CORRECTION_STATE";
+    }
+}
+//Change PLL settings on the external;
+bool changePLLSettings(hwc_context_t* ctx, int dpy);
+
+bool canChangePLLSettings(hwc_context_t* ctx);
+
+int commitOnPrimary(hwc_context_t* ctx, int dpy);
+//Is target HDMIPrimary
+static bool isPanelLVDS(int fb){
+    bool configured = false;
+    FILE *displayDeviceFP = NULL;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    char name[64];
+    char const device_node[64] = "/sys/class/graphics/fb%u/msm_fb_type";
+    snprintf(name, 64, device_node,fb);
+    displayDeviceFP = fopen(name, "r");
+
+    if(displayDeviceFP) {
+        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                displayDeviceFP);
+
+        if(!strncmp(fbType, HDMIPrimaryPanelName[1],
+                        sizeof(HDMIPrimaryPanelName[1]))) {
+            configured  = true;
+        }
+    }
+    fclose(displayDeviceFP);
+    return configured;
+}
+//Is panel pointed by fb LVDS
+static bool isHDMIPrimary(){
+    bool configured = false;
+    FILE *displayDeviceFP = NULL;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    displayDeviceFP = fopen("/sys/class/graphics/fb0/msm_fb_type", "r");
+
+    if(displayDeviceFP) {
+        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                displayDeviceFP);
+
+        for(int i = 0; i < NUM_HDMI_PRIMARY_PANEL_NAMES; i++) {
+            if(!strncmp(fbType, HDMIPrimaryPanelName[i],
+                        sizeof(HDMIPrimaryPanelName[i]))) {
+                configured  = true;
+                break;
+            }
+        }
+        fclose(displayDeviceFP);
+    }
+    return configured;
+}
 
 inline void getLayerResolution(const hwc_layer_1_t* layer,
                                int& width, int& height)
@@ -428,8 +514,29 @@ struct hwc_context_t {
     //OverScan parameters
     qhwc::OSRectDimensions ossrcparams[PP_MAX_VG_PIPES];
     qhwc::OSRectDimensions osdstparams[PP_MAX_VG_PIPES];
+    //addition of variables to implement getStdFrameratePixclock in mpq2.6
+    uint32_t default_pixclock;
+    uint32_t default_framerate;
+  /* Indicates the configuration change happening
+     * either Pixel Clock Correction or Picture Quality
+     * Correction */
+
+    qhwc::CONFIG_CHANGE_TYPE mConfigChangeType;
+     /* Indicates the state at which the configuration
+     * change is in */
+
+    qhwc::ConfigChangeState* mConfigChangeState;
+    qhwc::ConfigChangeParams mConfigChangeParams;
+
+    pthread_mutex_t mConfigChangeLock;
+    pthread_cond_t mConfigChangeCond;
+
     // Post-processing parameters
     qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
+
+    // To Stop and Start FrameWork Updates on Display
+    int mPQCState;
+
     //Total YUV layer handle in the context
     private_handle_t *mYuvHnd[MAX_NUM_APP_LAYERS];
     //Blanking round for res change

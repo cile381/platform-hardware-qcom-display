@@ -24,6 +24,7 @@
 #include <cutils/properties.h>
 #include <gralloc_priv.h>
 #include <overlay.h>
+#include <linux/msm_mdp.h>
 #include <overlayRotator.h>
 #include "hwc_utils.h"
 #include "hwc_mdpcomp.h"
@@ -35,6 +36,7 @@
 #include "hwc_qclient.h"
 #include "QService.h"
 #include "comptype.h"
+#include <math.h>
 
 using namespace qClient;
 using namespace qService;
@@ -44,6 +46,301 @@ using namespace overlay::utils;
 namespace ovutils = overlay::utils;
 
 namespace qhwc {
+
+ConfigChangeState* ConfigChangeState::sConfigChangeState = NULL;
+#ifdef USES_PLL_CALCULATION
+typedef struct {
+    int req_ppm;
+    int pll_ppm;
+    int frame_rate;
+} CHANGE_DATA;
+
+typedef struct {
+    int fps;
+    CHANGE_DATA cd[35];
+} PPM_DB;
+
+#define PPM_LOW_LIMIT -6000
+#define PPM_HIGH_LIMIT 6000
+
+static PPM_DB ppm_check_point[] = {
+        {60000,
+            {
+                {PPM_LOW_LIMIT},
+                {-5565, -5565, 16759953},
+                {-4329, -4329, 16739124},
+                {-2597, -2597, 16710069},
+//              {-1443,  -673, 16690766},
+                {    0,     0, 16666667},
+                { 1856,  1925, 16635810},
+                { 2598,  3780, 16623497},
+                { 4330,  4330, 16594827},
+                { 5904,  6254, 16568848},
+                {PPM_HIGH_LIMIT}
+            }
+        },
+        {50000,
+            {
+                {PPM_LOW_LIMIT},
+                {-5878, -3751, 20118270},
+                {-5714, -3569, 20114945},
+                {-5565, -3405, 20111946},
+                {-5430, -3257, 20109205},
+                {-5307, -3122, 20106737},
+                {-5194, -2998, 20104449},
+                {-4995, -2782, 20100417},
+                {-4906, -2686, 20098608},
+                {-2597, -2597, 20052086},
+                { -288,  -288, 20005775},
+                { -199,  -199, 20004000},
+                { -103,  -103, 20002081},
+                {    0,     0, 20000000},
+                {  113,   113, 19997744},
+                {  237,   237, 19995278},
+                {  372,   372, 19992582},
+                {  520,   520, 19989615},
+                {  684,   684, 19986340},
+                {  866,   866, 19982700},
+                { 1070,  1070, 19978635},
+//              { 1299,  1299, 0},
+                { 1559,  1559, 19968875},
+                { 1856,  1856, 19962965},
+                { 2198,  2198, 19956144},
+                { 2598,  2598, 19948188},
+                { 3070,  3070, 19938796},
+                { 3637,  3637, 19927539},
+                { 4330,  4330, 19913795},
+                { 5195,  5195, 19896632},
+                {PPM_HIGH_LIMIT}
+            }
+        },
+        {30000,
+            {
+                {PPM_LOW_LIMIT},
+                {-4329, -3366, 33478263},
+                {-2597, -2597, 33420141},
+                { -618,  1251, 33353958},
+                {  482,  3230, 33317299},
+                { 4330,  4330, 33189658},
+                {PPM_HIGH_LIMIT}
+            }
+        },
+        {25000,
+            {
+                {PPM_LOW_LIMIT},
+                {-2597, -2597, 40104163},
+                { 2021,  2021, 39919350},
+                { 2292,  2292, 39908525},
+                { 2598,  2598, 39896363},
+                { 2944,  2944, 39882608},
+                { 3340,  3340, 39866855},
+                { 3797,  3797, 39848717},
+                { 4330,  4330, 39827589},
+                { 4959,  4959, 39802637},
+                { 5715,  5715, 39772715},
+                {PPM_HIGH_LIMIT}
+            }
+        },
+        {24000,
+            {
+                {PPM_LOW_LIMIT},
+                {-4329, -4329, 42050974},
+                {  482,   482, 41646635},
+                { 1856,  1856, 41589499},
+                { 4330,  4330, 41487072},
+                {PPM_HIGH_LIMIT}
+            }
+        }
+};
+
+int validatePPM(int fps, int ppm, CHANGE_DATA **set_cd)
+{
+    int ret = -1;
+    int ppm_check_count = sizeof(ppm_check_point)/sizeof(ppm_check_point[0]);
+    CHANGE_DATA *cd = NULL;
+    int i;
+
+    if (ppm < PPM_LOW_LIMIT || ppm > PPM_HIGH_LIMIT)
+        return ret;
+
+    for (i = 0; i < ppm_check_count; i++) {
+        if (ppm_check_point[i].fps == fps) {
+            cd = ppm_check_point[i].cd;
+            break;
+        }
+    }
+
+    if (NULL == cd)
+        return ret;
+
+    for (i = 0; cd[i].req_ppm < PPM_HIGH_LIMIT; i++) {
+        int set = 0;
+
+        if (cd[i].req_ppm == ppm) {
+            *set_cd = cd + i;
+            set = 1;
+        } else if (ppm > cd[i].req_ppm && ppm <= cd[i + 1].req_ppm) {
+            if (ppm <= (int)floor((cd[i].req_ppm + cd[i + 1].req_ppm)/2))
+                *set_cd = cd + i;
+            else
+                *set_cd = cd + i + 1;
+
+            set = 1;
+        }
+
+        if (!set)
+            continue;
+
+        if ((*set_cd)->req_ppm == PPM_LOW_LIMIT)
+            *set_cd = cd + i + 1;
+        else if ((*set_cd)->req_ppm == PPM_HIGH_LIMIT)
+            *set_cd = cd + i;
+
+        if (set) {
+            ret = 0;
+            break;
+        }
+    }
+    return ret;
+}
+#endif
+
+bool changePLLSettings(hwc_context_t* ctx, int dpy) {
+    bool ret = true;
+#ifdef USES_PLL_CALCULATION
+    int pll_file = open(LVDS_PLL_UPDATE,O_WRONLY,0);
+
+    if(pll_file < 0) {
+        ALOGE("%s: LVDS PLL file %s not found: ret:%d err str: %s",
+                __FUNCTION__,LVDS_PLL_UPDATE,pll_file,strerror(errno));
+        ret = false;
+        return ret;
+    }
+
+    int err = -1;
+    int ctrl_reg[8];
+    int numchannels = 1;
+
+    float framerate = (ctx->mConfigChangeParams).param1;
+    float ppm       = (ctx->mConfigChangeParams).param2;
+    float change_pt_ppm;
+    CHANGE_DATA *set_cd;
+    uint32_t base_pixelclock = 0;
+    int req_bitclk = 0;
+    int pll_bitclk = 0;
+
+    if (validatePPM(framerate ? (int)floor(framerate) : 60000,
+            (int)floor(ppm), &set_cd))
+        return err;
+
+    change_pt_ppm = set_cd->pll_ppm * 1.0;
+
+    if(isPanelLVDS(0)){
+        numchannels = 2;
+    }
+
+    /* Check if framerate also has to be changed */
+    if(framerate)
+        base_pixelclock = (uint32_t)floor(((float)ctx->default_pixclock /
+                            (float)ctx->default_framerate) *
+                                (framerate / (float)numchannels));
+    else
+        base_pixelclock = ctx->default_pixclock;
+
+    req_bitclk  = base_pixelclock * 7;
+    req_bitclk += (int)floor((float)req_bitclk * (ppm / 1000000.0));
+
+    pll_bitclk  = base_pixelclock * 7;
+    pll_bitclk += (int)floor((float)pll_bitclk * (change_pt_ppm / 1000000.0));
+
+    int h_bk_porch = 0;
+    int h_total    = 2200;
+    float req_fps  = ((((float)req_bitclk / 7) * (float) ctx->default_framerate) /
+                            (float)ctx->default_pixclock) * 2;
+
+    if (req_bitclk != pll_bitclk)
+        h_bk_porch = (int)floor((((float)h_total * 1000000) /
+                    ((float)set_cd->frame_rate * req_fps)) * 1000000) - h_total;
+
+    ALOGE("%s: Req bit clock is %d",  __FUNCTION__, req_bitclk);
+    ALOGE("%s: PLL bit clock is %d",  __FUNCTION__, pll_bitclk);
+    ALOGE("%s: Req pixclock is %d",   __FUNCTION__, req_bitclk / 7);
+    ALOGE("%s: PLL pixclock is %u",   __FUNCTION__, pll_bitclk / 7);
+    ALOGE("%s: Req PPM is %f",        __FUNCTION__, ppm);
+    ALOGE("%s: PLL PPM is %f",        __FUNCTION__, change_pt_ppm);
+    ALOGE("%s: Req FPS is %f",        __FUNCTION__, req_fps);
+    ALOGE("%s: PLL Frame Rate is %d", __FUNCTION__, set_cd->frame_rate);
+    ALOGE("%s: Porch Value is %d",    __FUNCTION__, h_bk_porch);
+
+    pll_calculate(pll_bitclk, ref_pixclock, ctrl_reg);
+
+    err = write(pll_file, ctrl_reg, sizeof(ctrl_reg));
+    if(err <= 0) {
+        ALOGE("%s: file write failed '%s'", __FUNCTION__, LVDS_PLL_UPDATE);
+        ret = false;
+    } else {
+        ctx->default_pixclock = req_bitclk / 7;
+    }
+    close(pll_file);
+
+    struct msmfb_metadata metadata;
+    metadata.op    = metadata_op_panel_tune;
+    metadata.flags = 0;
+    metadata.data.panel_cfg.h_back_porch = h_bk_porch;
+
+    if(ioctl(ctx->dpyAttr[dpy].fd, MSMFB_METADATA_SET, &metadata) == -1)
+          ALOGW("%s: MSMFB_METADATA_SET failed to configure panel bk porch\n",
+                    __FUNCTION__);
+
+#endif
+    return ret;
+}
+
+bool canChangePLLSettings(hwc_context_t* ctx) {
+#ifdef USES_PLL_CALCULATION
+    if(not isHDMIPrimary()) {
+        return false;
+    }
+        int framerate = (ctx->mConfigChangeParams).param1;
+        int ppm = (ctx->mConfigChangeParams).param2;
+        /*For now check if the ppm is within limits */
+        if(framerate < 0) {
+            ALOGE("%s: Framerate %d is -ve",__FUNCTION__,framerate);
+            return false;
+        }
+        return true;
+#endif
+    return false;
+}
+int commitOnPrimary(hwc_context_t* ctx, int dpy) {
+ struct fb_var_screeninfo info;
+
+    int fb_fd = openFb(dpy);
+    if(fb_fd < 0) {
+        ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
+        return -errno;
+    }
+
+    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        ALOGE("%s:Error in ioctl FBIOGET_VSCREENINFO: %s", __FUNCTION__,
+                                                       strerror(errno));
+        close(fb_fd);
+        return -errno;
+    }
+
+    info.reserved[3] = ctx->default_framerate;
+    info.pixclock = ctx->default_pixclock;
+
+    if (ioctl(fb_fd, FBIOPUT_VSCREENINFO, &info) == -1) {
+        ALOGE("%s:Error in ioctl FBIOPUT_VSCREENINFO: %s", __FUNCTION__,
+                                                       strerror(errno));
+        close(fb_fd);
+        return -errno;
+    }
+
+    return 0;
+}
+
 
 static int openFramebufferDevice(hwc_context_t *ctx)
 {
@@ -55,6 +352,8 @@ static int openFramebufferDevice(hwc_context_t *ctx)
         ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
         return -errno;
     }
+    ctx->default_framerate = info.reserved[3];
+    ctx->default_pixclock = info.pixclock;
 
     if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &info) == -1) {
         ALOGE("%s:Error in ioctl FBIOGET_VSCREENINFO: %s", __FUNCTION__,
@@ -170,6 +469,10 @@ void initContext(hwc_context_t *ctx)
     }
 
     MDPComp::init(ctx);
+    ctx->mConfigChangeType = qhwc::NO_CORRECTION;
+    ctx->mConfigChangeState = qhwc::ConfigChangeState::getInstance();
+    pthread_mutex_init(&(ctx->mConfigChangeLock), NULL);
+    pthread_cond_init(&(ctx->mConfigChangeCond), NULL);
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
