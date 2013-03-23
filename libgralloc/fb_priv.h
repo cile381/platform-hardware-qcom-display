@@ -54,6 +54,8 @@ struct private_module_t {
     float fps;
     uint32_t swapInterval;
     uint32_t currentOffset;
+    uint32_t default_pixclock;
+    uint32_t default_framerate;
     bool fbPostDone;
     overlay::Overlay *overlay;
     pthread_mutex_t fbPostLock;

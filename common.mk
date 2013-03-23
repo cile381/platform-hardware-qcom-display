@@ -17,6 +17,10 @@ ifeq ($(TARGET_USES_POST_PROCESSING),true)
     common_includes += $(TARGET_OUT_HEADERS)/pp/inc
 endif
 
+ifeq ($(TARGET_USES_PLL_CALCULATION),true)
+    common_flags  += -DUSES_PLL_CALCULATION
+endif
+
 ifeq ($(ARCH_ARM_HAVE_NEON),true)
     common_flags += -D__ARM_HAVE_NEON
 endif

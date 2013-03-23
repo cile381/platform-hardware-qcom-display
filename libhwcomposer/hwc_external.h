@@ -45,7 +45,6 @@ enum {
     EXTERN_DISPLAY_FB2  = 2
 };
 enum {
-    MAX_FRAME_BUFFER_NAME_SIZE   = 80,
     MAX_DISPLAY_EXTERNAL_DEVICES = 2
 };
 enum {

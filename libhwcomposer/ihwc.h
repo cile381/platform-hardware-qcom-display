@@ -45,6 +45,11 @@ enum {
     GET_EXT_DISPLAY_RESOLUTION_MODE_COUNT,
     SET_PP_PARAMS,
     SET_PQCSTATE,
+    START_CONFIG_CHANGE,
+    DO_CONFIG_CHANGE,
+    STOP_CONFIG_CHANGE,
+    GET_STD_FRAMERATE_PIXCLOCK,
+    GET_CURRENT_FRAMERATE_PIXCLOCK,
     SET_OVERSCANCOMPENSATION_PARAMS,
     SET_OVERSCAN_PARAMS,
 };
@@ -76,6 +81,17 @@ public:
             qhwc::PP_Video_Layer_Type numVideoLayer,
             qhwc::OSRectDimensions ovsrcparams,
             qhwc::OSRectDimensions ovdstparams) = 0;
+    virtual android::status_t startConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t doConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) = 0;
+    virtual android::status_t stopConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t getStdFrameratePixclock(
+        qhwc::ConfigChangeParams *params) = 0;
+    virtual android::status_t getCurrentFrameratePixclock(
+        qhwc::ConfigChangeParams *params) = 0;
 };
 
 // ----------------------------------------------------------------------------
