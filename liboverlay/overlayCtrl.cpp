@@ -50,7 +50,8 @@ bool Ctrl::setPosition(const utils::Dim& dim)
         return false;
     }
 
-    if(!mMdp.setPosition(dim, mInfo.mFBWidth, mInfo.mFBHeight)) {
+    if(!mMdp.setPosition(dim, mInfo.mFBWidth, mInfo.mFBHeight,
+                                          mMdp.getTransform())) {
         ALOGE("Ctrl failed MDP setPosition");
         return false;
     }

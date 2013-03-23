@@ -132,8 +132,11 @@ public:
 
     bool setTransform(const utils::eTransform& orient, const bool& rotUsed);
 
+    const utils::eTransform& getTransform();
+
     /* given a dim and w/h, set overlay dim */
-    bool setPosition(const utils::Dim& dim, int w, int h);
+    bool setPosition(const utils::Dim& dim, int w, int h,
+                     const overlay::utils::eTransform& e);
 
     /* using user_data, sets/unsets roationvalue in mdp flags */
     void setRotationFlags();

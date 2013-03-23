@@ -93,22 +93,42 @@ bool MdpCtrl::setCrop(const utils::Dim& d) {
 }
 
 bool MdpCtrl::setPosition(const overlay::utils::Dim& d,
-        int fbw, int fbh)
+        int fbw, int fbh,  const utils::eTransform& orientation)
 {
     ovutils::Dim dim(d);
     ovutils::Dim ovsrcdim = getSrcRectDim();
-    // Scaling of upto a max of 20 times supported
-    if(dim.w >(ovsrcdim.w * ovutils::getOverlayMagnificationLimit())){
-        dim.w = ovutils::getOverlayMagnificationLimit() * ovsrcdim.w;
-        dim.x = (fbw - dim.w) / 2;
-    }
-    if(dim.h >(ovsrcdim.h * ovutils::getOverlayMagnificationLimit())) {
-        dim.h = ovutils::getOverlayMagnificationLimit() * ovsrcdim.h;
-        dim.y = (fbh - dim.h) / 2;
+
+    // Get scaling limit supported by MDP
+    // 8 - for MDP 400, and 20 for versions higher than 400
+
+    uint32_t mdpMagLimit = ovutils::getOverlayMagnificationLimit();
+
+    if(orientation & ovutils::OVERLAY_TRANSFORM_ROT_90 ) {
+       if(dim.h >(ovsrcdim.w * mdpMagLimit)){
+          dim.h = mdpMagLimit * ovsrcdim.w;
+          dim.y = (fbw - dim.h) / 2;
+       }
+       if(dim.w >(ovsrcdim.h * mdpMagLimit)) {
+          dim.w = mdpMagLimit * ovsrcdim.h;
+          dim.x = (fbh - dim.w) / 2;
+       }
+    } else {
+       if(dim.w >(ovsrcdim.w * mdpMagLimit)){
+          dim.w = mdpMagLimit * ovsrcdim.w;
+          dim.x = (fbw - dim.w) / 2;
+       }
+       if(dim.h >(ovsrcdim.h * mdpMagLimit)) {
+          dim.h = mdpMagLimit* ovsrcdim.h;
+          dim.y = (fbh - dim.h) / 2;
+       }
     }
 
     setDstRectDim(dim);
     return true;
+}
+
+const utils::eTransform&  MdpCtrl::getTransform() {
+    return mOrientation;
 }
 
 bool MdpCtrl::setTransform(const utils::eTransform& orient,
