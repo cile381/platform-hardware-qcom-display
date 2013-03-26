@@ -342,7 +342,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
         if(isYuvBuffer(hnd)) {
             MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
             SetVidInfo(ctx,layer,mdpFlags,*metadata,numVideoLayer);
-            if(metadata && ctx->mPpParams[numVideoLayer].isValid){
+            if(metadata && (ctx->mPpParams[numVideoLayer].isValid ||
+               (metadata->operation & PP_PARAM_VID_INTFC))) {
                 ov.setVisualParams(*metadata, dest);
             }
             rot  = ovutils::ROT_DOWNSCALE_ENABLED;

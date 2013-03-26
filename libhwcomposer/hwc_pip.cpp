@@ -116,7 +116,8 @@ bool configPrimaryVideo(hwc_context_t *ctx, hwc_layer_t *layer) {
     }
 
     MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
-    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+    if (metadata && (ctx->mPpParams[VIDEO_LAYER_0].isValid ||
+        (metadata->operation & PP_PARAM_VID_INTFC))) {
         /* Preference will be for the HSIC & QSEED values
          * set through binder */
         metadata->operation |= ctx->mPpParams[VIDEO_LAYER_0].ops;

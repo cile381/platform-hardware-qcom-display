@@ -209,7 +209,8 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         isFgFlag = ovutils::IS_FG_SET;
     }
 
-    if(metadata && ctx->mPpParams[VIDEO_LAYER_0].isValid){
+    if(metadata && (ctx->mPpParams[VIDEO_LAYER_0].isValid ||
+        (metadata->operation & PP_PARAM_VID_INTFC))) {
         /* Preference will be for the HSIC & QSEED values
          * set through binder */
         metadata->operation |= ctx->mPpParams[VIDEO_LAYER_0].ops;
