@@ -104,12 +104,13 @@ static int openFramebufferDevice(hwc_context_t *ctx)
 void initContext(hwc_context_t *ctx)
 {
     openFramebufferDevice(ctx);
-    overlay::Overlay::initOverlay();
-    ctx->mOverlay = overlay::Overlay::getInstance();
-    ctx->mRotMgr = new RotMgr();
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
+    overlay::Overlay::initOverlay();
+    ctx->mOverlay = overlay::Overlay::getInstance();
+    ctx->mRotMgr = new RotMgr();
+
     //Is created and destroyed only once for primary
     //For external it could get created and destroyed multiple times depending
     //on what external we connect to.
@@ -121,7 +122,6 @@ void initContext(hwc_context_t *ctx)
         IVideoOverlay::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
         HWC_DISPLAY_PRIMARY);
 
-    char value[PROPERTY_VALUE_MAX];
     // Check if the target supports copybit compostion (dyn/mdp/c2d) to
     // decide if we need to open the copybit module.
     int compositionType =
@@ -283,9 +283,21 @@ bool needsScaling(hwc_layer_1_t const* layer) {
 }
 
 bool isAlphaScaled(hwc_layer_1_t const* layer) {
-    if(needsScaling(layer)) {
-        if(layer->blending != HWC_BLENDING_NONE)
+    if(needsScaling(layer) && isAlphaPresent(layer)) {
+        return true;
+    }
+    return false;
+}
+
+bool isAlphaPresent(hwc_layer_1_t const* layer) {
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
+    int format = hnd->format;
+    switch(format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_BGRA_8888:
+            // In any more formats with Alpha go here..
             return true;
+        default : return false;
     }
     return false;
 }
@@ -800,6 +812,8 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(rDest != OV_INVALID) {
         PipeArgs pargR(mdpFlagsR, whf, z, isFg,
                 static_cast<eRotFlags>(rotFlags));
+        tmp_dstR.right = tmp_dstR.right - tmp_dstR.left;
+        tmp_dstR.left = 0;
         if(configMdp(ctx->mOverlay, pargR, orient,
                 tmp_cropR, tmp_dstR, rDest) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
