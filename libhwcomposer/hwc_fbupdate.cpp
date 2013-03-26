@@ -20,8 +20,8 @@
 
 #define DEBUG_FBUPDATE 0
 #include <gralloc_priv.h>
-#include <fb_priv.h>
 #include "hwc_fbupdate.h"
+#include "hwc_video.h"
 
 namespace qhwc {
 
@@ -71,7 +71,8 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx,
             ALOGE("%s:NULL private handle for layer!", __FUNCTION__);
             return false;
         }
-        ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
+        ovutils::Whf info(hnd->width, hnd->height,
+                ovutils::getMdpFormat(hnd->format), hnd->size);
 
         //Request an RGB pipe
         ovutils::eDest dest = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, mDpy);
@@ -82,11 +83,20 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx,
         mDest = dest;
 
         ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
+        // If any of the layers has pre-multiplied alpha, set Pre multiplied
+        // Flag as the compositied output is alpha pre-multiplied.
+        if(ctx->listStats[mDpy].preMultipliedAlpha == true)
+               ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_BLEND_FG_PREMULT);
+
+        ovutils::eZorder z_order =
+              ctx->mVidOv[mDpy]->isModeOn()?ovutils::ZORDER_1:ovutils::ZORDER_0;
+        ovutils::eIsFg is_fg =
+           ctx->mVidOv[mDpy]->isModeOn()? ovutils::IS_FG_OFF:ovutils::IS_FG_SET;
 
         ovutils::PipeArgs parg(mdpFlags,
                 info,
-                ovutils::ZORDER_0,
-                ovutils::IS_FG_SET,
+                z_order,
+                is_fg,
                 ovutils::ROT_FLAGS_NONE);
         ov.setSource(parg, dest);
 
@@ -171,7 +181,8 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
             ALOGE("%s:NULL private handle for layer!", __FUNCTION__);
             return false;
         }
-        ovutils::Whf info(hnd->width, hnd->height, hnd->format, hnd->size);
+        ovutils::Whf info(hnd->width, hnd->height,
+                ovutils::getMdpFormat(hnd->format), hnd->size);
 
         //Request left RGB pipe
         ovutils::eDest destL = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, mDpy);
@@ -188,11 +199,20 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         mDestRight = destR;
 
         ovutils::eMdpFlags mdpFlagsL = ovutils::OV_MDP_FLAGS_NONE;
+        //If any layer has pre-multiplied alpha, set Pre multiplied
+        //Flag as the compositied output is alpha pre-multiplied.
+        if(ctx->listStats[mDpy].preMultipliedAlpha == true)
+            ovutils::setMdpFlags(mdpFlagsL, ovutils::OV_MDP_BLEND_FG_PREMULT);
+
+        ovutils::eZorder z_order =
+              ctx->mVidOv[mDpy]->isModeOn()?ovutils::ZORDER_1:ovutils::ZORDER_0;
+        ovutils::eIsFg is_fg =
+           ctx->mVidOv[mDpy]->isModeOn()? ovutils::IS_FG_OFF:ovutils::IS_FG_SET;
 
         ovutils::PipeArgs pargL(mdpFlagsL,
                 info,
-                ovutils::ZORDER_0,
-                ovutils::IS_FG_SET,
+                z_order,
+                is_fg,
                 ovutils::ROT_FLAGS_NONE);
         ov.setSource(pargL, destL);
 
@@ -200,8 +220,8 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         ovutils::setMdpFlags(mdpFlagsR, ovutils::OV_MDSS_MDP_RIGHT_MIXER);
         ovutils::PipeArgs pargR(mdpFlagsR,
                 info,
-                ovutils::ZORDER_0,
-                ovutils::IS_FG_SET,
+                z_order,
+                is_fg,
                 ovutils::ROT_FLAGS_NONE);
         ov.setSource(pargR, destR);
 
