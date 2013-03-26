@@ -53,7 +53,8 @@ public:
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
-    bool setVisualParams(const MetaData_t& data);
+    void setVisualParams(const MetaData_t& data);
+    void resetVisualParams();
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -80,8 +81,11 @@ inline bool UIMirrorPipe::queueBuffer(int fd, uint32_t offset) {
 }
 inline bool UIMirrorPipe::setCrop(const utils::Dim& dim) {
     return mUI.setCrop(dim); }
-inline bool UIMirrorPipe::setVisualParams(const MetaData_t& data) {
-    return mUI.setVisualParams(data);
+inline void UIMirrorPipe::setVisualParams(const MetaData_t& data) {
+    mUI.setVisualParams(data);
+}
+inline void UIMirrorPipe::resetVisualParams() {
+    mUI.resetVisualParams();
 }
 inline bool UIMirrorPipe::setPosition(const utils::Dim& dim) {
     ovutils::Dim pdim;

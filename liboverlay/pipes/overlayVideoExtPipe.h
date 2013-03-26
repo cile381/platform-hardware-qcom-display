@@ -53,7 +53,8 @@ public:
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
-    bool setVisualParams(const MetaData_t& data);
+    void setVisualParams(const MetaData_t& data);
+    void resetVisualParams();
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -104,8 +105,11 @@ inline bool VideoExtPipe::setTransform(const utils::eTransform& param) {
     mSrcTransform = param;
     return mVideoExt.setTransform(param);
 }
-inline bool VideoExtPipe::setVisualParams(const MetaData_t& data) {
-    return mVideoExt.setVisualParams(data);
+inline void VideoExtPipe::setVisualParams(const MetaData_t& data) {
+    mVideoExt.setVisualParams(data);
+}
+inline void VideoExtPipe::resetVisualParams() {
+    mVideoExt.resetVisualParams();
 }
 inline bool VideoExtPipe::setSource(const utils::PipeArgs& args) {
     utils::PipeArgs arg(args);

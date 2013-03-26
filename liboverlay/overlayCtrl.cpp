@@ -82,13 +82,14 @@ bool Ctrl::setCrop(const utils::Dim& d)
 utils::ActionSafe* utils::ActionSafe::sActionSafe = NULL;
 utils::OverScanCompensation* utils::OverScanCompensation::sOverScanCompensation = NULL;
 
-bool Ctrl::setVisualParams(const MetaData_t& data)
+void Ctrl::setVisualParams(const MetaData_t& data)
 {
-    if(!mMdp.setVisualParams(data)) {
-        ALOGD("setVisualParam failed in MDP setVisualParam");
-        return false;
-    }
-    return true;
+    mMdp.setVisualParams(data);
+}
+
+void Ctrl::resetVisualParams()
+{
+    mMdp.resetVisualParams();
 }
 
 utils::Dim Ctrl::getAspectRatio(const utils::Whf& whf) const
