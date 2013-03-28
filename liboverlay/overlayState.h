@@ -70,6 +70,12 @@ public:
     /* Dump */
     void dump() const;
 
+    bool canCopyPipe0(utils::eOverlayState FromState,
+            utils::eOverlayState ToState) const;
+    bool canCopyPipe1(utils::eOverlayState FromState,
+            utils::eOverlayState ToState) const;
+
+
 private:
 
     /* Transitions from a state to a state. Default behavior is to move from an
@@ -267,7 +273,7 @@ template <> struct StateTraits<utils::OV_BYPASS_1_LAYER>
     typedef overlay::NullPipe pipe2;   // place holder
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
+    typedef Rotator rot0;
     typedef NullRotator rot1;
     typedef NullRotator rot2;
     typedef NullRotator rot3;
@@ -282,8 +288,8 @@ template <> struct StateTraits<utils::OV_BYPASS_2_LAYER>
     typedef overlay::NullPipe pipe2;   // place holder
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
     typedef NullRotator rot2;
     typedef NullRotator rot3;
 
@@ -297,9 +303,9 @@ template <> struct StateTraits<utils::OV_BYPASS_3_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe2;
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
-    typedef NullRotator rot2;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
+    typedef Rotator rot2;
     typedef NullRotator rot3;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2, pipe3> ovimpl;
@@ -312,9 +318,9 @@ template <> struct StateTraits<utils::OV_BYPASS_4_LAYER>
     typedef overlay::GenericPipe<utils::PRIMARY> pipe2;
     typedef overlay::FloatingPipe pipe3;   // FB pipe
 
-    typedef NullRotator rot0;
-    typedef NullRotator rot1;
-    typedef NullRotator rot2;
+    typedef Rotator rot0;
+    typedef Rotator rot1;
+    typedef Rotator rot2;
     typedef NullRotator rot3;
 
     typedef overlay::OverlayImpl<pipe0, pipe1, pipe2, pipe3> ovimpl;
@@ -361,6 +367,40 @@ inline OverlayImplBase* OverlayState::reset(utils::eOverlayState s) {
 }
 inline void OverlayState::dump() const {
     ALOGE("== Dump state %d start/end ==", mState);
+}
+
+inline bool OverlayState::canCopyPipe0(
+        utils::eOverlayState FromState,
+        utils::eOverlayState ToState) const {
+    return ((FromState == ovutils::OV_BYPASS_1_LAYER
+            or FromState == ovutils::OV_BYPASS_2_LAYER
+            or FromState == ovutils::OV_BYPASS_3_LAYER
+            or FromState == ovutils::OV_BYPASS_4_LAYER
+            or FromState == ovutils::OV_2D_TRUE_UI_MIRROR
+            or FromState == ovutils::OV_2D_VIDEO_ON_PANEL
+            or FromState == ovutils::OV_2D_VIDEO_ON_PANEL_TV
+            or FromState == ovutils::OV_2D_PIP_VIDEO_ON_PANEL) and
+           (ToState == ovutils::OV_BYPASS_1_LAYER
+            or ToState == ovutils::OV_BYPASS_2_LAYER
+            or ToState == ovutils::OV_BYPASS_3_LAYER
+            or ToState == ovutils::OV_BYPASS_4_LAYER
+            or ToState == ovutils::OV_2D_TRUE_UI_MIRROR
+            or ToState == ovutils::OV_2D_VIDEO_ON_PANEL
+            or ToState == ovutils::OV_2D_VIDEO_ON_PANEL_TV
+            or ToState == ovutils::OV_2D_PIP_VIDEO_ON_PANEL));
+}
+
+inline bool OverlayState::canCopyPipe1(
+        utils::eOverlayState FromState,
+        utils::eOverlayState ToState) const {
+    return ((FromState == ovutils::OV_BYPASS_2_LAYER
+            or FromState == ovutils::OV_BYPASS_3_LAYER
+            or FromState == ovutils::OV_BYPASS_4_LAYER
+            or FromState == ovutils::OV_2D_PIP_VIDEO_ON_PANEL) and
+           (ToState == ovutils::OV_BYPASS_2_LAYER
+            or ToState == ovutils::OV_BYPASS_3_LAYER
+            or ToState == ovutils::OV_BYPASS_4_LAYER
+            or ToState == ovutils::OV_2D_PIP_VIDEO_ON_PANEL));
 }
 
 inline OverlayImplBase* OverlayState::handleEvent(utils::eOverlayState toState,
@@ -567,18 +607,32 @@ inline OverlayImplBase* OverlayState::handle_from_to(OverlayImplBase* ov) {
     // Create new ovimpl based on new state
     OverlayImplBase* newov = new typename StateTraits<TO_STATE>::ovimpl;
 
-    //close old pipe0, create new pipe0
-    ov->closePipe(utils::OV_PIPE0);
-    RotatorBase* rot0 = new typename StateTraits<TO_STATE>::rot0;
-    newov->initPipe(rot0, utils::OV_PIPE0);
-    //close old pipe1, create new pipe1
-    ov->closePipe(utils::OV_PIPE1);
-    RotatorBase* rot1 = new typename StateTraits<TO_STATE>::rot1;
-    newov->initPipe(rot1, utils::OV_PIPE1);
+
+    if(canCopyPipe0(FROM_STATE,TO_STATE)){
+        //copy pipe0/rot0
+        newov->copyOvPipe(ov,utils::OV_PIPE0);
+    } else {
+        //close old pipe0, create new pipe0
+        ov->closePipe(utils::OV_PIPE0);
+        RotatorBase* rot0 = new typename StateTraits<TO_STATE>::rot0;
+        newov->initPipe(rot0, utils::OV_PIPE0);
+    }
+
+    if(canCopyPipe1(FROM_STATE,TO_STATE)){
+        //copy pipe1/rot1
+        newov->copyOvPipe(ov,utils::OV_PIPE1);
+    } else {
+        //close old pipe1, create new pipe1
+        ov->closePipe(utils::OV_PIPE1);
+        RotatorBase* rot1 = new typename StateTraits<TO_STATE>::rot1;
+        newov->initPipe(rot1, utils::OV_PIPE1);
+    }
+
     //close old pipe2, create new pipe2
     ov->closePipe(utils::OV_PIPE2);
     RotatorBase* rot2 = new typename StateTraits<TO_STATE>::rot2;
     newov->initPipe(rot2, utils::OV_PIPE2);
+
     //copy pipe3/rot3 (FB)
     newov->copyOvPipe(ov, utils::OV_PIPE3);
     // All pipes are copied or deleted so no more need for previous ovimpl
