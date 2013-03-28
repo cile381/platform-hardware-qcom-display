@@ -343,11 +343,11 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_layer_t *layer,
             MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
             SetVidInfo(ctx,layer,mdpFlags,*metadata,numVideoLayer);
             if(metadata && ctx->mPpParams[numVideoLayer].isValid){
-                if(ov.setVisualParams(*metadata, dest))
-                    ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+                ov.setVisualParams(*metadata, dest);
             }
             rot  = ovutils::ROT_DOWNSCALE_ENABLED;
         }
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
 
         ovutils::eTransform orient = overlay::utils::OVERLAY_TRANSFORM_0 ;
         if(!(layer->transform & HWC_TRANSFORM_ROT_90)) {

@@ -222,10 +222,10 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
         if(metadata->operation & PP_PARAM_SHARPNESS) {
             metadata->sharpness = ctx->mPpParams[VIDEO_LAYER_0].sharpness;
         }
-        if(ov.setVisualParams(*metadata, ovutils::OV_PIPE0))
-            ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
+        ov.setVisualParams(*metadata, ovutils::OV_PIPE0);
     }
 
+    ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
     //Ensure that VG pipe is allocated in cases where buffer-type
     //is video while format is RGB
     ovutils::setMdpFlags(mdpFlags,

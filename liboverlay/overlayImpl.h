@@ -70,7 +70,10 @@ public:
     virtual bool commit(utils::eDest dest) = 0;
 
     /* Set any buffer specific metaData */
-    virtual bool setVisualParams(const MetaData_t& data,
+    virtual void setVisualParams(const MetaData_t& data,
+            utils::eDest dest = utils::OV_PIPE_ALL) = 0;
+
+    virtual void resetVisualParams(
             utils::eDest dest = utils::OV_PIPE_ALL) = 0;
 
     /* Queue buffer with fd from an offset*/
@@ -104,7 +107,8 @@ public:
     bool close() { return true; }
     bool start(const utils::PipeArgs& args) { return true; }
     bool commit() { return true; }
-    bool setVisualParams(const MetaData_t& data) { return false; }
+    void setVisualParams(const MetaData_t& data) { }
+    void resetVisualParams() { }
     bool setCrop(const utils::Dim& d) { return true; }
     bool setPosition(const utils::Dim& dim) { return true; }
     bool setTransform(const utils::eTransform& param) { return true; }
@@ -144,7 +148,9 @@ public:
             RotatorBase* rot3);
     virtual bool close();
     virtual bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
-    virtual bool setVisualParams(const MetaData_t& data,
+    virtual void setVisualParams(const MetaData_t& data,
+            utils::eDest dest = utils::OV_PIPE_ALL);
+    virtual void resetVisualParams(
             utils::eDest dest = utils::OV_PIPE_ALL);
     virtual bool setCrop(const utils::Dim& d,
             utils::eDest dest);
@@ -410,6 +416,7 @@ bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
 
     if (utils::OV_PIPE0 & dest) {
         mPipe0 = ovimpl->mPipe0;
+        mPipe0->resetVisualParams();
         mRotP0 = ovimpl->mRotP0;
         ovimpl->mPipe0 = 0;
         ovimpl->mRotP0 = 0;
@@ -417,6 +424,7 @@ bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
 
     if (utils::OV_PIPE1 & dest) {
         mPipe1 = ovimpl->mPipe1;
+        mPipe1->resetVisualParams();
         mRotP1 = ovimpl->mRotP1;
         ovimpl->mPipe1 = 0;
         ovimpl->mRotP1 = 0;
@@ -424,6 +432,7 @@ bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
 
     if (utils::OV_PIPE2 & dest) {
         mPipe2 = ovimpl->mPipe2;
+        mPipe2->resetVisualParams();
         mRotP2 = ovimpl->mRotP2;
         ovimpl->mPipe2 = 0;
         ovimpl->mRotP2 = 0;
@@ -431,6 +440,7 @@ bool OverlayImpl<P0, P1, P2, P3>::copyOvPipe(OverlayImplBase* ov,
 
     if (utils::OV_PIPE3 & dest) {
         mPipe3 = ovimpl->mPipe3;
+        mPipe3->resetVisualParams();
         mRotP3 = ovimpl->mRotP3;
         ovimpl->mPipe3 = 0;
         ovimpl->mRotP3 = 0;
@@ -526,7 +536,7 @@ bool OverlayImpl<P0, P1, P2, P3>::commit(utils::eDest dest)
 }
 
 template <class P0, class P1, class P2,class P3>
-bool OverlayImpl<P0, P1, P2,P3>::setVisualParams(const MetaData_t& data,
+void OverlayImpl<P0, P1, P2,P3>::setVisualParams(const MetaData_t& data,
                                                 utils::eDest dest)
 {
     OVASSERT(mPipe0 && mPipe1 && mPipe2,
@@ -534,34 +544,44 @@ bool OverlayImpl<P0, P1, P2,P3>::setVisualParams(const MetaData_t& data,
             __FUNCTION__, mPipe0, mPipe1, mPipe2);
 
     if (utils::OV_PIPE0 & dest) {
-        if(!mPipe0->setVisualParams(data)) {
-            ALOGD("OverlayImpl p0 failed to setVisualParams");
-            return false;
-        }
+        mPipe0->setVisualParams(data);
     }
 
     if (utils::OV_PIPE1 & dest) {
-        if(!mPipe1->setVisualParams(data)) {
-            ALOGD("OverlayImpl p1 failed to setVisualParams");
-            return false;
-        }
+        mPipe1->setVisualParams(data);
     }
 
     if (utils::OV_PIPE2 & dest) {
-        if(!mPipe2->setVisualParams(data)) {
-            ALOGD("OverlayImpl p2 failed to setVisualParams");
-            return false;
-        }
+        mPipe2->setVisualParams(data);
     }
 
     if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->setVisualParams(data)) {
-            ALOGD("OverlayImpl p3 failed to setVisualParams");
-            return false;
-        }
+        mPipe3->setVisualParams(data);
+    }
+}
+
+template <class P0, class P1, class P2,class P3>
+void OverlayImpl<P0, P1, P2,P3>::resetVisualParams(utils::eDest dest)
+{
+    OVASSERT(mPipe0 && mPipe1 && mPipe2,
+            "%s: Pipes are null p0=%p p1=%p p2=%p",
+            __FUNCTION__, mPipe0, mPipe1, mPipe2);
+
+    if (utils::OV_PIPE0 & dest) {
+        mPipe0->resetVisualParams();
     }
 
-    return true;
+    if (utils::OV_PIPE1 & dest) {
+        mPipe0->resetVisualParams();
+    }
+
+    if (utils::OV_PIPE2 & dest) {
+        mPipe0->resetVisualParams();
+    }
+
+    if (utils::OV_PIPE3 & dest) {
+        mPipe0->resetVisualParams();
+    }
 }
 
 template <class P0, class P1, class P2, class P3>

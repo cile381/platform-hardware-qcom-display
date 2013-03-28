@@ -52,7 +52,8 @@ public:
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
-    bool setVisualParams(const MetaData_t& data);
+    void setVisualParams(const MetaData_t& data);
+    void resetVisualParams();
     bool setSource(const utils::PipeArgs& args);
     void dump() const;
 private:
@@ -167,8 +168,11 @@ inline bool FloatingPipe::setCrop(const utils::Dim& dim) {
     mBorderFill_rect_h = dim.h;
     return mFloating.setCrop(dim);
 }
-inline bool FloatingPipe::setVisualParams(const MetaData_t& data) {
-    return mFloating.setVisualParams(data);
+inline void FloatingPipe::setVisualParams(const MetaData_t& data) {
+    mFloating.setVisualParams(data);
+}
+inline void FloatingPipe::resetVisualParams() {
+    mFloating.resetVisualParams();
 }
 inline bool FloatingPipe::setPosition(const utils::Dim& dim) {
     return mFloating.setPosition(dim);

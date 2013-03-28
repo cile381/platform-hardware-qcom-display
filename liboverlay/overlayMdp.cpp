@@ -67,9 +67,14 @@ void MdpCtrl::reset() {
     mLkgo.id = MSMFB_NEW_REQUEST;
     mOrientation = utils::OVERLAY_TRANSFORM_0;
     mRotUsed = false;
+    resetVisualParams();
+}
+
+void MdpCtrl::resetVisualParams() {
 #ifdef USES_POST_PROCESSING
     memset(&params, 0, sizeof(struct compute_params));
     memset(qseedData,0,sizeof(qseedData));
+    memset(&(mOVInfo.overlay_pp_cfg),0,sizeof(mOVInfo.overlay_pp_cfg));
     params.params.conv_params.order = hsic_order_hsc_i;
     params.params.conv_params.interface = interface_rec601;
     params.params.conv_params.cc_matrix[0][0] = 1;
@@ -302,7 +307,7 @@ void MdpCtrl3D::dump() const {
     ALOGE("== Dump MdpCtrl end ==");
 }
 
-bool MdpCtrl::setVisualParams(const MetaData_t& data) {
+void MdpCtrl::setVisualParams(const MetaData_t& data) {
 #ifdef USES_POST_PROCESSING
     bool needUpdate = false;
     float precision = 0.00001;
@@ -387,10 +392,8 @@ bool MdpCtrl::setVisualParams(const MetaData_t& data) {
 
     if (needUpdate) {
         display_pp_compute_params(&params, &mOVInfo.overlay_pp_cfg);
-        return true;
      }
 #endif
-    return false;
 }
 
 } // overlay

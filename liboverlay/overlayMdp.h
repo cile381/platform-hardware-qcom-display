@@ -148,7 +148,10 @@ public:
     void setRotationFlags();
 
     /* setVisualParam */
-    bool setVisualParams(const MetaData_t& data);
+    void setVisualParams(const MetaData_t& data);
+
+    /* resetVisualParam */
+    void resetVisualParams();
 
     /* dump state of the object */
     void dump() const;

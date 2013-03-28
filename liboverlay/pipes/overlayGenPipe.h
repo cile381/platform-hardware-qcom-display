@@ -58,7 +58,9 @@ public:
     /* set mdp posision using dim */
     bool setPosition(const utils::Dim& dim);
     /* set visual params*/
-    bool setVisualParams(const MetaData_t& data);
+    void setVisualParams(const MetaData_t& data);
+    /* reset visual params*/
+    void resetVisualParams();
     /* commit changes to the overlay "set"*/
     bool commit();
 
@@ -240,10 +242,14 @@ inline bool GenericPipe<PANEL>::setPosition(const utils::Dim& d)
 }
 
 template <int PANEL>
-inline bool GenericPipe<PANEL>::setVisualParams(const MetaData_t& data) {
-    return mCtrlData.ctrl.setVisualParams(data);
+inline void GenericPipe<PANEL>::setVisualParams(const MetaData_t& data) {
+    mCtrlData.ctrl.setVisualParams(data);
 }
 
+template <int PANEL>
+inline void GenericPipe<PANEL>::resetVisualParams() {
+    mCtrlData.ctrl.resetVisualParams();
+}
 template <int PANEL>
 inline void GenericPipe<PANEL>::setRotatorUsed(const bool& rotUsed) {
     mRot->setRotatorUsed(rotUsed);

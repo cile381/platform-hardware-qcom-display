@@ -456,6 +456,7 @@ static int setupFloatingPipe(struct private_module_t* module) {
         ovutils::Whf info(fb_stride, fb_hnd->height,
                                 fb_hnd->format, fb_hnd->size);
         ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_MEMORY_ID_TYPE_FB;
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_PP_EN);
         ovutils::eIsFg isFG = ovutils::IS_FG_OFF;
         if(module->overlay->getState() ==
                 ovutils::OV_2D_PIP_VIDEO_ON_PANEL) {
