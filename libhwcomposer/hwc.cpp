@@ -116,6 +116,88 @@ static void *commitExtDisp(void *ptr)
     return NULL;
 }
 
+bool configChange_prepare(hwc_context_t* ctx) {
+
+    switch(ctx->mConfigChangeState->getState()) {
+        case qhwc::CONFIG_CHANGE_START_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_START_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_START_FINISH:
+            ctx->mOverlay->setState(ovutils::OV_CLOSED);
+            return true;
+        case qhwc::CONFIG_CHANGE_DO_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_DO_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_DO_FINISH:
+            ctx->mOverlay->setState(ovutils::OV_CLOSED);
+            return true;
+        case qhwc::CONFIG_CHANGE_STOP_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_STOP_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_STOP_FINISH:
+            return false;
+    }
+    return false;
+}
+
+bool configChange_set(hwc_context_t* ctx) {
+
+    switch(ctx->mConfigChangeState->getState()) {
+        case qhwc::CONFIG_CHANGE_START_BEGIN:
+            return false;
+        case qhwc::CONFIG_CHANGE_START_INPROGRESS:
+            commitOnPrimary(ctx);
+            switch(ctx->mConfigChangeType) {
+                case qhwc::PICTURE_QUALITY_CORRECTION:
+                    break;
+                case qhwc::PIXEL_CLOCK_CORRECTION:
+                    break;
+                default:
+                    break;
+            }
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_START_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+            return true;
+        case qhwc::CONFIG_CHANGE_DO_INPROGRESS:
+            switch(ctx->mConfigChangeType) {
+                case qhwc::PICTURE_QUALITY_CORRECTION:
+                    glFinish();
+                    return true;
+                case qhwc::PIXEL_CLOCK_CORRECTION:
+                    if(canChangePLLSettings(ctx)){
+                        set_vsync(ctx,true);
+                        changePLLSettings(ctx);
+                        commitOnPrimary(ctx);
+                        set_vsync(ctx,false);
+                    }
+                    break;
+                default:
+                    break;
+            }
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_DO_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+            return true;
+        case qhwc::CONFIG_CHANGE_STOP_INPROGRESS:
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_STOP_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+        case qhwc::CONFIG_CHANGE_STOP_FINISH:
+            return false;
+        case qhwc::CONFIG_CHANGE_START_FINISH:
+        case qhwc::CONFIG_CHANGE_DO_BEGIN:
+        case qhwc::CONFIG_CHANGE_DO_FINISH:
+        case qhwc::CONFIG_CHANGE_STOP_BEGIN:
+            glFinish();
+            return true;
+    }
+    return false;
+}
+
 static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
 {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
@@ -137,6 +219,9 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         // This will tear down External Display Device.
         return 0;
     }
+
+    if(configChange_prepare(ctx))
+        return 0;
 
     ctx->externalDisplay = ctx->mExtDisplay->getExternalDisplay();
 
@@ -252,6 +337,12 @@ static int hwc_set(hwc_composer_device_t *dev,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
+
+    if(configChange_set(ctx)) {
+        /* Configuration change in progress*/
+        ctx->qbuf->unlockAllPrevious();
+        return ret;
+    }
 
     if(ctx->mPQCState == PQC_CLOSEPIPES){
         /* overlayState is OV_CLOSED. Call pan-update on primary */

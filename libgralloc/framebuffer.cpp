@@ -153,7 +153,8 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     }
     return 0;
 }
-static bool  isBypassState(struct private_module_t* m) {
+
+static bool isBypassState(struct private_module_t* m) {
 
     ovutils::eOverlayState state = m->overlay->getState();
     return (state == ovutils::OV_BYPASS_1_LAYER ||
@@ -398,6 +399,10 @@ int mapFrameBufferLocked(struct private_module_t* module)
     module->ydpi = ydpi;
     module->fps = fps;
     module->swapInterval = 1;
+    module->default_pixclock = info.pixclock;
+    module->default_framerate = info.reserved[4];
+    ALOGV("Bootup framerate is %d and pixclock is %d",info.reserved[4],
+            info.pixclock);
 
     CALC_INIT();
 

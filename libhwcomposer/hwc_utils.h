@@ -21,11 +21,20 @@
 #include <hardware/hwcomposer.h>
 #include <gralloc_priv.h>
 #include <hwc_ppmetadata.h>
+#ifdef USES_PLL_CALCULATION
+#include "pll_calc.h"
+#endif
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 #define PP_MAX_VG_PIPES 2
+
+#define LVDS_PLL_UPDATE "/sys/devices/virtual/graphics/fb0/lvds_pll_update"
+#define ref_pixclock 27000000
+#define NUM_HDMI_PRIMARY_PANEL_NAMES 2
+#define HDMI_PANEL "dtv panel"
+#define LVDS_TV_PANEL "lvds panel"
 
 //Fwrd decls
 struct hwc_context_t;
@@ -38,6 +47,15 @@ class HWComposerService;
 namespace overlay {
 class Overlay;
 }
+
+enum {
+    MAX_FRAME_BUFFER_NAME_SIZE = 80
+};
+
+static const char *HDMIPrimaryPanelName[NUM_HDMI_PRIMARY_PANEL_NAMES] = {
+    HDMI_PANEL,
+    LVDS_TV_PANEL
+};
 
 namespace qhwc {
 //fwrd decl
@@ -79,7 +97,6 @@ enum PQCStatus {
     PQC_INPROGRESS = 3
 };
 
-// -----------------------------------------------------------------------------
 // Utility functions - implemented in hwc_utils.cpp
 void dumpLayer(hwc_layer_t const* l);
 void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list);
@@ -106,7 +123,74 @@ void wait4CommitSignal(hwc_context_t* ctx);
 // Waits for the commit to finish on ext display
 void wait4ExtCommitDone(hwc_context_t* ctx);
 
+//commit on primary
 int commitOnPrimary(hwc_context_t* ctx);
+
+//Is target HDMIPrimary
+static bool isPanelLVDS(int fb){
+    bool configured = false;
+    FILE *displayDeviceFP = NULL;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    char name[64];
+    char const device_node[64] = "/sys/class/graphics/fb%u/msm_fb_type";
+    snprintf(name, 64, device_node,fb);
+    displayDeviceFP = fopen(name, "r");
+
+    if(displayDeviceFP) {
+        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                displayDeviceFP);
+
+        if(!strncmp(fbType, HDMIPrimaryPanelName[1],
+                        sizeof(HDMIPrimaryPanelName[1]))) {
+            configured  = true;
+        }
+    }
+    fclose(displayDeviceFP);
+    return configured;
+}
+
+//Is panel pointed by fb LVDS
+static bool isHDMIPrimary(){
+    bool configured = false;
+    FILE *displayDeviceFP = NULL;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    displayDeviceFP = fopen("/sys/class/graphics/fb0/msm_fb_type", "r");
+
+    if(displayDeviceFP) {
+        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                displayDeviceFP);
+
+        for(int i = 0; i < NUM_HDMI_PRIMARY_PANEL_NAMES; i++) {
+            if(!strncmp(fbType, HDMIPrimaryPanelName[i],
+                        sizeof(HDMIPrimaryPanelName[i]))) {
+                configured  = true;
+                break;
+            }
+        }
+        fclose(displayDeviceFP);
+    }
+    return configured;
+}
+
+static const char* getConfigTypeString(qhwc::CONFIG_CHANGE_TYPE configType) {
+    switch(configType) {
+        case qhwc::NO_CORRECTION:
+            return "NO_CORRECTION";
+        case qhwc::PIXEL_CLOCK_CORRECTION:
+            return "PIXEL_CLOCK_CORRECTION";
+        case qhwc::PICTURE_QUALITY_CORRECTION:
+            return "PICTURE_QUALITY_CORRECTION";
+        default:
+            return "UNKNOWN_CORRECTION_STATE";
+    }
+}
+
+//Change PLL settings on the external;
+bool changePLLSettings(hwc_context_t* ctx);
+
+bool canChangePLLSettings(hwc_context_t* ctx);
+
+bool set_vsync(hwc_context_t* ctx, bool enable);
 
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_t* l) {
@@ -224,6 +308,22 @@ struct hwc_context_t {
     //OverScan parameters
     qhwc::OSRectDimensions ossrcparams[PP_MAX_VG_PIPES];
     qhwc::OSRectDimensions osdstparams[PP_MAX_VG_PIPES];
+
+    /* Indicates the configuration change happening
+     * either Pixel Clock Correction or Picture Quality
+     * Correction */
+
+    qhwc::CONFIG_CHANGE_TYPE mConfigChangeType;
+
+    /* Indicates the state at which the configuration
+     * change is in */
+
+    qhwc::ConfigChangeState* mConfigChangeState;
+
+    qhwc::ConfigChangeParams mConfigChangeParams;
+
+    pthread_mutex_t mConfigChangeLock;
+    pthread_cond_t mConfigChangeCond;
 
     // used for signalling the commit Ext Disp thread
     bool mExtCommit;

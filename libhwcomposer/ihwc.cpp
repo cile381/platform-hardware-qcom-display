@@ -206,6 +206,67 @@ public:
         result = reply.readInt32();
         return result;
     }
+
+    virtual android::status_t startConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        status_t result = remote()->transact(
+                          START_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t doConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        data.writeFloat(params.param1);
+        data.writeFloat(params.param2);
+        status_t result = remote()->transact(
+                          DO_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t stopConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        status_t result = remote()->transact(
+                          STOP_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t getStdFrameratePixclock(
+        qhwc::ConfigChangeParams *params){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_STD_FRAMERATE_PIXCLOCK,
+                                             data, &reply);
+        params->param1 = reply.readFloat();
+        params->param2 = reply.readFloat();
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t getCurrentFrameratePixclock(
+        qhwc::ConfigChangeParams *params){
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_CURRENT_FRAMERATE_PIXCLOCK,
+                                             data, &reply);
+        params->param1 = reply.readFloat();
+        params->param2 = reply.readFloat();
+        result = reply.readInt32();
+        return result;
+    }
+
 };
 
 IMPLEMENT_META_INTERFACE(HWComposer, "android.display.IHWComposer");
@@ -312,7 +373,7 @@ status_t BnHWComposer::onTransact(
            status_t res = setPQCState(value);
            reply->writeInt32(res);
            return NO_ERROR;
-       } break;
+        } break;
         case SET_OVERSCANCOMPENSATION_PARAMS: {
             qhwc::OSRectDimensions oscparams;
             CHECK_INTERFACE(IHWComposer, data, reply);
@@ -343,6 +404,51 @@ status_t BnHWComposer::onTransact(
             ovdstparams.bottom = data.readInt32();
             ovdstparams.isValid = data.readInt32();
             status_t res = setOverScanParams(numVideoLayer,ovsrcparams,ovdstparams);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case START_CONFIG_CHANGE:{
+            qhwc::CONFIG_CHANGE_TYPE configType;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            configType = (qhwc::CONFIG_CHANGE_TYPE)data.readInt32();
+            status_t res = startConfigChange(configType);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case DO_CONFIG_CHANGE:{
+            qhwc::CONFIG_CHANGE_TYPE configType;
+            qhwc::ConfigChangeParams params;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            configType = (qhwc::CONFIG_CHANGE_TYPE)data.readInt32();
+            params.param1 = data.readFloat();
+            params.param2 = data.readFloat();
+            status_t res = doConfigChange(configType,params);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case STOP_CONFIG_CHANGE:{
+            qhwc::CONFIG_CHANGE_TYPE configType;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            configType = (qhwc::CONFIG_CHANGE_TYPE)data.readInt32();
+            status_t res = stopConfigChange(configType);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case GET_STD_FRAMERATE_PIXCLOCK:{
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            qhwc::ConfigChangeParams params;
+            status_t res = getStdFrameratePixclock(&params);
+            reply->writeFloat(params.param1);
+            reply->writeFloat(params.param2);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case GET_CURRENT_FRAMERATE_PIXCLOCK:{
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            qhwc::ConfigChangeParams params;
+            status_t res = getCurrentFrameratePixclock(&params);
+            reply->writeFloat(params.param1);
+            reply->writeFloat(params.param2);
             reply->writeInt32(res);
             return NO_ERROR;
         } break;

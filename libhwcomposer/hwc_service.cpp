@@ -29,6 +29,7 @@
 
 #include <hwc_service.h>
 #include <hwc_utils.h>
+#include <fb_priv.h>
 #include <cutils/properties.h>
 
 #define HWC_SERVICE_DEBUG 0
@@ -94,59 +95,27 @@ status_t HWComposerService::setActionSafeDimension(int w, int h) {
 }
 status_t HWComposerService::setOpenSecureStart( ) {
     mHwcContext->mSecureConfig = true;
-    //Invalidate
-    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
-    if(!proc) {
-        ALOGE("%s: HWC proc not registered", __FUNCTION__);
-    } else {
-        /* Trigger redraw */
-        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
-        proc->invalidate(proc);
-    }
+    inValidate();
     return NO_ERROR;
 }
 
 status_t HWComposerService::setOpenSecureEnd( ) {
     mHwcContext->mSecure = true;
     mHwcContext->mSecureConfig = false;
-    //Invalidate
-    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
-    if(!proc) {
-        ALOGE("%s: HWC proc not registered", __FUNCTION__);
-    } else {
-        /* Trigger redraw */
-        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
-        proc->invalidate(proc);
-    }
+    inValidate();
     return NO_ERROR;
 }
 
 status_t HWComposerService::setCloseSecureStart( ) {
     mHwcContext->mSecureConfig = true;
-    //Invalidate
-    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
-    if(!proc) {
-        ALOGE("%s: HWC proc not registered", __FUNCTION__);
-    } else {
-        /* Trigger redraw */
-        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
-        proc->invalidate(proc);
-    }
+    inValidate();
     return NO_ERROR;
 }
 
 status_t HWComposerService::setCloseSecureEnd( ) {
     mHwcContext->mSecure = false;
     mHwcContext->mSecureConfig = false;
-    //Invalidate
-    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
-    if(!proc) {
-        ALOGE("%s: HWC proc not registered", __FUNCTION__);
-    } else {
-        /* Trigger redraw */
-        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
-        proc->invalidate(proc);
-    }
+    inValidate();
     return NO_ERROR;
 }
 
@@ -263,6 +232,190 @@ status_t HWComposerService::setOverScanParams(
     return NO_ERROR;
 }
 
+status_t HWComposerService::startConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType){
+
+    ALOGE_IF(HWC_SERVICE_DEBUG," %s configChangeType %s",__FUNCTION__,
+            qhwc::getConfigTypeString(configChangeType));
+
+    switch(mHwcContext->mConfigChangeType) {
+        case qhwc::NO_CORRECTION:
+            /* No ConfigChanges are in progress. Start new ConfigChange */
+            switch(configChangeType) {
+                case qhwc::PIXEL_CLOCK_CORRECTION:
+                case qhwc::PICTURE_QUALITY_CORRECTION:
+                    ALOGE_IF(HWC_SERVICE_DEBUG,"%s: %s start", __FUNCTION__,
+                            qhwc::getConfigTypeString(configChangeType));
+                    mHwcContext->mConfigChangeType = configChangeType;
+                    mHwcContext->mConfigChangeState->setState(
+                            qhwc::CONFIG_CHANGE_START_BEGIN);
+                    inValidate();
+                    pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+                    while(mHwcContext->mConfigChangeState->getState() !=
+                            qhwc::CONFIG_CHANGE_START_FINISH) {
+                         pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                                 &(mHwcContext->mConfigChangeLock));
+                    }
+                    pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+                    break;
+                default:
+                    ALOGE("%s: InValid configChangeType %s",__FUNCTION__,
+                            qhwc::getConfigTypeString(configChangeType));
+                    return BAD_VALUE;
+            }
+            break;
+        case qhwc::PIXEL_CLOCK_CORRECTION:
+        case qhwc::PICTURE_QUALITY_CORRECTION:
+            ALOGE("%s: ConfigChange %s in progress."
+                " Aborting new ConfigChange %s",__FUNCTION__,
+                qhwc::getConfigTypeString(mHwcContext->mConfigChangeType),
+                qhwc::getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    qhwc::getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::doConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) {
+
+    ALOGE_IF(HWC_SERVICE_DEBUG," %s configChangeType %s params are %f %f",
+            __FUNCTION__, qhwc::getConfigTypeString(configChangeType),
+            params.param1,params.param2);
+
+    switch(mHwcContext->mConfigChangeType) {
+        case qhwc::NO_CORRECTION:
+            ALOGE("%s: No configChange in progress. Cannot do %s",
+                    __FUNCTION__,qhwc::getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        case qhwc::PIXEL_CLOCK_CORRECTION:
+        case qhwc::PICTURE_QUALITY_CORRECTION:
+            if(mHwcContext->mConfigChangeType == configChangeType){
+                ALOGE_IF(HWC_SERVICE_DEBUG,"%s: %s do", __FUNCTION__,
+                        qhwc::getConfigTypeString(configChangeType));
+                mHwcContext->mConfigChangeParams = params;
+                mHwcContext->mConfigChangeState->setState(
+                        qhwc::CONFIG_CHANGE_DO_BEGIN);
+                inValidate();
+                pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+                while(mHwcContext->mConfigChangeState->getState() !=
+                        qhwc::CONFIG_CHANGE_DO_FINISH) {
+                    pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                            &(mHwcContext->mConfigChangeLock));
+                }
+                pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+            } else {
+                ALOGE("%s: ConfigChange %s in progress."
+                        " Aborting new ConfigChange %s",__FUNCTION__,
+                        qhwc::getConfigTypeString(mHwcContext->mConfigChangeType),
+                        qhwc::getConfigTypeString(configChangeType));
+                return BAD_VALUE;
+            }
+            break;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    qhwc::getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::stopConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType) {
+
+    ALOGE_IF(HWC_SERVICE_DEBUG," %s configChangeType %s",__FUNCTION__,
+            qhwc::getConfigTypeString(configChangeType));
+
+    switch(mHwcContext->mConfigChangeType) {
+        case qhwc::NO_CORRECTION:
+            ALOGE("%s: No configChange in progress. Cannot stop %s",
+                    __FUNCTION__,qhwc::getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        case qhwc::PIXEL_CLOCK_CORRECTION:
+        case qhwc::PICTURE_QUALITY_CORRECTION:
+            switch(configChangeType) {
+                case qhwc::PIXEL_CLOCK_CORRECTION:
+                case qhwc::PICTURE_QUALITY_CORRECTION:
+                    ALOGE_IF(HWC_SERVICE_DEBUG,"%s: %s stop", __FUNCTION__,
+                            qhwc::getConfigTypeString(configChangeType));
+                    mHwcContext->mConfigChangeType = qhwc::NO_CORRECTION;
+                    mHwcContext->mConfigChangeState->setState(
+                             qhwc::CONFIG_CHANGE_STOP_BEGIN);
+                    inValidate();
+                    pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+                    while(mHwcContext->mConfigChangeState->getState() !=
+                            qhwc::CONFIG_CHANGE_STOP_FINISH) {
+                        pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                                &(mHwcContext->mConfigChangeLock));
+                    }
+                    pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+                    break;
+                default:
+                    ALOGE("%s: InValid configChangeType %s",__FUNCTION__,
+                            qhwc::getConfigTypeString(configChangeType));
+                    return BAD_VALUE;
+            }
+            break;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    qhwc::getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
+    return NO_ERROR;
+}
+
+status_t HWComposerService::getStdFrameratePixclock(
+        qhwc::ConfigChangeParams *params) {
+    framebuffer_device_t *fbDev = mHwcContext->mFbDev;
+    if(fbDev) {
+        int num_channels = 1;
+        private_module_t* m = reinterpret_cast<private_module_t*>(
+                mHwcContext->mFbDev->common.module);
+        if(qhwc::isPanelLVDS(0)){
+            num_channels = 2;
+        }
+        params->param1 = m->default_framerate * num_channels;
+        params->param2 = m->default_pixclock * num_channels;
+        ALOGE_IF(HWC_SERVICE_DEBUG,"%s: Std framerate is %f and "
+                "Std pixclock is %f",__FUNCTION__,params->param1,
+                params->param2);
+        return NO_ERROR;
+    }
+    return BAD_VALUE;
+}
+
+status_t HWComposerService::getCurrentFrameratePixclock(
+        qhwc::ConfigChangeParams *params) {
+    framebuffer_device_t *fbDev = mHwcContext->mFbDev;
+    if(fbDev) {
+        int num_channels = 1;
+        private_module_t* m = reinterpret_cast<private_module_t*>(
+                mHwcContext->mFbDev->common.module);
+        struct fb_var_screeninfo info;
+        int ret = 0;
+        if(qhwc::isPanelLVDS(0)){
+            num_channels = 2;
+        }
+        ret = ioctl(m->framebuffer->fd, FBIOGET_VSCREENINFO, &info);
+        if(ret < 0) {
+            ALOGE("In %s: FBIOGET_VSCREENINFO failed Err Str = %s", __FUNCTION__,
+                    strerror(errno));
+            return BAD_VALUE;
+        }
+        params->param1 = info.reserved[4] * num_channels;
+        params->param2 = info.pixclock * num_channels;
+        ALOGE_IF(HWC_SERVICE_DEBUG,"%s: Current framerate is %f and"
+                "Current pixclock is %f",__FUNCTION__,params->param1,
+                params->param2);
+        return NO_ERROR;
+    }
+    return BAD_VALUE;
+}
+
 HWComposerService* HWComposerService::getInstance()
 {
     if(!sHwcService) {
@@ -275,6 +428,18 @@ HWComposerService* HWComposerService::getInstance()
             ALOGD_IF(HWC_SERVICE_DEBUG, "adding display.hwcservice failed");
     }
     return sHwcService;
+}
+
+void HWComposerService::inValidate() {
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->device.reserved_proc[0];
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(HWC_SERVICE_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
 }
 
 void HWComposerService::setHwcContext(hwc_context_t *hwcCtx) {

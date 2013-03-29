@@ -66,6 +66,19 @@ public:
             qhwc::OSRectDimensions ovsrcparams,
             qhwc::OSRectDimensions ovdstparams);
 
+    //Config Change Hooks
+    virtual android::status_t startConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType);
+    virtual android::status_t doConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params);
+    virtual android::status_t stopConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType);
+    virtual android::status_t getStdFrameratePixclock(
+        qhwc::ConfigChangeParams *params);
+    virtual android::status_t getCurrentFrameratePixclock(
+        qhwc::ConfigChangeParams *params);
+
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();
     virtual android::status_t setOpenSecureEnd();
@@ -73,6 +86,7 @@ public:
     virtual android::status_t setCloseSecureEnd();
     void setHwcContext(hwc_context_t *hwcCtx);
 private:
+    virtual void inValidate();
     static HWComposerService *sHwcService;
     hwc_context_t *mHwcContext;
     int mMaxActionSafeWidth;
