@@ -33,9 +33,7 @@
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
-#define FINAL_TRANSFORM_MASK 0x000F
-#define MAX_NUM_DISPLAYS 4 //Yes, this is ambitious
-#define MAX_NUM_LAYERS 32
+#define MAX_NUM_LAYERS 32 //includes fb layer
 #define MAX_DISPLAY_DIM 2048
 
 // For support of virtual displays
@@ -94,6 +92,7 @@ struct ListStats {
     int yuvCount;
     int yuvIndices[MAX_NUM_LAYERS];
     bool needsAlphaScale;
+    bool preMultipliedAlpha;
 };
 
 struct LayerProp {
@@ -143,6 +142,7 @@ bool isSecuring(hwc_context_t* ctx);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
+bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 
 //Helper function to dump logs
@@ -296,6 +296,8 @@ struct hwc_context_t {
     struct vsync_state vstate;
     //DMA used for rotator
     bool mDMAInUse;
+    //MDP rotater needed
+    bool mNeedsRotator;
 };
 
 namespace qhwc {

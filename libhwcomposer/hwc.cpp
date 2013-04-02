@@ -35,6 +35,7 @@
 #include "hwc_mdpcomp.h"
 #include "external.h"
 #include "hwc_copybit.h"
+#include "profiler.h"
 
 using namespace qhwc;
 #define VSYNC_DEBUG 0
@@ -108,17 +109,12 @@ static void reset(hwc_context_t *ctx, int numDisplays,
 }
 
 //clear prev layer prop flags and realloc for current frame
-static void reset_layer_prop(hwc_context_t* ctx, int dpy) {
-    int layer_count = ctx->listStats[dpy].numAppLayers;
-
+static void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers) {
     if(ctx->layerProp[dpy]) {
        delete[] ctx->layerProp[dpy];
        ctx->layerProp[dpy] = NULL;
     }
-
-    if(layer_count) {
-       ctx->layerProp[dpy] = new LayerProp[layer_count];
-    }
+    ctx->layerProp[dpy] = new LayerProp[numAppLayers];
 }
 
 static int display_commit(hwc_context_t *ctx, int dpy) {
@@ -136,23 +132,27 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         hwc_display_contents_1_t *list) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     const int dpy = HWC_DISPLAY_PRIMARY;
-    if (LIKELY(list && list->numHwLayers > 1 &&
-        list->numHwLayers <= MAX_NUM_LAYERS) && ctx->dpyAttr[dpy].isActive) {
+    if (LIKELY(list && list->numHwLayers > 1) &&
+            ctx->dpyAttr[dpy].isActive) {
+        reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
         uint32_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
         if(fbLayer->handle) {
+            if(list->numHwLayers > MAX_NUM_LAYERS) {
+                ctx->mFBUpdate[dpy]->prepare(ctx, list);
+                return 0;
+            }
             setListStats(ctx, list, dpy);
-            reset_layer_prop(ctx, dpy);
-            int ret = ctx->mMDPComp->prepare(ctx, list);
+            bool ret = ctx->mMDPComp->prepare(ctx, list);
             if(!ret) {
                 // IF MDPcomp fails use this route
                 ctx->mVidOv[dpy]->prepare(ctx, list);
                 ctx->mFBUpdate[dpy]->prepare(ctx, list);
+                // Use Copybit, when MDP comp fails
+                if(ctx->mCopyBit[dpy])
+                    ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+                ctx->mLayerCache[dpy]->updateLayerCache(list);
             }
-            ctx->mLayerCache[dpy]->updateLayerCache(list);
-            // Use Copybit, when MDP comp fails
-            if(!ret && ctx->mCopyBit[dpy])
-                ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
         }
     }
     return 0;
@@ -162,22 +162,25 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
         hwc_display_contents_1_t *list, int dpy) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
 
-    if (LIKELY(list && list->numHwLayers > 1 &&
-        list->numHwLayers <= MAX_NUM_LAYERS) &&
-        ctx->dpyAttr[dpy].isActive &&
-        ctx->dpyAttr[dpy].connected) {
+    if (LIKELY(list && list->numHwLayers > 1) &&
+            ctx->dpyAttr[dpy].isActive &&
+            ctx->dpyAttr[dpy].connected) {
+        reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
         uint32_t last = list->numHwLayers - 1;
+        hwc_layer_1_t *fbLayer = &list->hwLayers[last];
         if(!ctx->dpyAttr[dpy].isPause) {
-            hwc_layer_1_t *fbLayer = &list->hwLayers[last];
             if(fbLayer->handle) {
+                ctx->mExtDispConfiguring = false;
+                if(list->numHwLayers > MAX_NUM_LAYERS) {
+                    ctx->mFBUpdate[dpy]->prepare(ctx, list);
+                    return 0;
+                }
                 setListStats(ctx, list, dpy);
-                reset_layer_prop(ctx, dpy);
                 ctx->mVidOv[dpy]->prepare(ctx, list);
                 ctx->mFBUpdate[dpy]->prepare(ctx, list);
                 ctx->mLayerCache[dpy]->updateLayerCache(list);
                 if(ctx->mCopyBit[dpy])
                     ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
-                ctx->mExtDispConfiguring = false;
             }
         } else {
             // External Display is in Pause state.
@@ -200,6 +203,7 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
 
     ctx->mOverlay->configBegin();
     ctx->mRotMgr->configBegin();
+    ctx->mNeedsRotator = false;
 
     for (int32_t i = numDisplays; i >= 0; i--) {
         hwc_display_contents_1_t *list = displays[i];
@@ -361,19 +365,15 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         //TODO We dont check for SKIP flag on this layer because we need PAN
         //always. Last layer is always FB
-        private_handle_t *hnd = NULL;
+        private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
         if(copybitDone) {
             hnd = ctx->mCopyBit[dpy]->getCurrentRenderBuffer();
-        } else {
-            hnd = (private_handle_t *)fbLayer->handle;
         }
-        if(fbLayer->compositionType == HWC_FRAMEBUFFER_TARGET && hnd) {
-            if(!(fbLayer->flags & HWC_SKIP_LAYER) &&
-                (list->numHwLayers > 1)) {
-                if (!ctx->mFBUpdate[dpy]->draw(ctx, hnd)) {
-                    ALOGE("%s: FBUpdate draw failed", __FUNCTION__);
-                    ret = -1;
-                }
+
+        if(hnd) {
+            if (!ctx->mFBUpdate[dpy]->draw(ctx, hnd)) {
+                ALOGE("%s: FBUpdate draw failed", __FUNCTION__);
+                ret = -1;
             }
         }
 
@@ -412,16 +412,12 @@ static int hwc_set_external(hwc_context_t *ctx,
             ret = -1;
         }
 
-        private_handle_t *hnd = NULL;
+        private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
         if(copybitDone) {
             hnd = ctx->mCopyBit[dpy]->getCurrentRenderBuffer();
-        } else {
-            hnd = (private_handle_t *)fbLayer->handle;
         }
 
-        if(fbLayer->compositionType == HWC_FRAMEBUFFER_TARGET &&
-                !(fbLayer->flags & HWC_SKIP_LAYER) && hnd &&
-                (list->numHwLayers > 1)) {
+        if(hnd) {
             if (!ctx->mFBUpdate[dpy]->draw(ctx, hnd)) {
                 ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
                 ret = -1;
@@ -430,7 +426,7 @@ static int hwc_set_external(hwc_context_t *ctx,
 
         if (display_commit(ctx, dpy) < 0) {
             ALOGE("%s: display commit fail!", __FUNCTION__);
-            return -1;
+            ret = -1;
         }
     }
 
@@ -463,6 +459,9 @@ static int hwc_set(hwc_composer_device_1 *dev,
                 ret = -EINVAL;
         }
     }
+    // This is only indicative of how many times SurfaceFlinger posts
+    // frames to the display.
+    CALC_FPS();
     return ret;
 }
 
