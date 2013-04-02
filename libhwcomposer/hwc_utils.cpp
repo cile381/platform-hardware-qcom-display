@@ -55,9 +55,10 @@ typedef struct {
     int frame_rate;
 } CHANGE_DATA;
 
+#define CD_LIMIT 35
 typedef struct {
     int fps;
-    CHANGE_DATA cd[35];
+    CHANGE_DATA cd[CD_LIMIT];
 } PPM_DB;
 
 #define PPM_LOW_LIMIT -6000
@@ -70,7 +71,7 @@ static PPM_DB ppm_check_point[] = {
                 {-5565, -5565, 16759953},
                 {-4329, -4329, 16739124},
                 {-2597, -2597, 16710069},
-//              {-1443,  -673, 16690766},
+                {-1443,  -673, 16690766},
                 {    0,     0, 16666667},
                 { 1856,  1925, 16635810},
                 { 2598,  3780, 16623497},
@@ -153,6 +154,52 @@ static PPM_DB ppm_check_point[] = {
         }
 };
 
+int getChangeData(int fps, int req_ppm, int offset, CHANGE_DATA **set_cd)
+{
+    int ppm_check_count = sizeof(ppm_check_point)/sizeof(ppm_check_point[0]);
+    int ret             = -1;
+    CHANGE_DATA *cd     = NULL;
+    int cd_size         = 0;
+    int set             = 0;
+    int i;
+
+    for (i = 0; i < ppm_check_count; i++) {
+        if (ppm_check_point[i].fps == fps) {
+            cd = ppm_check_point[i].cd;
+            break;
+        }
+    }
+
+    if (NULL == cd)
+        return ret;
+
+    for (i = 0; cd[i].req_ppm < PPM_HIGH_LIMIT; i++);
+
+    cd_size = i;
+
+    for (i = 0; cd[i].req_ppm < PPM_HIGH_LIMIT; i++) {
+
+        if (cd[i].req_ppm == req_ppm) {
+            if ((i + offset >= 0) && (i + offset < cd_size)) {
+                *set_cd = cd + i + offset;
+                set = 1;
+                ret = 0;
+                break;
+            }
+        }
+    }
+
+    if (!set)
+        return ret;
+
+    if ((*set_cd)->req_ppm == PPM_LOW_LIMIT)
+            *set_cd = cd + i + 1;
+        else if ((*set_cd)->req_ppm == PPM_HIGH_LIMIT)
+            *set_cd = cd + i;
+
+    return ret;
+}
+
 int validatePPM(int fps, int ppm, CHANGE_DATA **set_cd)
 {
     int ret = -1;
@@ -210,6 +257,8 @@ bool changePLLSettings(hwc_context_t* ctx, int dpy) {
 #ifdef USES_PLL_CALCULATION
     int pll_file = open(LVDS_PLL_UPDATE,O_WRONLY,0);
 
+    ALOGE("<<<<<< %s >>>>>>", __FUNCTION__);
+
     if(pll_file < 0) {
         ALOGE("%s: LVDS PLL file %s not found: ret:%d err str: %s",
                 __FUNCTION__,LVDS_PLL_UPDATE,pll_file,strerror(errno));
@@ -221,13 +270,14 @@ bool changePLLSettings(hwc_context_t* ctx, int dpy) {
     int ctrl_reg[8];
     int numchannels = 1;
 
-    float framerate = (ctx->mConfigChangeParams).param1;
-    float ppm       = (ctx->mConfigChangeParams).param2;
-    float change_pt_ppm;
-    CHANGE_DATA *set_cd;
+    float framerate          = (ctx->mConfigChangeParams).param1;
+    float ppm                = (ctx->mConfigChangeParams).param2;
     uint32_t base_pixelclock = 0;
-    int req_bitclk = 0;
-    int pll_bitclk = 0;
+    int req_bitclk           = 0;
+    int pll_bitclk           = 0;
+    int bit_clk_match        = 0;
+    float change_pt_ppm;
+    CHANGE_DATA *set_cd, *set_cd1, *set_cd2;
 
     if (validatePPM(framerate ? (int)floor(framerate) : 60000,
             (int)floor(ppm), &set_cd))
@@ -253,24 +303,116 @@ bool changePLLSettings(hwc_context_t* ctx, int dpy) {
     pll_bitclk  = base_pixelclock * 7;
     pll_bitclk += (int)floor((float)pll_bitclk * (change_pt_ppm / 1000000.0));
 
-    int h_bk_porch = 0;
-    int h_total    = 2200;
-    float req_fps  = ((((float)req_bitclk / 7) * (float) ctx->default_framerate) /
-                            (float)ctx->default_pixclock) * 2;
+    int h_bk_porch  = 0;
+    int h_bk_porch1 = 0;
+    int h_bk_porch2 = 0;
+    int h_total     = 2200;
+    int v_total     = 1125;
+    float req_fps   = ((((float)req_bitclk / 7) *
+                        ((float) m->default_framerate / 1000.0)) /
+                            (float)m->default_pixclock) * 2;
 
-    if (req_bitclk != pll_bitclk)
-        h_bk_porch = (int)floor((((float)h_total * 1000000) /
-                    ((float)set_cd->frame_rate * req_fps)) * 1000000) - h_total;
+    if (req_bitclk != pll_bitclk) {
+        bit_clk_match = 1;
+        h_bk_porch = (int)floor((((float)h_total * 1000) /
+                        ((float)set_cd->frame_rate * req_fps)) * 1000000) -
+                        h_total;
+    }
 
-    ALOGE("%s: Req bit clock is %d",  __FUNCTION__, req_bitclk);
-    ALOGE("%s: PLL bit clock is %d",  __FUNCTION__, pll_bitclk);
-    ALOGE("%s: Req pixclock is %d",   __FUNCTION__, req_bitclk / 7);
-    ALOGE("%s: PLL pixclock is %u",   __FUNCTION__, pll_bitclk / 7);
-    ALOGE("%s: Req PPM is %f",        __FUNCTION__, ppm);
-    ALOGE("%s: PLL PPM is %f",        __FUNCTION__, change_pt_ppm);
-    ALOGE("%s: Req FPS is %f",        __FUNCTION__, req_fps);
-    ALOGE("%s: PLL Frame Rate is %d", __FUNCTION__, set_cd->frame_rate);
-    ALOGE("%s: Porch Value is %d",    __FUNCTION__, h_bk_porch);
+    if (abs(h_bk_porch) % 2 != 0) {
+        if (h_bk_porch < 0)
+            h_bk_porch += 1;
+        else
+            h_bk_porch -= 1;
+    }
+
+    if (bit_clk_match) {
+        float pll_porch_fps  = (((float)pll_bitclk / 7 ) /
+                                (float)((h_total + h_bk_porch) * v_total)) * 2;
+        float pll_porch_fps1 = 0;
+        float pll_porch_fps2 = 0;
+
+        int pll_bitclk1 = 0;
+        int pll_bitclk2 = 0;
+
+        if (getChangeData(framerate ? (int)floor(framerate) : 60000,
+            set_cd->req_ppm, -1, &set_cd1))
+                set_cd1 = NULL;
+
+        if (getChangeData(framerate ? (int)floor(framerate) : 60000,
+            set_cd->req_ppm, 1, &set_cd2))
+                set_cd2 = NULL;
+
+        if (set_cd1) {
+            h_bk_porch1 = (int)floor((((float)h_total * 1000) /
+                ((float)set_cd1->frame_rate * req_fps)) * 1000000) - h_total;
+
+            if (abs(h_bk_porch1) % 2 != 0) {
+                if (h_bk_porch1 < 0)
+                    h_bk_porch1 += 1;
+                else
+                    h_bk_porch1 -= 1;
+            }
+
+            pll_bitclk1  = base_pixelclock * 7;
+            pll_bitclk1 += (int)floor((float)pll_bitclk1 *
+                                ((float)set_cd1->pll_ppm / 1000000.0));
+
+            pll_porch_fps1 = (((float)pll_bitclk1 / 7 ) /
+                            (float)((h_total + h_bk_porch1) * v_total)) * 2;
+        }
+
+        if (set_cd2) {
+            h_bk_porch2 = (int)floor((((float)h_total * 1000) /
+                ((float)set_cd2->frame_rate * req_fps)) * 1000000) - h_total;
+
+            if (abs(h_bk_porch2) % 2 != 0) {
+                if (h_bk_porch2 < 0)
+                    h_bk_porch2 += 1;
+                else
+                    h_bk_porch2 -= 1;
+            }
+
+            pll_bitclk2  = base_pixelclock * 7;
+            pll_bitclk2 += (int)floor((float)pll_bitclk2 *
+                               ((float)set_cd2->pll_ppm / 1000000.0));
+
+            pll_porch_fps2 = (((float)pll_bitclk2 / 7 ) /
+                                (float)((h_total + h_bk_porch2) * v_total)) * 2;
+        }
+
+        ALOGE("%s: Req FPS is \t\t%f",    __FUNCTION__, req_fps);
+        ALOGE("%s: PLL FPS is \t\t%f",    __FUNCTION__, pll_porch_fps);
+        ALOGE("%s: PLL -1 FPS is \t\t%f", __FUNCTION__, pll_porch_fps1);
+        ALOGE("%s: PLL +1 FPS is \t\t%f", __FUNCTION__, pll_porch_fps2);
+
+        float val  = abs((int)((req_fps * 1000) - (pll_porch_fps  * 1000)));
+        float val1 = abs((int)((req_fps * 1000) - (pll_porch_fps1 * 1000)));
+        float val2 = abs((int)((req_fps * 1000) - (pll_porch_fps2 * 1000)));
+        float val3;
+
+        if (val < val1) {
+            val3 = val;
+        } else {
+            pll_bitclk = pll_bitclk1;
+            h_bk_porch = h_bk_porch1;
+            val3       = val1;
+            set_cd     = set_cd1;
+        }
+
+        if (val3 > val2) {
+            pll_bitclk = pll_bitclk2;
+            h_bk_porch = h_bk_porch2;
+            set_cd     = set_cd2;
+        }
+    }
+
+    ALOGE("%s: Req bit clock is \t%d",    __FUNCTION__, req_bitclk);
+    ALOGE("%s: PLL bit clock is \t%d",    __FUNCTION__, pll_bitclk);
+    ALOGE("%s: Req PPM is \t\t%f",        __FUNCTION__, ppm);
+    ALOGE("%s: PLL PPM at CD is \t%f",    __FUNCTION__, change_pt_ppm);
+    ALOGE("%s: PLL PPM selected is \t%f", __FUNCTION__, (float)set_cd->pll_ppm);
+    ALOGE("%s: Porch Value is \t\t%d",    __FUNCTION__, h_bk_porch);
 
     pll_calculate(pll_bitclk, ref_pixclock, ctrl_reg);
 
