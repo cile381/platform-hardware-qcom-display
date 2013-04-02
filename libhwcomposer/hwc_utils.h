@@ -77,6 +77,8 @@ void closeContext(hwc_context_t *ctx);
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
         const int fbWidth, const int fbHeight);
+// Reset flags
+void resetFlags(hwc_context_t* ctx);
 
 // Waits for the fb_post to be called
 void wait4fbPost(hwc_context_t* ctx);
