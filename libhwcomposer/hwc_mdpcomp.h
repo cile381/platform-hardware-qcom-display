@@ -65,9 +65,6 @@ protected:
     void printInfo(hwc_layer_1_t* layer);
     /* get/set states */
     eState getState() { return mState; };
-
-    /* set up Border fill as Base pipe */
-    static bool setupBasePipe(hwc_context_t*);
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
     /* Is feature enabled */
