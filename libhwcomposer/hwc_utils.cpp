@@ -32,6 +32,7 @@
 #include "hwc_video.h"
 #include "mdp_version.h"
 #include "hwc_copybit.h"
+#include "hwc_dump_layers.h"
 #include "external.h"
 #include "hwc_qclient.h"
 #include "QService.h"
@@ -196,6 +197,10 @@ void closeContext(hwc_context_t *ctx)
         if(ctx->mVidOv[i]) {
             delete ctx->mVidOv[i];
             ctx->mVidOv[i] = NULL;
+        }
+        if(ctx->mHwcDebug[i]) {
+            delete ctx->mHwcDebug[i];
+            ctx->mHwcDebug[i] = NULL;
         }
     }
 
