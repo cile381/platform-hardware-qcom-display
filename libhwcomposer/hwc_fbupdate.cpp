@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -38,6 +38,16 @@ inline void IFBUpdate::reset() {
     mModeOn = false;
 }
 
+bool IFBUpdate::needFbUpdate(hwc_context_t *ctx,
+        const hwc_display_contents_1_t *list, int dpy) {
+    // if Video Overlay is on and and YUV layers are passed through overlay
+    // , no need to configure FB layer.
+    if(ctx->mVidOv[dpy]->isModeOn() &&
+        (ctx->listStats[dpy].yuvCount == ctx->listStats[dpy].numAppLayers))
+        return false;
+
+    return true;
+}
 //================= Low res====================================
 FBUpdateLowRes::FBUpdateLowRes(const int& dpy): IFBUpdate(dpy) {}
 
@@ -65,12 +75,13 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx,
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
     if (LIKELY(ctx->mOverlay)) {
+        // When Video overlay is in use and there are no UI layers to
+        // be composed to FB , no need to configure FbUpdate.
+        if(!needFbUpdate(ctx, list, mDpy))
+            return false;
+
         overlay::Overlay& ov = *(ctx->mOverlay);
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        if (!hnd) {
-            ALOGE("%s:NULL private handle for layer!", __FUNCTION__);
-            return false;
-        }
         ovutils::Whf info(hnd->width, hnd->height,
                 ovutils::getMdpFormat(hnd->format), hnd->size);
 
@@ -175,12 +186,13 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
     if (LIKELY(ctx->mOverlay)) {
+        // When Video overlay is in use and there are no UI layers to
+        // be composed to FB , no need to configure FbUpdate.
+        if(!needFbUpdate(ctx, list, mDpy))
+            return false;
+
         overlay::Overlay& ov = *(ctx->mOverlay);
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        if (!hnd) {
-            ALOGE("%s:NULL private handle for layer!", __FUNCTION__);
-            return false;
-        }
         ovutils::Whf info(hnd->width, hnd->height,
                 ovutils::getMdpFormat(hnd->format), hnd->size);
 
