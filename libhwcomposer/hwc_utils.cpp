@@ -99,6 +99,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mExtDispConfiguring = false;
     ctx->deviceOrientation = 0;
     ctx->mBasePipeSetup = false;
+    ctx->mExtResumed = false;
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
