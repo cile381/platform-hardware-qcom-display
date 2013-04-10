@@ -51,8 +51,8 @@ public:
     virtual bool close() = 0;
     virtual void setSource(const utils::Whf& wfh) = 0;
     virtual void setFlags(const utils::eMdpFlags& flags) = 0;
-    virtual void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed) = 0;
+    virtual void setTransform(const utils::eTransform& rot) = 0;
+    virtual void setRotatorUsed(const bool& rotUsed) = 0;
     virtual bool commit() = 0;
     virtual bool queueBuffer(int fd, uint32_t offset) = 0;
 
@@ -89,9 +89,10 @@ public:
     virtual void setSource(const utils::Whf& wfh) = 0;
     /* set mdp flags, will use only stuff necessary for rotator */
     virtual void setFlags(const utils::eMdpFlags& flags) = 0;
-    /* Set rotation and calculate */
-    virtual void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed) = 0;
+    /* Set orientation */
+    virtual void setTransform(const utils::eTransform& rot) = 0;
+    /* Set whether rotator can be used */
+    virtual void setRotatorUsed(const bool& rotUsed) = 0;
     /* calls underlying wrappers to start rotator */
     virtual bool commit() = 0;
     /* Lazy buffer allocation. queue buffer */
@@ -132,8 +133,8 @@ public:
     virtual bool close();
     virtual void setSource(const utils::Whf& wfh);
     virtual void setFlags(const utils::eMdpFlags& flags);
-    virtual void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed);
+    virtual void setTransform(const utils::eTransform& rot);
+    virtual void setRotatorUsed(const bool& rotUsed);
     virtual bool commit();
     virtual void setRotations(uint32_t r);
     virtual void setSrcFB();
@@ -159,8 +160,8 @@ public:
     virtual bool close();
     virtual void setSource(const utils::Whf& wfh);
     virtual void setFlags(const utils::eMdpFlags& flags);
-    virtual void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed);
+    virtual void setTransform(const utils::eTransform& rot);
+    virtual void setRotatorUsed(const bool& rotUsed);
     virtual bool commit();
     virtual void setRotations(uint32_t r);
     virtual bool queueBuffer(int fd, uint32_t offset);
@@ -222,8 +223,8 @@ public:
     bool close();
     void setSource(const utils::Whf& whf);
     virtual void setFlags(const utils::eMdpFlags& flags);
-    void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed);
+    void setTransform(const utils::eTransform& rot);
+    void setRotatorUsed(const bool& rotUsed);
     bool commit();
     bool queueBuffer(int fd, uint32_t offset);
     void setEnable();
@@ -281,8 +282,8 @@ public:
     bool close();
     void setSource(const utils::Whf& whf);
     virtual void setFlags(const utils::eMdpFlags& flags);
-    void setTransform(const utils::eTransform& rot,
-            const bool& rotUsed);
+    void setTransform(const utils::eTransform& rot);
+    void setRotatorUsed(const bool& rotUsed);
     bool commit();
     bool queueBuffer(int fd, uint32_t offset);
     void setEnable();
@@ -353,10 +354,11 @@ inline void Rotator::setSource(const utils::Whf& whf) {
 inline void Rotator::setFlags(const utils::eMdpFlags& flags) {
     mRot->setFlags(flags);
 }
-inline void Rotator::setTransform(const utils::eTransform& rot,
-        const bool& rotUsed)
-{
-    mRot->setTransform(rot, rotUsed);
+inline void Rotator::setTransform(const utils::eTransform& rot) {
+    mRot->setTransform(rot);
+}
+inline void Rotator::setRotatorUsed(const bool& rotUsed) {
+    mRot->setRotatorUsed(rotUsed);
 }
 inline bool Rotator::commit() {
     return mRot->commit();
@@ -395,9 +397,9 @@ inline bool NullRotator::close() { return true; }
 inline bool NullRotator::commit() { return true; }
 inline void NullRotator::setSource(const utils::Whf& wfh) {}
 inline void NullRotator::setFlags(const utils::eMdpFlags& flags) {}
-inline void NullRotator::setTransform(const utils::eTransform& rot, const bool&)
-{}
-inline void NullRotator::setRotations(uint32_t) {}
+inline void NullRotator::setTransform(const utils::eTransform& rot) {}
+inline void NullRotator::setRotatorUsed(const bool& rotUsed) {}
+inline void NullRotator::setRotations(uint32_t rot) {}
 inline void NullRotator::setEnable() {}
 inline void NullRotator::setDisable() {}
 inline bool NullRotator::enabled() const { return false; }
