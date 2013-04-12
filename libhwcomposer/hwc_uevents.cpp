@@ -59,7 +59,6 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             proc->invalidate(proc);
         }
     } else if(!(strncmp(str,"offline@",strlen("offline@")))) {
-        ctx->hdmi_pending = false;
         ctx->mExtDisplay->processUEventOffline(str);
     }
 }
