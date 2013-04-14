@@ -73,7 +73,7 @@ class ExternalDisplay
     void setHPDStatus(int enabled);
     void setEDIDMode(int resMode);
     void setActionSafeDimension(int w, int h);
-    void processUEventOnline(const char *str);
+    bool processUEventOnline(const char *str);
     void processUEventOffline(const char *str);
     bool isHDMIConfigured();
 
@@ -90,6 +90,7 @@ class ExternalDisplay
     int getBestMode();
     void resetInfo();
     void configureWFDDisplay(int fbIndex);
+    void triggerRefresh();
 
     mutable android::Mutex mExtDispLock;
     int mFd;

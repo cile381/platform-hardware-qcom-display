@@ -86,16 +86,30 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list)
         return 0;
     }
 
-    if(ctx->mExtDisplay->getExternalDisplay())
-        ovutils::setExtType(ctx->mExtDisplay->getExternalDisplay());
     if (ctx->hdmi_pending == true) {
         if ((qdutils::MDPVersion::getInstance().getMDPVersion() >=
-            qdutils::MDP_V4_2) || (ctx->mOverlay->getState() !=
-                                  ovutils::OV_BYPASS_3_LAYER)) {
-            ctx->mExtDisplay->processUEventOnline((const char*)ctx->mHDMIEvent);
-            ctx->hdmi_pending = false;
+            qdutils::MDP_V4_2) || ((ctx->mOverlay->getState() !=
+              ovutils::OV_BYPASS_3_LAYER) && (ctx->mOverlay->getState() !=
+              ovutils::OV_BYPASS_2_LAYER) && (ctx->mOverlay->getState() !=
+              ovutils::OV_BYPASS_1_LAYER))) {
+
+            if(ctx->mExtDisplay->processUEventOnline(
+                                    (const char*)ctx->mHDMIEvent) == true) {
+                ctx->hdmi_pending = false;
+            } else {
+                /* This occurs in the following scenario:
+                 *   In case of HDMI online connection request when WFD is
+                 *   active, we need to tear-down WFD display first, invalidate
+                 *   which will ensure that overlay state is closed and process
+                 *   HDMI online request.
+                 */
+            }
         }
     }
+
+    if(ctx->mExtDisplay->getExternalDisplay())
+        ovutils::setExtType(ctx->mExtDisplay->getExternalDisplay());
+
     if (LIKELY(list)) {
         //reset for this draw round
         VideoOverlay::reset();
