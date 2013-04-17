@@ -141,6 +141,7 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
 bool isSecuring(hwc_context_t* ctx);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
+bool setupBasePipe(hwc_context_t *ctx);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -276,6 +277,8 @@ struct hwc_context_t {
     mutable Locker mExtSetLock;
     //Vsync
     struct vsync_state vstate;
+    //Check if base pipe is set up
+    bool mBasePipeSetup;
 };
 
 static inline bool isSkipPresent (hwc_context_t *ctx, int dpy) {
