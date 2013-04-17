@@ -117,8 +117,6 @@ void MdpCtrl::setPosition(const overlay::utils::Dim& d) {
 void MdpCtrl::setTransform(const utils::eTransform& orient) {
     int rot = utils::getMdpOrient(orient);
     setUserData(rot);
-    //getMdpOrient will switch the flips if the source is 90 rotated.
-    //Clients in Android dont factor in 90 rotation while deciding the flip.
     mOrientation = static_cast<utils::eTransform>(rot);
 }
 
@@ -139,6 +137,7 @@ void MdpCtrl::doDownscale() {
 }
 
 bool MdpCtrl::set() {
+    int mdpVersion = qdutils::MDPVersion::getInstance().getMDPVersion();
     //deferred calcs, so APIs could be called in any order.
     doTransform();
     doDownscale();
@@ -146,8 +145,10 @@ bool MdpCtrl::set() {
     if(utils::isYuv(whf.format)) {
         normalizeCrop(mOVInfo.src_rect.x, mOVInfo.src_rect.w);
         normalizeCrop(mOVInfo.src_rect.y, mOVInfo.src_rect.h);
-        utils::even_floor(mOVInfo.dst_rect.w);
-        utils::even_floor(mOVInfo.dst_rect.h);
+        if(mdpVersion < qdutils::MDSS_V5) {
+            utils::even_floor(mOVInfo.dst_rect.w);
+            utils::even_floor(mOVInfo.dst_rect.h);
+        }
     }
 
     if(this->ovChanged()) {
