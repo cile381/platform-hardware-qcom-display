@@ -279,6 +279,9 @@ struct hwc_context_t {
     struct vsync_state vstate;
     //Check if base pipe is set up
     bool mBasePipeSetup;
+    // Used as a workaround to skip video frames on
+    // External on Resume
+    bool mExtResumed;
 };
 
 static inline bool isSkipPresent (hwc_context_t *ctx, int dpy) {

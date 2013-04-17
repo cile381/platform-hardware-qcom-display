@@ -329,6 +329,10 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
                     ret = -1;
                     ALOGE("%s:post fail!! for external display ",
                                                            __FUNCTION__);
+                } else {
+                    // Used only in hwc_video file for external.
+                    // set here on resume and will be reset in hwc_video
+                    ctx->mExtResumed = true;
                 }
             } else {
             }

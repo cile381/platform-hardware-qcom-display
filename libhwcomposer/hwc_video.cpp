@@ -60,6 +60,17 @@ bool VideoOverlay::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         return false;
     }
 
+    if(dpy && ctx->mExtResumed &&
+           ctx->listStats[dpy].isDisplayAnimating) {
+        // This is the case where the external is resumed and display
+        // animating, and we dont want to show any video layer on Ext
+        return false;
+    } else if( dpy && ctx->mExtResumed &&
+                 !ctx->listStats[dpy].isDisplayAnimating) {
+        // Reset this to false, as we are done handling the above usecase
+        ctx->mExtResumed = false;
+    }
+
     if(isSkipLayer(&list->hwLayers[yuvIndex]) &&
                                 (dpy == HWC_DISPLAY_PRIMARY)) {
         //Skip layer on primary, return
