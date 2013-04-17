@@ -92,6 +92,10 @@ void initContext(hwc_context_t *ctx)
     pthread_mutex_init(&(ctx->mExtCommitDoneLock), NULL);
     pthread_cond_init(&(ctx->mExtCommitDoneCond), NULL);
 
+    ctx->mExtDisplayConfigDone = false;
+    pthread_mutex_init(&(ctx->mExtDisplayConfigDoneLock), NULL);
+    pthread_cond_init(&(ctx->mExtDisplayConfigDoneCond), NULL);
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
     ALOGI("DYN composition threshold : %f", ctx->dynThreshold);
@@ -322,6 +326,18 @@ void wait4CommitSignal(hwc_context_t* ctx) {
         }
         ctx->mExtCommit = false;
         pthread_mutex_unlock(&ctx->mExtCommitLock);
+    }
+}
+
+void wait4ExtDisplayConfigDone(hwc_context_t* ctx) {
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtDisplayConfigDoneLock);
+        while(ctx->mExtDisplayConfigDone == false) {
+            pthread_cond_wait(&(ctx->mExtDisplayConfigDoneCond),
+                    &(ctx->mExtDisplayConfigDoneLock));
+        }
+        ctx->mExtDisplayConfigDone = false;
+        pthread_mutex_unlock(&ctx->mExtDisplayConfigDoneLock);
     }
 }
 

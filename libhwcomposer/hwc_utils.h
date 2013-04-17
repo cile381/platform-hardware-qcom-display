@@ -90,6 +90,9 @@ void wait4CommitSignal(hwc_context_t* ctx);
 // Waits for the commit to finish on ext display
 void wait4ExtCommitDone(hwc_context_t* ctx);
 
+// Waits for the external display configuration to be done
+void wait4ExtDisplayConfigDone(hwc_context_t* ctx);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
@@ -184,11 +187,16 @@ struct hwc_context_t {
     pthread_mutex_t mExtCommitLock;
     pthread_cond_t mExtCommitCond;
 
+    bool mExtDisplayConfigDone;
+    pthread_mutex_t mExtDisplayConfigDoneLock;
+    pthread_cond_t mExtDisplayConfigDoneCond;
+
     // used for signalling the composition thread
-    // from the       extDispCommit thread
+    // from the extDispCommit thread
     bool mExtCommitDone;
     pthread_mutex_t mExtCommitDoneLock;
     pthread_cond_t mExtCommitDoneCond;
+
     // flag that indicate secure session status
     bool mSecure;
 
