@@ -161,8 +161,8 @@ inline uint32_t colorFormat(uint32_t fmt) {
     return fmt;
 }
 inline uint32_t format3DOutput(uint32_t x) {
-    return (x & 0xF000) >> SHIFT_OUT_3D; }
-inline uint32_t format3DInput(uint32_t x) { return x & 0xF0000; }
+    return (x & 0xFF00) >> SHIFT_OUT_3D; }
+inline uint32_t format3DInput(uint32_t x) { return x & 0xFF0000; }
 uint32_t getColorFormat(uint32_t format);
 
 bool isHDMIConnected ();
@@ -613,10 +613,12 @@ enum {
     HAL_3D_IN_TOP_BOTTOM              = 0x20000,
     HAL_3D_IN_INTERLEAVE              = 0x40000,
     HAL_3D_IN_SIDE_BY_SIDE_R_L        = 0x80000,
+    HAL_3D_IN_FRAME_PACKING           = 0x100000,
     HAL_3D_OUT_SIDE_BY_SIDE           = 0x1000,
     HAL_3D_OUT_TOP_BOTTOM             = 0x2000,
     HAL_3D_OUT_INTERLEAVE             = 0x4000,
-    HAL_3D_OUT_MONOSCOPIC             = 0x8000
+    HAL_3D_OUT_MONOSCOPIC             = 0x8000,
+    HAL_3D_OUT_FRAME_PACKING          = 0x800
 };
 
 enum { HAL_3D_OUT_SBS_MASK =
@@ -626,7 +628,7 @@ enum { HAL_3D_OUT_SBS_MASK =
     HAL_3D_OUT_INTERL_MASK =
             HAL_3D_OUT_INTERLEAVE >> overlay::utils::SHIFT_OUT_3D,
     HAL_3D_OUT_MONOS_MASK =
-            HAL_3D_OUT_MONOSCOPIC >> overlay::utils::SHIFT_OUT_3D
+            HAL_3D_OUT_MONOSCOPIC >> overlay::utils::SHIFT_OUT_3D,
 };
 
 
@@ -644,6 +646,40 @@ inline bool isYuv(uint32_t format) {
         case MDP_Y_CR_CB_GH2V2:
         case MDP_YCBCR_H1V1:
         case MDP_YCRCB_H1V1:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+
+inline bool isYuvH2(uint32_t format) {
+    switch(format){
+        case MDP_Y_CBCR_H2V1:
+        case MDP_Y_CBCR_H2V2:
+        case MDP_Y_CRCB_H2V2:
+        case MDP_Y_CRCB_H2V1:
+        case MDP_Y_CRCB_H2V2_TILE:
+        case MDP_Y_CBCR_H2V2_TILE:
+        case MDP_Y_CR_CB_H2V2:
+        case MDP_Y_CBCR_H2V2_VENUS:
+        case MDP_Y_CR_CB_GH2V2:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+
+inline bool isYuvV2(uint32_t format) {
+    switch(format){
+        case MDP_Y_CBCR_H2V2:
+        case MDP_Y_CRCB_H2V2:
+        case MDP_Y_CRCB_H2V2_TILE:
+        case MDP_Y_CBCR_H2V2_TILE:
+        case MDP_Y_CR_CB_H2V2:
+        case MDP_Y_CBCR_H2V2_VENUS:
+        case MDP_Y_CR_CB_GH2V2:
             return true;
         default:
             return false;
@@ -881,6 +917,18 @@ inline Dim getCropS3DImpl(const Dim& in, uint32_t fmt) {
         case HAL_3D_IN_INTERLEAVE:
             ALOGE("%s HAL_3D_IN_INTERLEAVE", __FUNCTION__);
             break;
+        case HAL_3D_IN_FRAME_PACKING:
+            if (in.h >= (1080 * 2)) {
+                return Dim(in.x, in.y, in.w, 1080 - in.y);
+            } else if (in.h >= (720 * 2)) {
+                return Dim(in.x, in.y, in.w, 720 - in.y);
+            } else if (in.h >= (576 * 2)) {
+                return Dim(in.x, in.y, in.w, 576 - in.y);
+            } else if (in.h >=  (480 * 2)) {
+                return Dim(in.x, in.y, in.w, 480 - in.y);
+            } else {
+                ALOGE("%s Unsupported 3D format %d height %d", __FUNCTION__, fmt, in.h);
+            }
         default:
             ALOGE("%s Unsupported 3D format %d", __FUNCTION__, fmt);
             break;
@@ -901,6 +949,18 @@ inline Dim getCropS3DImpl<utils::OV_CHAN1>(const Dim& in, uint32_t fmt) {
         case HAL_3D_IN_INTERLEAVE:
             ALOGE("%s HAL_3D_IN_INTERLEAVE", __FUNCTION__);
             break;
+        case HAL_3D_IN_FRAME_PACKING:
+            if (in.h >= (1080 * 2) ) {
+                return Dim(in.x, (1080 + 45 + (in.y/2)), in.w, 1080 - (in.y/2));
+            } else if (in.h >= (720 * 2)) {
+                return Dim(in.x, (720 + 30 + (in.y/2)), in.w, 720 - (in.y/2));
+            } else if (in.h >= (576 * 2)) {
+                return Dim(in.x, (576 + 49 + (in.y/2)), in.w, 576 - (in.y/2));
+            } else if (in.h >= (480 * 2)) {
+                return Dim(in.x, (480 + 45 + (in.y/2)), in.w, 480 - (in.y/2));
+            } else {
+                ALOGE("%s Unsupported 3D format %d height %d", __FUNCTION__, fmt, in.h);
+            }
         default:
             ALOGE("%s Unsupported 3D format %d", __FUNCTION__, fmt);
             break;

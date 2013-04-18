@@ -357,9 +357,8 @@ bool enableBarrier (uint32_t orientation) {
         IOFile fp(Res::barrierFile, "wb");
         (void)fp.write("%d", orientation);
         if(!fp.valid()) {
-            ALOGE("enableBarrier no sysfs entry for "
+            ALOGW("enableBarrier no sysfs entry for "
                     "enabling barriers on 3D panel");
-            return false;
         }
     }
     return true;

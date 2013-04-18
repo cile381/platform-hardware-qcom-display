@@ -101,6 +101,10 @@ void VideoOverlay::markUILayersforS3DComposition(hwc_layer_list_t *list) {
             ALOGD_IF(VIDEO_DEBUG,
             "Setting the hint HWC_HINT_DRAW_S3D_TOP_BOTTOM to SF");
             layer->hints |= HWC_HINT_DRAW_S3D_TOP_BOTTOM;
+        } else if (sLayerS3DFormat & HAL_3D_IN_FRAME_PACKING) {
+            ALOGD_IF(VIDEO_DEBUG,
+            "Setting the hint HWC_HINT_DRAW_S3D_TOP_BOTTOM to SF");
+            layer->hints |= HWC_HINT_DRAW_S3D_TOP_BOTTOM;
         } else {
             ALOGE("Invalid 3D format %x",sLayerS3DFormat);
         }

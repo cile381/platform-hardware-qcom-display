@@ -221,10 +221,12 @@ void MdpCtrl::doDownscale(int dscale_factor) {
 bool MdpCtrl::set() {
     //deferred calcs, so APIs could be called in any order.
     utils::Whf whf = getSrcWhf();
-    if(utils::isYuv(whf.format)) {
+    if(utils::isYuvH2(whf.format)) {
         normalizeCrop(mOVInfo.src_rect.x, mOVInfo.src_rect.w);
-        normalizeCrop(mOVInfo.src_rect.y, mOVInfo.src_rect.h);
         utils::even_floor(mOVInfo.dst_rect.w);
+    }
+    if(utils::isYuvV2(whf.format)) {
+        normalizeCrop(mOVInfo.src_rect.y, mOVInfo.src_rect.h);
         utils::even_floor(mOVInfo.dst_rect.h);
     }
 
