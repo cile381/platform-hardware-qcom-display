@@ -507,6 +507,15 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
                         (layer_prop & MDPCOMP_LAYER_BLEND)) {
             pipe_pref = PIPE_REQ_RGB;
          }
+        //If downscale is required and alpha channel present request RGB pipe
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        if((layer_prop & MDPCOMP_LAYER_DOWNSCALE) &&
+                hnd &&
+                (hnd->format == HAL_PIXEL_FORMAT_RGBA_8888 ||
+                 hnd->format == HAL_PIXEL_FORMAT_BGRA_8888 ||
+                 hnd->format == HAL_PIXEL_FORMAT_RGBA_5551 ||
+                 hnd->format == HAL_PIXEL_FORMAT_RGBA_4444))
+            pipe_pref = PIPE_REQ_RGB;
 
         int allocated_pipe = sPipeMgr.req_for_pipe( pipe_pref);
         if(allocated_pipe) {
