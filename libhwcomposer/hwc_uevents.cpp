@@ -53,6 +53,12 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     if(!(strncmp(str,"online@",strlen("online@")))) {
         ctx->mExtDisplay->processUEventOnline(str);
     } else if(!(strncmp(str,"offline@",strlen("offline@")))) {
+        /* Since processUEventOnline is executed as part of composition thread and
+         * processUEventOffline is executed as part of this uevent thread, there is
+         * scope for race-condition in rapid online/offline events from WFD/HDMI.
+         * Wait for the external display configuration to be done before proceeding
+         * for cleanup in processUEventOffline */
+        wait4ExtDisplayConfigDone(ctx);
         ctx->mExtDisplay->processUEventOffline(str);
     }
 }

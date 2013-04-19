@@ -465,6 +465,7 @@ void ExternalDisplay::processUEventOnline(const char *str) {
     strcpy(mUEventStr, str);
     mExternalPending = true;
 }
+
 void ExternalDisplay::configureExtDisplay() {
 
     if(!mExternalPending) {
@@ -472,6 +473,7 @@ void ExternalDisplay::configureExtDisplay() {
     }
 
     mExternalPending = false;
+
     const char *str = mUEventStr;
     const char *s1 = str + (strlen(str)-strlen(DEVICE_NODE_FB1));
 
@@ -503,6 +505,14 @@ void ExternalDisplay::configureExtDisplay() {
             configureWFDDisplay(EXTERN_DISPLAY_FB2);
             setExternalDisplay(EXTERN_DISPLAY_FB2);
         }
+    }
+
+    hwc_context_t* ctx = mHwcContext;
+    if(ctx) {
+        pthread_mutex_lock(&ctx->mExtDisplayConfigDoneLock);
+        ctx->mExtDisplayConfigDone = true;
+        pthread_cond_signal(&ctx->mExtDisplayConfigDoneCond);
+        pthread_mutex_unlock(&ctx->mExtDisplayConfigDoneLock);
     }
 }
 
