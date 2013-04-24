@@ -254,9 +254,22 @@ void MdpCtrl::adjustSrcWhf(const bool& rotUsed) {
             whf.w = utils::alignup(whf.w, 64);
             whf.h = utils::alignup(whf.h, 32);
         }
-        //For example: If original format is tiled, rotator outputs non-tiled,
-        //so update mdp's src fmt to that.
+        /*For example: If original format is tiled, rotator outputs non-tiled,
+         *so update mdp's src fmt to that.
+         */
         whf.format = utils::getRotOutFmt(whf.format);
+        setSrcWhf(whf);
+        /* The above format will be overwritten in function updateSrcformat
+         * after doing rotator start. Format is then set depending on
+         * whether the fastyuv mode is used by the rotator.
+         */
+    }
+}
+
+void MdpCtrl::updateSrcformat(const uint32_t& inputformat) {
+    if(mRotUsed) {
+        utils::Whf whf = getSrcWhf();
+        whf.format =  inputformat;
         setSrcWhf(whf);
     }
 }

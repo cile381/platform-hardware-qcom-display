@@ -154,6 +154,9 @@ public:
     /* Get downscale factor */
     int getDownscalefactor();
 
+    /* Update the src format */
+
+    void updateSrcformat(const uint32_t& inputsrcFormat);
 private:
 
     /* helper functions for overlayTransform */

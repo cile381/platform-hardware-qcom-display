@@ -66,6 +66,7 @@ public:
     virtual uint32_t getSessId() const = 0;
     virtual int getDstMemId() const = 0;
     virtual uint32_t getDstOffset() const = 0;
+    virtual uint32_t getDstFormat() const = 0;
     virtual void dump() const = 0;
 
 protected:
@@ -113,6 +114,8 @@ public:
     /* get dst (for offset and memory id) non-virt */
     virtual int getDstMemId() const = 0;
     virtual uint32_t getDstOffset() const = 0;
+    /* get rotator destination format */
+    virtual uint32_t getDstFormat() const = 0;
     /* dump the state of the object */
     virtual void dump() const = 0;
 
@@ -140,6 +143,7 @@ public:
     virtual void setSrcFB();
     virtual int getDstMemId() const;
     virtual uint32_t getDstOffset() const;
+    virtual uint32_t getDstFormat() const;
     virtual void setEnable();
     virtual void setDisable();
     virtual void setDownscale(int ds);
@@ -173,6 +177,7 @@ public:
     virtual uint32_t getSessId() const;
     virtual int getDstMemId() const;
     virtual uint32_t getDstOffset() const;
+    virtual uint32_t getDstFormat() const;
     virtual void dump() const;
 };
 
@@ -236,6 +241,7 @@ public:
     uint32_t getSessId() const;
     int getDstMemId() const;
     uint32_t getDstOffset() const;
+    uint32_t getDstFormat() const;
     void dump() const;
 
 private:
@@ -295,6 +301,7 @@ public:
     uint32_t getSessId() const;
     int getDstMemId() const;
     uint32_t getDstOffset() const;
+    uint32_t getDstFormat() const;
     void dump() const;
 
 private:
@@ -374,6 +381,9 @@ inline int Rotator::getDstMemId() const {
 inline uint32_t Rotator::getDstOffset() const {
     return mRot->getDstOffset();
 }
+inline uint32_t Rotator::getDstFormat() const {
+    return mRot->getDstFormat();
+}
 inline void Rotator::setRotations(uint32_t rot) {
     mRot->setRotations (rot);
 }
@@ -409,6 +419,7 @@ inline void NullRotator::setSrcFB() {}
 inline void NullRotator::setDownscale(int ds) { }
 inline int NullRotator::getDstMemId() const { return -1; }
 inline uint32_t NullRotator::getDstOffset() const { return 0;}
+inline uint32_t NullRotator::getDstFormat() const { return 0;}
 inline void NullRotator::dump() const {
     ALOGE("== Dump NullRotator dump (null) start/end ==");
 }
@@ -436,6 +447,9 @@ inline int MdpRot::getDstMemId() const {
 }
 inline uint32_t MdpRot::getDstOffset() const {
     return mRotDataInfo.dst.offset;
+}
+inline uint32_t MdpRot::getDstFormat() const {
+    return mRotImgInfo.dst.format;
 }
 inline uint32_t MdpRot::getSessId() const { return mRotImgInfo.session_id; }
 inline void MdpRot::setSrcFB() {
@@ -468,6 +482,7 @@ inline int MdssRot::getDstMemId() const {
 inline uint32_t MdssRot::getDstOffset() const {
     return mRotData.dst_data.offset;
 }
+inline uint32_t MdssRot::getDstFormat() const {return 0;}
 inline uint32_t MdssRot::getSessId() const { return mRotInfo.id; }
 inline void MdssRot::setSrcFB() {
     mRotData.data.flags |= MDP_MEMORY_ID_TYPE_FB;
