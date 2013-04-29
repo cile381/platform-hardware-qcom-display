@@ -52,9 +52,17 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     struct fb_var_screeninfo info;
 
     int fb_fd = openFb(HWC_DISPLAY_PRIMARY);
-
-    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &info) == -1)
+    if(fb_fd < 0) {
+        ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
         return -errno;
+    }
+
+    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        ALOGE("%s:Error in ioctl FBIOGET_VSCREENINFO: %s", __FUNCTION__,
+                                                       strerror(errno));
+        close(fb_fd);
+        return -errno;
+    }
 
     if (int(info.width) <= 0 || int(info.height) <= 0) {
         // the driver doesn't return that information
@@ -72,7 +80,9 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     metadata.op = metadata_op_frame_rate;
 
     if (ioctl(fb_fd, MSMFB_METADATA_GET, &metadata) == -1) {
-        ALOGE("Error retrieving panel frame rate");
+        ALOGE("%s:Error retrieving panel frame rate: %s", __FUNCTION__,
+                                                      strerror(errno));
+        close(fb_fd);
         return -errno;
     }
 
@@ -83,11 +93,12 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     float fps  = info.reserved[3] & 0xFF;
 #endif
 
-    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1)
+    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        ALOGE("%s:Error in ioctl FBIOGET_FSCREENINFO: %s", __FUNCTION__,
+                                                       strerror(errno));
+        close(fb_fd);
         return -errno;
-
-    if (finfo.smem_len <= 0)
-        return -errno;
+    }
 
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = fb_fd;
     //xres, yres may not be 32 aligned
@@ -240,9 +251,9 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     char value[PROPERTY_VALUE_MAX];
 
     // Apply action safe parameters
-    property_get("hw.actionsafe.width", value, "0");
+    property_get("persist.sys.actionsafe.width", value, "0");
     int asWidthRatio = atoi(value);
-    property_get("hw.actionsafe.height", value, "0");
+    property_get("persist.sys.actionsafe.height", value, "0");
     int asHeightRatio = atoi(value);
     // based on the action safe ratio, get the Action safe rectangle
     asW = fbWidth * (1.0f -  asWidthRatio / 100.0f);
@@ -333,6 +344,9 @@ void setListStats(hwc_context_t *ctx,
             yuvCount++;
 
             if(layer->transform & HWC_TRANSFORM_ROT_90) {
+                if(ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
+                    ctx->isPaddingRound = true;
+                }
                 Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
             }
         }

@@ -124,6 +124,16 @@ eDest Overlay::nextPipe(eMdpPipeType type, int dpy) {
     return dest;
 }
 
+bool Overlay::isPipeTypeAttached(eMdpPipeType type) {
+    for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
+        if(type == PipeBook::getPipeType((eDest)i) &&
+                mPipeBook[i].mDisplay != PipeBook::DPY_UNUSED) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Overlay::commit(utils::eDest dest) {
     bool ret = false;
     int index = (int)dest;
@@ -285,19 +295,19 @@ void Overlay::dump() const {
 
 void Overlay::getDump(char *buf, size_t len) {
     int totalPipes = 0;
-    const char *str = "\nOverlay State\n==========================\n";
+    const char *str = "\nOverlay State\n\n";
     strncat(buf, str, strlen(str));
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
         if(mPipeBook[i].valid()) {
             mPipeBook[i].mPipe->getDump(buf, len);
             char str[64] = {'\0'};
-            snprintf(str, 64, "Attached to dpy=%d\n\n", mPipeBook[i].mDisplay);
+            snprintf(str, 64, "Display=%d\n\n", mPipeBook[i].mDisplay);
             strncat(buf, str, strlen(str));
             totalPipes++;
         }
     }
     char str_pipes[64] = {'\0'};
-    snprintf(str_pipes, 64, "Pipes used=%d\n\n", totalPipes);
+    snprintf(str_pipes, 64, "Pipes=%d\n\n", totalPipes);
     strncat(buf, str_pipes, strlen(str_pipes));
 }
 
