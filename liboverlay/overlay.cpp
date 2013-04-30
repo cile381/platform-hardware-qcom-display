@@ -142,13 +142,13 @@ bool Overlay::commit(utils::eDest dest) {
 }
 
 bool Overlay::queueBuffer(int fd, uint32_t offset,
-        utils::eDest dest) {
+        utils::eDest dest, VideoFrame_t *frc) {
     int index = (int)dest;
     bool ret = false;
     validate(index);
     //Queue only if commit() has succeeded (and the bit set)
     if(PipeBook::isUsed((int)dest)) {
-        ret = mPipeBook[index].mPipe->queueBuffer(fd, offset);
+        ret = mPipeBook[index].mPipe->queueBuffer(fd, offset, frc);
     }
     return ret;
 }
