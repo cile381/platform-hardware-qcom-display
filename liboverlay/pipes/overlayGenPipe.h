@@ -58,7 +58,7 @@ public:
     bool commit();
     /* Data APIs */
     /* queue buffer to the overlay */
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc);
     /* return cached startup args */
     const utils::PipeArgs& getArgs() const;
     /* retrieve cached crop data */

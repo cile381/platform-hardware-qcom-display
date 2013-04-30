@@ -161,7 +161,7 @@ bool GenericPipe::commit() {
     return ret;
 }
 
-bool GenericPipe::queueBuffer(int fd, uint32_t offset) {
+bool GenericPipe::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
     //TODO Move pipe-id transfer to CtrlData class. Make ctrl and data private.
     OVASSERT(isOpen(), "State is closed, cannot queueBuffer");
     int pipeId = mCtrlData.ctrl.getPipeId();
@@ -188,7 +188,7 @@ bool GenericPipe::queueBuffer(int fd, uint32_t offset) {
             ALOGE("Null rotator in use, where an actual is required");
         }
     }
-    return mCtrlData.data.queueBuffer(finalFd, finalOffset);
+    return mCtrlData.data.queueBuffer(finalFd, finalOffset, frc);
 }
 
 int GenericPipe::getCtrlFd() const {

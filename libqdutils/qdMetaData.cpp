@@ -65,6 +65,9 @@ int setMetaData(private_handle_t *handle, DispParamType paramType,
         case PP_PARAM_INTERLACED:
             data->interlaced = *((int32_t *)param);
             break;
+        case PP_PARAM_VIDEO_FRAME:
+            memcpy((void *)&data->videoFrame, param, sizeof(VideoFrame_t));
+            break;
         default:
             ALOGE("Unknown paramType %d", paramType);
             break;

@@ -151,7 +151,7 @@ bool FBUpdateLowRes::draw(hwc_context_t *ctx, private_handle_t *hnd)
     bool ret = true;
     overlay::Overlay& ov = *(ctx->mOverlay);
     ovutils::eDest dest = mDest;
-    if (!ov.queueBuffer(hnd->fd, hnd->offset, dest)) {
+    if (!ov.queueBuffer(hnd->fd, hnd->offset, dest, NULL)) {
         ALOGE("%s: queueBuffer failed for FBUpdate", __FUNCTION__);
         ret = false;
     }
@@ -292,12 +292,12 @@ bool FBUpdateHighRes::draw(hwc_context_t *ctx, private_handle_t *hnd)
     overlay::Overlay& ov = *(ctx->mOverlay);
     ovutils::eDest destL = mDestLeft;
     ovutils::eDest destR = mDestRight;
-    if (!ov.queueBuffer(hnd->fd, hnd->offset, destL)) {
+    if (!ov.queueBuffer(hnd->fd, hnd->offset, destL, NULL)) {
         ALOGE("%s: queue failed for left of dpy = %d",
                 __FUNCTION__, mDpy);
         ret = false;
     }
-    if (!ov.queueBuffer(hnd->fd, hnd->offset, destR)) {
+    if (!ov.queueBuffer(hnd->fd, hnd->offset, destR, NULL)) {
         ALOGE("%s: queue failed for right of dpy = %d",
                 __FUNCTION__, mDpy);
         ret = false;

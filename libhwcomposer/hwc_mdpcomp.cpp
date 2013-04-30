@@ -498,8 +498,15 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             fd = rot->getDstMemId();
             offset = rot->getDstOffset();
         }
+        MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+        VideoFrame_t *frc;
+        if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
+            frc = &metadata->videoFrame;
+        } else {
+            frc = NULL;
+        }
 
-        if (!ov.queueBuffer(fd, offset, dest)) {
+        if (!ov.queueBuffer(fd, offset, dest, frc)) {
             ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
             return false;
         }
@@ -681,7 +688,7 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ovutils::eDest destL = (ovutils::eDest)indexL;
             ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
                     using  pipe: %d", __FUNCTION__, layer, hnd, indexL );
-            if (!ov.queueBuffer(fd, offset, destL)) {
+            if (!ov.queueBuffer(fd, offset, destL, NULL)) {
                 ALOGE("%s: queueBuffer failed for left mixer", __FUNCTION__);
                 return false;
             }
@@ -692,7 +699,7 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ovutils::eDest destR = (ovutils::eDest)indexR;
             ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
                     using  pipe: %d", __FUNCTION__, layer, hnd, indexR );
-            if (!ov.queueBuffer(fd, offset, destR)) {
+            if (!ov.queueBuffer(fd, offset, destR, NULL)) {
                 ALOGE("%s: queueBuffer failed for right mixer", __FUNCTION__);
                 return false;
             }
