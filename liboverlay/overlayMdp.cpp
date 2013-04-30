@@ -80,6 +80,7 @@ void MdpCtrl::resetVisualParams() {
     params.params.conv_params.cc_matrix[0][0] = 1;
     params.params.conv_params.cc_matrix[1][1] = 1;
     params.params.conv_params.cc_matrix[2][2] = 1;
+    mCscConfiged = false;
 #endif
 }
 
@@ -388,8 +389,20 @@ void MdpCtrl::setVisualParams(const MetaData_t& data) {
     }
 
     if (data.operation & PP_PARAM_VID_INTFC) {
+        if ((params.params.conv_params.interface != (interface_type) data.video_interface) ||
+            (!mCscConfiged)) {
             params.params.conv_params.interface =
                         (interface_type) data.video_interface;
+            needUpdate = true;
+            if ((params.params.conv_params.interface == interface_srgb) ||
+                (params.params.conv_params.interface == interface_srgb_full))
+                ops = 0;
+            else
+                ops = 3;
+            mCscConfiged = true;
+            params.params.conv_params.ops = ops;
+            params.operation |= PP_OP_HSIC;
+        }
     }
 
     if (needUpdate) {
