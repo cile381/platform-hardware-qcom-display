@@ -287,6 +287,10 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
                 }
             } else {
                 ret = ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, FB_BLANK_UNBLANK);
+                if (ret != 0) {
+                    ALOGE("Display unblank failed (%d)\n", ret);
+                    abort();
+                }
                 if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected == true) {
                     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = !blank;
                 }
