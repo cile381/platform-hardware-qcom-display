@@ -71,6 +71,15 @@ android::status_t QService::screenRefresh() {
     return result;
 }
 
+android::status_t QService::setMode(int32_t mode) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->notifyCallback(SET_MODE, mode);
+    }
+    return result;
+}
+
+
 void QService::init()
 {
     if(!sQService) {

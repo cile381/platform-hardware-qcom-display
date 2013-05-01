@@ -39,7 +39,7 @@ class MDPComp {
 public:
     virtual ~MDPComp(){};
     /*sets up mdp comp for the current frame */
-    bool prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list);
+    bool prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy);
     /* draw */
     virtual bool draw(hwc_context_t *ctx, hwc_display_contents_1_t *list) = 0;
 
@@ -117,6 +117,7 @@ protected:
     static bool sEnabled;
     static bool sDebugLogs;
     static bool sIdleFallBack;
+    static int sDpy;
     static IdleInvalidator *idleInvalidator;
     struct FrameInfo mCurrentFrame;
 };

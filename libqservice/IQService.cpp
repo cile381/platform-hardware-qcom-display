@@ -71,6 +71,15 @@ public:
         status_t result = reply.readInt32();
         return result;
     }
+
+    virtual status_t setMode(int32_t mode) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(mode);
+        remote()->transact(SET_MODE, data, &reply);
+        status_t result = reply.readInt32();
+        return result;
+    }
 };
 
 IMPLEMENT_META_INTERFACE(QService, "android.display.IQService");
@@ -140,6 +149,17 @@ status_t BnQService::onTransact(
                 return PERMISSION_DENIED;
             }
             return screenRefresh();
+        } break;
+        case SET_MODE: {
+            if(callerUid != AID_SYSTEM && callerUid != AID_ROOT) {
+                ALOGE("display.qservice SET_MODE access denied: \
+                      pid=%d uid=%d process=%s",callerPid,
+                      callerUid, callingProcName);
+                return PERMISSION_DENIED;
+            }
+            CHECK_INTERFACE(IQService, data, reply);
+            int32_t mode = data.readInt32();
+            return setMode(mode);
         } break;
         default:
             return BBinder::onTransact(code, data, reply, flags);

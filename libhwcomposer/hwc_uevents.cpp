@@ -51,46 +51,12 @@ static bool isHDMI(const char* str)
     return false;
 }
 
-static void setup(hwc_context_t* ctx, int dpy, bool usecopybit)
-{
-    ctx->mFBUpdate[dpy] =
-            IFBUpdate::getObject(ctx->dpyAttr[dpy].xres, dpy);
-    if(usecopybit)
-        ctx->mCopyBit[dpy] = new CopyBit();
-    ctx->mVidOv[dpy] =
-            IVideoOverlay::getObject(ctx->dpyAttr[dpy].xres, dpy);
-}
-
-static void clear(hwc_context_t* ctx, int dpy)
-{
-    if(ctx->mFBUpdate[dpy]) {
-        delete ctx->mFBUpdate[dpy];
-        ctx->mFBUpdate[dpy] = NULL;
-    }
-    if(ctx->mCopyBit[dpy]){
-        delete ctx->mCopyBit[dpy];
-        ctx->mCopyBit[dpy] = NULL;
-    }
-    if(ctx->mVidOv[dpy]) {
-        delete ctx->mVidOv[dpy];
-        ctx->mVidOv[dpy] = NULL;
-    }
-}
-
 static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
     int vsync = 0;
     int64_t timestamp = 0;
     const char *str = udata;
-    bool usecopybit = false;
-    int compositionType =
-        qdutils::QCCompositionType::getInstance().getCompositionType();
 
-    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
-                           qdutils::COMPOSITION_TYPE_MDP |
-                           qdutils::COMPOSITION_TYPE_C2D)) {
-        usecopybit = true;
-    }
     if(!strcasestr("change@/devices/virtual/switch/hdmi", str) &&
        !strcasestr("change@/devices/virtual/switch/wfd", str)) {
         ALOGD_IF(UEVENT_DEBUG, "%s: Not Ext Disp Event ", __FUNCTION__);
@@ -151,7 +117,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     ctx->mExtDisplay->teardownWFDDisplay();
                 }
                 Locker::Autolock _l(ctx->mExtSetLock);
-                clear(ctx, dpy);
+                cleanExternalObjs(ctx, dpy);
                 ALOGD("%s sending hotplug: connected = %d and dpy:%d",
                       __FUNCTION__, connected, dpy);
                 ctx->dpyAttr[dpy].connected = false;
@@ -173,7 +139,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                         ctx->mExtDisplay->teardownWFDDisplay();
                         {
                             Locker::Autolock _l(ctx->mExtSetLock);
-                            clear(ctx, dpy);
+                            cleanExternalObjs(ctx, dpy);
                             //send hotplug disconnect event
                             ALOGD_IF(UEVENT_DEBUG, "sending hotplug: disconnect"
                                     "for WFD");
@@ -193,7 +159,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     ctx->mExtDisplay->configureWFDDisplay();
                 }
                 ctx->dpyAttr[dpy].isPause = false;
-                setup(ctx, dpy, usecopybit);
+                setupExternalObjs(ctx, dpy);
                 ALOGD("%s sending hotplug: connected = %d", __FUNCTION__,
                         connected);
                 ctx->dpyAttr[dpy].connected = true;

@@ -30,6 +30,7 @@
 #include <hwc_qclient.h>
 #include <IQService.h>
 #include <hwc_utils.h>
+#include <external.h>
 
 #define QCLIENT_DEBUG 0
 
@@ -60,6 +61,9 @@ status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
             break;
         case IQService::SCREEN_REFRESH:
             return screenRefresh();
+            break;
+        case IQService::SET_MODE:
+            return setMode(value);
             break;
         default:
             return NO_ERROR;
@@ -103,6 +107,23 @@ android::status_t QClient::screenRefresh() {
     if(mHwcContext->proc) {
         mHwcContext->proc->invalidate(mHwcContext->proc);
         result = NO_ERROR;
+    }
+#endif
+    return result;
+}
+
+android::status_t QClient::setMode(int32_t mode) {
+    status_t result = NO_INIT;
+#ifdef QCOM_BSP
+    mHwcContext->mExtDisplay->readResolution();
+    if (mHwcContext->mExtDisplay->isValidMode(mode) &&
+        !mHwcContext->mExtDisplay->isInterlacedMode(mode)) {
+        mHwcContext->mResChanged = true;
+        mHwcContext->mExtDisplay->setCustomMode(mode);
+        screenRefresh();
+        result = NO_ERROR;
+    } else {
+        result = BAD_VALUE;
     }
 #endif
     return result;

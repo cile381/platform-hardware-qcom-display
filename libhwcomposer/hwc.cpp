@@ -129,11 +129,10 @@ static int display_commit(hwc_context_t *ctx, int dpy) {
 }
 
 static int hwc_prepare_primary(hwc_composer_device_1 *dev,
-        hwc_display_contents_1_t *list) {
+        hwc_display_contents_1_t *list, int dpy) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    const int dpy = HWC_DISPLAY_PRIMARY;
     if(UNLIKELY(!ctx->mBasePipeSetup))
-        setupBasePipe(ctx);
+        setupBasePipe(ctx, dpy);
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
@@ -145,7 +144,7 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
                 return 0;
             }
             setListStats(ctx, list, dpy);
-            bool ret = ctx->mMDPComp->prepare(ctx, list);
+            bool ret = ctx->mMDPComp->prepare(ctx, list, dpy);
             if(!ret) {
                 // IF MDPcomp fails use this route
                 ctx->mVidOv[dpy]->prepare(ctx, list);
@@ -195,6 +194,20 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
     return 0;
 }
 
+static int hwc_prepare_dummy(hwc_composer_device_1 *dev,
+        hwc_display_contents_1_t *list, int dpy) {
+    if (LIKELY(list && list->numHwLayers > 1)) {
+        /* Mark as Layers as overlay */
+        for(uint32_t j = 0; j < list->numHwLayers; j++) {
+            if(list->hwLayers[j].compositionType != HWC_FRAMEBUFFER_TARGET)
+                list->hwLayers[j].compositionType = HWC_OVERLAY;
+        }
+
+    }
+
+    return 0;
+}
+
 static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
                        hwc_display_contents_1_t** displays)
 {
@@ -207,18 +220,30 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     ctx->mRotMgr->configBegin();
     ctx->mNeedsRotator = false;
 
-    for (int32_t i = numDisplays; i >= 0; i--) {
-        hwc_display_contents_1_t *list = displays[i];
-        switch(i) {
+    if (LIKELY(!ctx->mResChanged)) {
+        for (int32_t i = numDisplays; i >= 0; i--) {
+            hwc_display_contents_1_t *list = displays[i];
+            switch(i) {
             case HWC_DISPLAY_PRIMARY:
-                ret = hwc_prepare_primary(dev, list);
+                if(ctx->mExtDisplay->hasResolutionChanged()) {
+                    ret = hwc_prepare_dummy(dev, list, i);
+                } else {
+                    ret = hwc_prepare_primary(dev, list, i);
+                }
                 break;
             case HWC_DISPLAY_EXTERNAL:
+                if(ctx->mExtDisplay->hasResolutionChanged()) {
+                    ret = hwc_prepare_primary(dev, list, i);
+                } else {
+                    ret = hwc_prepare_external(dev, list, i);
+                }
+                break;
             case HWC_DISPLAY_VIRTUAL:
                 ret = hwc_prepare_external(dev, list, i);
                 break;
             default:
                 ret = -EINVAL;
+            }
         }
     }
 
@@ -360,10 +385,10 @@ static int hwc_query(struct hwc_composer_device_1* dev,
 }
 
 
-static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+static int hwc_set_primary(hwc_context_t *ctx,
+                           hwc_display_contents_1_t* list, int dpy) {
     ATRACE_CALL();
     int ret = 0;
-    const int dpy = HWC_DISPLAY_PRIMARY;
     if (LIKELY(list) && ctx->dpyAttr[dpy].isActive) {
         uint32_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
@@ -453,6 +478,14 @@ static int hwc_set_external(hwc_context_t *ctx,
     return ret;
 }
 
+static int hwc_set_dummy(hwc_context_t *ctx,
+                         hwc_display_contents_1_t* list, int dpy)
+{
+    //Do nothing, just close the fences
+    closeAcquireFds(list);
+    return 0;
+}
+
 static int hwc_set(hwc_composer_device_1 *dev,
                    size_t numDisplays,
                    hwc_display_contents_1_t** displays)
@@ -460,23 +493,64 @@ static int hwc_set(hwc_composer_device_1 *dev,
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     Locker::Autolock _l(ctx->mBlankLock);
-    for (uint32_t i = 0; i <= numDisplays; i++) {
-        hwc_display_contents_1_t* list = displays[i];
-        switch(i) {
+
+    if (LIKELY(!ctx->mResChanged)) {
+        for (uint32_t i = 0; i <= numDisplays; i++) {
+            hwc_display_contents_1_t* list = displays[i];
+            switch(i) {
             case HWC_DISPLAY_PRIMARY:
-                ret = hwc_set_primary(ctx, list);
+                if(ctx->mExtDisplay->hasResolutionChanged()) {
+                    ret = hwc_set_dummy(ctx, list, i);
+                } else {
+                    ret = hwc_set_primary(ctx, list, i);
+                }
                 break;
             case HWC_DISPLAY_EXTERNAL:
+                if(ctx->mExtDisplay->hasResolutionChanged()) {
+                    ret = hwc_set_primary(ctx, list, i);
+                } else {
+                    ret = hwc_set_external(ctx, list, i);
+                }
+                break;
             case HWC_DISPLAY_VIRTUAL:
-            /* ToDo: We are using hwc_set_external path for both External and
-                     Virtual displays on HWC1.1. Eventually, we will have
-                     separate functions when we move to HWC1.2
-            */
+                /* ToDo: We are using hwc_set_external path for both External
+                 * and Virtual displays on HWC1.1. Eventually, we will have
+                 separate functions when we move to HWC1.2
+                 */
                 ret = hwc_set_external(ctx, list, i);
                 break;
             default:
                 ret = -EINVAL;
+            }
         }
+    } else {
+        //Do nothing for res changed round for one frame so that all fences are
+        //closed
+        ctx->mBasePipeSetup = false;
+        for (uint32_t i = 0; i < numDisplays; i++) {
+            if (display_commit(ctx, i) < 0) {
+                ALOGE("%s: display commit fail!", __FUNCTION__);
+                ret = -1;
+            }
+            closeAcquireFds(displays[i]);
+        }
+        ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd, FBIOBLANK,
+                    FB_BLANK_POWERDOWN);
+
+        if (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected) {
+            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
+            ctx->mExtDisplay->teardownHDMIDisplay();
+            ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL, 0);
+            return ret;
+        }
+
+        int result = ctx->mExtDisplay->setHdmiPrimaryMode();
+        if (result == EXT_MODE_CHANGED) {
+            setupExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+        } else {
+            cleanExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+        }
+        ctx->mResChanged = false;
     }
     // This is only indicative of how many times SurfaceFlinger posts
     // frames to the display.

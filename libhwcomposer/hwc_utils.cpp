@@ -145,6 +145,7 @@ void initContext(hwc_context_t *ctx)
     ctx->vstate.fakevsync = false;
     ctx->mExtDispConfiguring = false;
     ctx->mBasePipeSetup = false;
+    ctx->mResChanged = false;
 
     //Right now hwc starts the service but anybody could do it, or it could be
     //independent process as well.
@@ -473,6 +474,37 @@ void closeAcquireFds(hwc_display_contents_1_t* list) {
     }
 }
 
+void setupExternalObjs(hwc_context_t* ctx, int dpy) {
+
+    int compositionType =
+        qdutils::QCCompositionType::getInstance().getCompositionType();
+
+    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
+                           qdutils::COMPOSITION_TYPE_MDP |
+                           qdutils::COMPOSITION_TYPE_C2D)) {
+        ctx->mCopyBit[dpy] = new CopyBit();
+    }
+    ctx->mFBUpdate[dpy] =
+        IFBUpdate::getObject(ctx->dpyAttr[dpy].xres, dpy);
+    ctx->mVidOv[dpy] =
+        IVideoOverlay::getObject(ctx->dpyAttr[dpy].xres, dpy);
+}
+
+void cleanExternalObjs(hwc_context_t* ctx, int dpy) {
+        if(ctx->mFBUpdate[dpy]) {
+            delete ctx->mFBUpdate[dpy];
+            ctx->mFBUpdate[dpy] = NULL;
+        }
+        if(ctx->mCopyBit[dpy]){
+            delete ctx->mCopyBit[dpy];
+            ctx->mCopyBit[dpy] = NULL;
+        }
+        if(ctx->mVidOv[dpy]) {
+            delete ctx->mVidOv[dpy];
+            ctx->mVidOv[dpy] = NULL;
+        }
+}
+
 int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                                                         int fd) {
     int ret = 0;
@@ -632,8 +664,7 @@ static inline int configRotator(Rotator *rot, Whf& whf,
  * Sets up BORDERFILL as default base pipe and detaches RGB0.
  * Framebuffer is always updated using PLAY ioctl.
  */
-bool setupBasePipe(hwc_context_t *ctx) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
+bool setupBasePipe(hwc_context_t *ctx, int dpy) {
     int fb_stride = ctx->dpyAttr[dpy].stride;
     int fb_width = ctx->dpyAttr[dpy].xres;
     int fb_height = ctx->dpyAttr[dpy].yres;
@@ -668,7 +699,6 @@ bool setupBasePipe(hwc_context_t *ctx) {
     ctx->mBasePipeSetup = true;
     return true;
 }
-
 
 static inline int configMdp(Overlay *ov, const PipeArgs& parg,
         const eTransform& orient, const hwc_rect_t& crop,
