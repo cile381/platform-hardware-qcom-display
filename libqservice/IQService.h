@@ -55,6 +55,7 @@ public:
         SCREEN_REFRESH,
         EXTERNAL_ORIENTATION,
         BUFFER_MIRRORMODE,
+        SET_MODE,
     };
     enum {
         END = 0,
@@ -86,6 +87,7 @@ public:
     virtual android::status_t stopConfigChange(
         CONFIG_CHANGE_TYPE configChangeType) = 0;
     virtual android::status_t setPQCState(int value) = 0;
+    virtual android::status_t setMode(int32_t mode) = 0;
 };
 
 // ----------------------------------------------------------------------------

@@ -135,11 +135,10 @@ static void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers) {
 
 
 static int hwc_prepare_primary(hwc_composer_device_1 *dev,
-        hwc_display_contents_1_t *list) {
+        hwc_display_contents_1_t *list, int dpy) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    const int dpy = HWC_DISPLAY_PRIMARY;
     if(UNLIKELY(!ctx->mBasePipeSetup))
-        setupBasePipe(ctx);
+        setupBasePipe(ctx, dpy);
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
@@ -163,9 +162,8 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
 }
 
 static int hwc_prepare_external(hwc_composer_device_1 *dev,
-        hwc_display_contents_1_t *list) {
+        hwc_display_contents_1_t *list, int dpy) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    const int dpy = HWC_DISPLAY_EXTERNAL;
 
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive &&
@@ -249,6 +247,19 @@ static int hwc_prepare_virtual(hwc_composer_device_1 *dev,
     return 0;
 }
 
+static int hwc_prepare_dummy(hwc_composer_device_1 *dev,
+        hwc_display_contents_1_t *list, int dpy) {
+    if (LIKELY(list && list->numHwLayers > 1)) {
+        /* Mark as Layers as overlay */
+        for(uint32_t j = 0; j < list->numHwLayers; j++) {
+            if(list->hwLayers[j].compositionType != HWC_FRAMEBUFFER_TARGET)
+                list->hwLayers[j].compositionType = HWC_OVERLAY;
+        }
+
+    }
+
+    return 0;
+}
 
 static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
                        hwc_display_contents_1_t** displays)
@@ -270,22 +281,31 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     ctx->mOverlay->configBegin();
     ctx->mRotMgr->configBegin();
     ctx->mNeedsRotator = false;
-
-    for (int32_t i = numDisplays; i >= 0; i--) {
-        hwc_display_contents_1_t *list = displays[i];
-        int dpy = getDpyforExternalDisplay(ctx, i);
-        switch(dpy) {
-            case HWC_DISPLAY_PRIMARY:
-                ret = hwc_prepare_primary(dev, list);
-                break;
-            case HWC_DISPLAY_EXTERNAL:
-                ret = hwc_prepare_external(dev, list);
-                break;
-            case HWC_DISPLAY_VIRTUAL:
-                ret = hwc_prepare_virtual(dev, list);
-                break;
-            default:
-                ret = -EINVAL;
+    if (LIKELY(!ctx->mResChanged)) {
+        for (int32_t i = numDisplays; i >= 0; i--) {
+            hwc_display_contents_1_t *list = displays[i];
+            int dpy = getDpyforExternalDisplay(ctx, i);
+            switch(dpy) {
+                case HWC_DISPLAY_PRIMARY:
+                    if(ctx->mExtDisplay->hasResolutionChanged()) {
+                        ret = hwc_prepare_dummy(dev, list, i);
+                    } else {
+                        ret = hwc_prepare_primary(dev, list, i);
+                    }
+                    break;
+                case HWC_DISPLAY_EXTERNAL:
+                    if(ctx->mExtDisplay->hasResolutionChanged()) {
+                        ret = hwc_prepare_primary(dev, list, i);
+                    } else {
+                        ret = hwc_prepare_external(dev, list, i);
+                    }
+                    break;
+                case HWC_DISPLAY_VIRTUAL:
+                    ret = hwc_prepare_virtual(dev, list);
+                    break;
+                default:
+                    ret = -EINVAL;
+            }
         }
     }
 
@@ -428,7 +448,20 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
                 ALOGE("%s: display commit fail for external!", __FUNCTION__);
                 ret = -1;
             }
+        } else {
+            // During DRC, vysnc state can reach to invalid, as panel goes off
+            // and turn on again. During this period if userspace sends the
+            // vsync ioctl, kernel returns invaild, hence vsync is enabled
+            // in DRC case during unblank.
+            int enable = 1;
+            if(Overlay::isHDMIPrimary() && ctx->mResChanged) {
+                if(enable == ctx->vstate.enable)
+                    ctx->vstate.enable = !enable;
+                hwc_eventControl(dev, HWC_DISPLAY_PRIMARY, HWC_EVENT_VSYNC, enable);
+                ctx->mResChanged = false;
+            }
         }
+
         ctx->dpyAttr[dpy].isActive = !blank;
         break;
     default:
@@ -464,10 +497,10 @@ static int hwc_query(struct hwc_composer_device_1* dev,
 }
 
 
-static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+static int hwc_set_primary(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list, int dpy) {
     ATRACE_CALL();
     int ret = 0;
-    const int dpy = HWC_DISPLAY_PRIMARY;
     if (LIKELY(list) && ctx->dpyAttr[dpy].isActive) {
         uint32_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
@@ -509,13 +542,10 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 }
 
 static int hwc_set_external(hwc_context_t *ctx,
-                            hwc_display_contents_1_t* list)
+                            hwc_display_contents_1_t* list, int dpy)
 {
     ATRACE_CALL();
     int ret = 0;
-
-    const int dpy = HWC_DISPLAY_EXTERNAL;
-
 
     if (LIKELY(list) && ctx->dpyAttr[dpy].isActive &&
         ctx->dpyAttr[dpy].connected &&
@@ -629,6 +659,13 @@ static int hwc_set_virtual(hwc_context_t *ctx,
     return ret;
 }
 
+static int hwc_set_dummy(hwc_context_t *ctx,
+                         hwc_display_contents_1_t* list, int dpy)
+{
+    //Do nothing, just close the fences
+    closeAcquireFds(list);
+    return 0;
+}
 
 static int hwc_set(hwc_composer_device_1 *dev,
                    size_t numDisplays,
@@ -636,21 +673,61 @@ static int hwc_set(hwc_composer_device_1 *dev,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    for (uint32_t i = 0; i <= numDisplays; i++) {
-        hwc_display_contents_1_t* list = displays[i];
-        int dpy = getDpyforExternalDisplay(ctx, i);
-        switch(dpy) {
-            case HWC_DISPLAY_PRIMARY:
-                ret = hwc_set_primary(ctx, list);
-                break;
-            case HWC_DISPLAY_EXTERNAL:
-                ret = hwc_set_external(ctx, list);
-                break;
-            case HWC_DISPLAY_VIRTUAL:
-                ret = hwc_set_virtual(ctx, list);
-                break;
-            default:
-                ret = -EINVAL;
+    if (LIKELY(!ctx->mResChanged)) {
+        for (uint32_t i = 0; i <= numDisplays; i++) {
+            hwc_display_contents_1_t* list = displays[i];
+            int dpy = getDpyforExternalDisplay(ctx, i);
+            switch(dpy) {
+                case HWC_DISPLAY_PRIMARY:
+                    if(ctx->mExtDisplay->hasResolutionChanged()) {
+                        ret = hwc_set_dummy(ctx, list, i);
+                    } else {
+                        ret = hwc_set_primary(ctx, list, i);
+                    }
+                    break;
+                case HWC_DISPLAY_EXTERNAL:
+                    if(ctx->mExtDisplay->hasResolutionChanged()) {
+                        ret = hwc_set_primary(ctx, list, i);
+                    } else {
+                        ret = hwc_set_external(ctx, list, i);
+                    }
+                    break;
+                case HWC_DISPLAY_VIRTUAL:
+                    ret = hwc_set_virtual(ctx, list);
+                    break;
+                default:
+                    ret = -EINVAL;
+            }
+        }
+    } else {
+        //Do nothing for res changed round for one frame so that all fences are
+        //closed
+        int avmute = 1;
+        ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd,
+                    MSMFB_EXTERNAL_MUTE, &avmute);
+        ALOGI("%s: avmute ioctl called!\n", __FUNCTION__);
+        ctx->mBasePipeSetup = false;
+        for (uint32_t i = 0; i < numDisplays; i++) {
+            if (!Overlay::displayCommit(ctx->dpyAttr[i].fd)) {
+                ALOGE("%s: display commit fail!", __FUNCTION__);
+                ret = -1;
+            }
+            closeAcquireFds(displays[i]);
+        }
+
+        if (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected) {
+            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
+            ctx->mExtDisplay->teardown();
+            ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL, 0);
+            ctx->mDrawLock.unlock();
+            return ret;
+        }
+
+        int result = ctx->mExtDisplay->setHdmiPrimaryMode();
+        if (result == EXT_MODE_CHANGED) {
+            setupExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+        } else {
+            cleanExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
         }
     }
     // This is only indicative of how many times SurfaceFlinger posts

@@ -72,6 +72,7 @@ public:
         status_t result = reply.readInt32();
         return result;
     }
+
     virtual status_t getStdFrameratePixclock(ConfigChangeParams *params) {
         Parcel data, reply;
         data.writeInterfaceToken(IQService::getInterfaceDescriptor());
@@ -206,6 +207,15 @@ public:
         data.writeInterfaceToken(IQService::getInterfaceDescriptor());
         data.writeInt32(enable);
         remote()->transact(BUFFER_MIRRORMODE, data, &reply);
+    }
+
+    virtual status_t setMode(int32_t mode) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(mode);
+        remote()->transact(SET_MODE, data, &reply);
+        status_t result = reply.readInt32();
+        return result;
     }
 };
 
@@ -390,6 +400,17 @@ status_t BnQService::onTransact(
             uint32_t orientation = data.readInt32();
             setExtOrientation(orientation);
             return NO_ERROR;
+        } break;
+        case SET_MODE: {
+            if(callerUid != AID_SYSTEM && callerUid != AID_ROOT) {
+                ALOGE("display.qservice SET_MODE access denied: \
+                      pid=%d uid=%d process=%s",callerPid,
+                      callerUid, callingProcName);
+                return PERMISSION_DENIED;
+            }
+            CHECK_INTERFACE(IQService, data, reply);
+            int32_t mode = data.readInt32();
+            return setMode(mode);
         } break;
         case BUFFER_MIRRORMODE: {
             CHECK_INTERFACE(IQService, data, reply);

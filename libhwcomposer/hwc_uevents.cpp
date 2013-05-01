@@ -46,37 +46,6 @@ enum {
     EXTERNAL_RESUME
 };
 
-static void setup(hwc_context_t* ctx, int dpy)
-{
-    ctx->mFBUpdate[dpy] =
-        IFBUpdate::getObject(ctx->dpyAttr[dpy].xres, dpy);
-    ctx->mMDPComp[dpy] =
-        MDPComp::getObject(ctx->dpyAttr[dpy].xres, dpy);
-    int compositionType =
-                qdutils::QCCompositionType::getInstance().getCompositionType();
-    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
-                           qdutils::COMPOSITION_TYPE_MDP |
-                           qdutils::COMPOSITION_TYPE_C2D)) {
-        ctx->mCopyBit[dpy] = new CopyBit();
-    }
-}
-
-static void clear(hwc_context_t* ctx, int dpy)
-{
-    if(ctx->mFBUpdate[dpy]) {
-        delete ctx->mFBUpdate[dpy];
-        ctx->mFBUpdate[dpy] = NULL;
-    }
-    if(ctx->mCopyBit[dpy]){
-        delete ctx->mCopyBit[dpy];
-        ctx->mCopyBit[dpy] = NULL;
-    }
-    if(ctx->mMDPComp[dpy]) {
-        delete ctx->mMDPComp[dpy];
-        ctx->mMDPComp[dpy] = NULL;
-    }
-}
-
 /* Parse uevent data for devices which we are interested */
 static int getConnectedDisplay(const char* strUdata)
 {
@@ -126,7 +95,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
             {
                 Locker::Autolock _l(ctx->mDrawLock);
-                clear(ctx, dpy);
+                cleanExternalObjs(ctx, dpy);
                 ctx->dpyAttr[dpy].connected = false;
                 ctx->dpyAttr[dpy].isActive = false;
 
@@ -194,7 +163,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                              "when WFD is active");
                     {
                         Locker::Autolock _l(ctx->mDrawLock);
-                        clear(ctx, HWC_DISPLAY_VIRTUAL);
+                        cleanExternalObjs(ctx, HWC_DISPLAY_VIRTUAL);
                         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
                         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
 
@@ -244,7 +213,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             Locker::Autolock _l(ctx->mDrawLock);
-            setup(ctx, dpy);
+            setupExternalObjs(ctx, dpy);
             ctx->dpyAttr[dpy].isPause = false;
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;

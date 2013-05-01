@@ -85,6 +85,7 @@ private:
     android::status_t screenRefresh();
     void setExtOrientation(uint32_t orientation);
     void setBufferMirrorMode(uint32_t enable);
+    android::status_t setMode(int32_t mode);
 
     hwc_context_t *mHwcContext;
     const android::sp<android::IMediaDeathNotifier> mMPDeathNotifier;

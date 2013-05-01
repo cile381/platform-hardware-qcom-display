@@ -210,7 +210,9 @@ bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
-bool setupBasePipe(hwc_context_t *ctx);
+bool setupBasePipe(hwc_context_t *ctx, int dpy);
+void setupExternalObjs(hwc_context_t* ctx, int dpy);
+void cleanExternalObjs(hwc_context_t* ctx, int dpy);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 int getBlending(int blending);
 
@@ -423,6 +425,8 @@ struct hwc_context_t {
     qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
     //Total YUV layer handle in the context
     private_handle_t *mYuvHnd[MAX_NUM_APP_LAYERS];
+    //Blanking round for res change
+    bool mResChanged;
 };
 
 namespace qhwc {
