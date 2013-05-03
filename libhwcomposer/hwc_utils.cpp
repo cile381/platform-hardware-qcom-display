@@ -559,8 +559,11 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     }
 
     if(ret < 0) {
-        ALOGE("ioctl MSMFB_BUFFER_SYNC failed, err=%s",
-                strerror(errno));
+        ALOGE("%s: ioctl MSMFB_BUFFER_SYNC failed, err=%s",
+                  __FUNCTION__, strerror(errno));
+        ALOGE("%s: acq_fen_fd_cnt=%d flags=%d fd=%d dpy=%d numHwLayers=%d",
+              __FUNCTION__, data.acq_fen_fd_cnt, data.flags, fbFd,
+              dpy, list->numHwLayers);
     }
 
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
@@ -628,6 +631,12 @@ void setMdpFlags(hwc_layer_1_t *layer,
         if(transform & HWC_TRANSFORM_ROT_90) {
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_SOURCE_ROTATED_90);
+            // enable bandwidth compression only if src width < 2048
+            if(qdutils::MDPVersion::getInstance().supportsBWC() &&
+                hnd->width < qdutils::MAX_DISPLAY_DIM) {
+                ovutils::setMdpFlags(mdpFlags,
+                                 ovutils::OV_MDSS_MDP_BWC_EN);
+            }
         }
     }
 
@@ -841,7 +850,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     //Not needed if the layer is confined to one half of the screen.
     //If rotator has been used then it has also done the flips, so ignore them.
     if((orient & OVERLAY_TRANSFORM_FLIP_V) && lDest != OV_INVALID
-            && rDest != OV_INVALID && rot == NULL) {
+            && rDest != OV_INVALID && (*rot) == NULL) {
         hwc_rect_t new_cropR;
         new_cropR.left = tmp_cropL.left;
         new_cropR.right = new_cropR.left + (tmp_cropR.right - tmp_cropR.left);
@@ -877,8 +886,8 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(rDest != OV_INVALID) {
         PipeArgs pargR(mdpFlagsR, whf, z, isFg,
                 static_cast<eRotFlags>(rotFlags));
-        tmp_dstR.right = tmp_dstR.right - tmp_dstR.left;
-        tmp_dstR.left = 0;
+        tmp_dstR.right = tmp_dstR.right - hw_w/2;
+        tmp_dstR.left = tmp_dstR.left - hw_w/2;
         if(configMdp(ctx->mOverlay, pargR, orient,
                 tmp_cropR, tmp_dstR, metadata, rDest) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
