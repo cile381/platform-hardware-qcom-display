@@ -46,7 +46,8 @@ namespace qhwc {
 #define MAX_DISPLAY_DEVICES             (3)
 
 
-const char* msmFbDevicePath[] = {  "/dev/graphics/fb1",
+const char* msmFbDevicePath[] = {  "/dev/graphics/fb0",
+                                   "/dev/graphics/fb1",
                                    "/dev/graphics/fb2"};
 
 /*
@@ -60,7 +61,7 @@ void ExternalDisplay::updateExtDispDevFbIndex()
     char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
     char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
 
-    for(int j = 1; j < MAX_DISPLAY_DEVICES; j++) {
+    for(int j = 0; j < MAX_DISPLAY_DEVICES; j++) {
         sprintf (msmFbTypePath,"/sys/class/graphics/fb%d/msm_fb_type", j);
         displayDeviceFP = fopen(msmFbTypePath, "r");
         if(displayDeviceFP){
@@ -69,6 +70,7 @@ void ExternalDisplay::updateExtDispDevFbIndex()
             if(strncmp(fbType, "dtv panel", strlen("dtv panel")) == 0){
                 ALOGD_IF(DEBUG,"hdmi framebuffer index is %d",j);
                 mHdmiFbNum = j;
+                (mHdmiFbNum == 0) ? mHdmiPrimary = true : mHdmiPrimary = false;
             } else if(strncmp(fbType, "writeback panel",
                                     strlen("writeback panel")) == 0){
                 ALOGD_IF(DEBUG,"wfd framebuffer index is %d",j);
@@ -161,7 +163,7 @@ int ExternalDisplay::ignoreRequest(const char *str) {
 ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     mCurrentMode(-1), mConnected(0), mConnectedFbNum(0), mModeCount(0),
     mUnderscanSupported(false), mHwcContext(ctx), mHdmiFbNum(-1),
-    mWfdFbNum(-1), mExtDpyNum(HWC_DISPLAY_EXTERNAL)
+    mWfdFbNum(-1), mExtDpyNum(HWC_DISPLAY_EXTERNAL), mHdmiPrimary(false)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     //Determine the fb index for external display devices.
@@ -434,10 +436,14 @@ bool ExternalDisplay::readResolution()
 bool ExternalDisplay::openFrameBuffer(int fbNum)
 {
     if (mFd == -1) {
-        mFd = open(msmFbDevicePath[fbNum-1], O_RDWR);
+        if((fbNum == mHdmiFbNum) and mHdmiPrimary)
+            /*Donot open framebuffer corresponding to fb0*/
+            mFd = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].fd;
+        else
+            mFd = open(msmFbDevicePath[fbNum], O_RDWR);
         if (mFd < 0)
             ALOGE("%s: %s is not available", __FUNCTION__,
-                                            msmFbDevicePath[fbNum-1]);
+                                            msmFbDevicePath[fbNum]);
         if(mHwcContext) {
             mHwcContext->dpyAttr[mExtDpyNum].fd = mFd;
         }
@@ -449,8 +455,13 @@ bool ExternalDisplay::closeFrameBuffer()
 {
     int ret = 0;
     if(mFd >= 0) {
-        ret = close(mFd);
-        mFd = -1;
+        if((mConnectedFbNum == mHdmiFbNum) and mHdmiPrimary)
+            /*Donot close framebuffer corresponding to fb0*/
+            mFd = -1;
+        else {
+            ret = close(mFd);
+            mFd = -1;
+        }
     }
     if(mHwcContext) {
         mHwcContext->dpyAttr[mExtDpyNum].fd = mFd;
