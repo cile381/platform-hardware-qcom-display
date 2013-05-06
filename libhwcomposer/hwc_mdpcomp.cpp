@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+#include <math.h>
 #include "hwc_mdpcomp.h"
 #include <sys/ioctl.h>
 #include "external.h"
@@ -222,7 +223,7 @@ void MDPComp::FrameInfo::reset(const int& numLayers) {
     layerCount = numLayers;
     fbCount = numLayers;
     mdpCount = 0;
-    needsRedraw = false;
+    needsRedraw = true;
     fbZ = 0;
 }
 
@@ -263,8 +264,8 @@ void MDPComp::LayerCache::updateCounts(const FrameInfo& curFrame) {
     fbZ = curFrame.fbZ;
 }
 
-bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
-
+bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
+    const int dpy = HWC_DISPLAY_PRIMARY;
     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
     if(!hnd) {
@@ -275,31 +276,48 @@ bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     int hw_w = ctx->dpyAttr[mDpy].xres;
     int hw_h = ctx->dpyAttr[mDpy].yres;
 
-    hwc_rect_t sourceCrop = layer->sourceCrop;
-    hwc_rect_t displayFrame = layer->displayFrame;
-
-    hwc_rect_t crop =  sourceCrop;
-    int crop_w = crop.right - crop.left;
-    int crop_h = crop.bottom - crop.top;
-
-    hwc_rect_t dst = displayFrame;
-    int dst_w = dst.right - dst.left;
-    int dst_h = dst.bottom - dst.top;
+    hwc_rect_t crop = layer->sourceCrop;
+    hwc_rect_t dst = layer->displayFrame;
 
     if(dst.left < 0 || dst.top < 0 || dst.right > hw_w || dst.bottom > hw_h) {
-        hwc_rect_t scissor = {0, 0, hw_w, hw_h };
-        qhwc::calculate_crop_rects(crop, dst, scissor, layer->transform);
-        crop_w = crop.right - crop.left;
-        crop_h = crop.bottom - crop.top;
+       hwc_rect_t scissor = {0, 0, hw_w, hw_h };
+       qhwc::calculate_crop_rects(crop, dst, scissor, layer->transform);
     }
+
+    int crop_w = crop.right - crop.left;
+    int crop_h = crop.bottom - crop.top;
+    int dst_w = dst.right - dst.left;
+    int dst_h = dst.bottom - dst.top;
+    float w_dscale = ceilf((float)crop_w / (float)dst_w);
+    float h_dscale = ceilf((float)crop_h / (float)dst_h);
 
     /* Workaround for MDP HW limitation in DSI command mode panels where
      * FPS will not go beyond 30 if buffers on RGB pipes are of width or height
      * less than 5 pixels
-     * */
-
+     * There also is a HW limilation in MDP, minimum block size is 2x2
+     * Fallback to GPU if height is less than 2.
+     */
     if((crop_w < 5)||(crop_h < 5))
         return false;
+
+    const uint32_t downscale =
+            qdutils::MDPVersion::getInstance().getMaxMDPDownscale();
+    if(ctx->mMDP.version >= qdutils::MDSS_V5) {
+        /* Workaround for downscales larger than 4x.
+         * Will be removed once decimator block is enabled for MDSS
+         */
+        if(!qdutils::MDPVersion::getInstance().supportsDecimation()) {
+            if(crop_w > MAX_DISPLAY_DIM || w_dscale > downscale ||
+                    h_dscale > downscale)
+                return false;
+        } else {
+            if(w_dscale > 64 || h_dscale > 64)
+                return false;
+        }
+    } else { //A-family
+        if(w_dscale > downscale || h_dscale > downscale)
+            return false;
+    }
 
     return true;
 }
@@ -345,10 +363,6 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
         ALOGD_IF( isDebug(),"%s: External Display connection is pending",
                   __FUNCTION__);
         ret = false;
-    } else if(ctx->listStats[mDpy].needsAlphaScale
-       && ctx->mMDP.version < qdutils::MDSS_V5) {
-        ALOGD_IF(isDebug(), "%s: frame needs alpha downscaling",__FUNCTION__);
-        ret = false;
     } else if(ctx->isPaddingRound) {
         ctx->isPaddingRound = false;
         ALOGD_IF(isDebug(), "%s: padding round",__FUNCTION__);
@@ -382,6 +396,12 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
         return false;
     }
 
+    if(ctx->listStats[mDpy].needsAlphaScale
+       && ctx->mMDP.version < qdutils::MDSS_V5) {
+        ALOGD_IF(isDebug(), "%s: frame needs alpha downscaling",__FUNCTION__);
+        return false;
+    }
+
     //MDP composition is not efficient if layer needs rotator.
     for(int i = 0; i < numAppLayers; ++i) {
         // As MDP h/w supports flip operation, use MDP comp only for
@@ -389,13 +409,14 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        if(layer->transform & HWC_TRANSFORM_ROT_90 && !isYuvBuffer(hnd)) {
+        if((layer->transform & HWC_TRANSFORM_ROT_90) && !isYuvBuffer(hnd)) {
             ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
             return false;
         }
 
-        if(!isYuvBuffer(hnd) && !isWidthValid(ctx,layer)) {
-            ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",__FUNCTION__);
+        if(!isValidDimension(ctx,layer)) {
+            ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",
+                __FUNCTION__);
             return false;
         }
     }
@@ -467,12 +488,15 @@ bool MDPComp::isOnlyVideoDoable(hwc_context_t *ctx,
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     mCurrentFrame.reset(numAppLayers);
     updateYUV(ctx, list);
-    int mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount;
+    int mdpCount = mCurrentFrame.mdpCount;
     int fbNeeded = int(mCurrentFrame.fbCount != 0);
 
     if(!isYuvPresent(ctx, mDpy)) {
         return false;
     }
+
+    if(!mdpCount)
+        return false;
 
     if(mdpCount > (sMaxPipesPerMixer - fbNeeded)) {
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
@@ -503,24 +527,12 @@ bool MDPComp::isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer) {
         return false;
     }
 
-    if(!qdutils::MDPVersion::getInstance().supportsDecimation()) {
-        const uint32_t downscale =
-                qdutils::MDPVersion::getInstance().getMaxMDPDownscale();
-        hwc_rect_t crop = layer->sourceCrop;
-        hwc_rect_t dst = layer->displayFrame;
-        int cWidth = crop.right - crop.left;
-        int cHeight = crop.bottom - crop.top;
-        int dWidth = dst.right - dst.left;
-        int dHeight = dst.bottom - dst.top;
-
-        if(layer->transform & HAL_TRANSFORM_ROT_90) {
-            swap(cWidth, cHeight);
-        }
-
-        if(cWidth > MAX_DISPLAY_DIM || (cWidth/dWidth) > downscale ||
-                    (cHeight/dHeight) > downscale)
-            return false;
+    if(!isValidDimension(ctx, layer)) {
+        ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",
+            __FUNCTION__);
+        return false;
     }
+
     return true;
 }
 
@@ -713,12 +725,23 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     //Check whether layers marked for MDP Composition is actually doable.
     if(isFullFrameDoable(ctx, list)){
-        if(mCurrentFrame.mdpCount) {
-            mCurrentFrame.map();
-            //Acquire and Program MDP pipes
-            if(!programMDP(ctx, list)) {
-                mCurrentFrame.reset(numLayers);
-                mCachedFrame.cacheAll(list);
+        mCurrentFrame.map();
+        //Acquire and Program MDP pipes
+        if(!programMDP(ctx, list)) {
+            mCurrentFrame.reset(numLayers);
+            mCachedFrame.cacheAll(list);
+        } else { //Success
+            //Any change in composition types needs an FB refresh
+            mCurrentFrame.needsRedraw = false;
+            if(mCurrentFrame.fbCount &&
+                    ((mCurrentFrame.mdpCount != mCachedFrame.mdpCount) ||
+                     (mCurrentFrame.fbCount != mCachedFrame.cacheCount) ||
+                     (mCurrentFrame.fbZ != mCachedFrame.fbZ) ||
+                     (!mCurrentFrame.mdpCount) ||
+                     (list->flags & HWC_GEOMETRY_CHANGED) ||
+                     isSkipPresent(ctx, mDpy) ||
+                     (mDpy > HWC_DISPLAY_PRIMARY))) {
+                mCurrentFrame.needsRedraw = true;
             }
         }
     } else if(isOnlyVideoDoable(ctx, list)) {
@@ -738,18 +761,6 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     } else {
         mCurrentFrame.reset(numLayers);
         mCachedFrame.cacheAll(list);
-    }
-
-    /* Any change in composition types needs an FB refresh*/
-    if(mCurrentFrame.fbCount &&
-            ((mCurrentFrame.mdpCount != mCachedFrame.mdpCount) ||
-            (mCurrentFrame.fbCount != mCachedFrame.cacheCount) ||
-            (mCurrentFrame.fbZ != mCachedFrame.fbZ) ||
-            (!mCurrentFrame.mdpCount) ||
-            (list->flags & HWC_GEOMETRY_CHANGED) ||
-            isSkipPresent(ctx, mDpy) ||
-            (mDpy > HWC_DISPLAY_PRIMARY))) {
-        mCurrentFrame.needsRedraw = true;
     }
 
     //UpdateLayerFlags
