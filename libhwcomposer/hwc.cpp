@@ -273,7 +273,19 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
     switch(dpy) {
         case HWC_DISPLAY_PRIMARY:
             if(blank) {
-                ret = ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK,FB_BLANK_POWERDOWN);
+                if(ctx->mExtDisplay->isHDMIPrimary()) {
+                    /* In case target is HDMIPrimary, donot call
+                     * fb_blank ioctl and call commit on primary
+                     * so that any pipe unsets gets committed
+                     */
+                    if(display_commit(ctx, dpy) < 0) {
+                        ret = -1;
+                        ALOGE("%s:post failed for primary display !!",
+                                                            __FUNCTION__);
+                    }
+                } else {
+                    ret = ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK,FB_BLANK_POWERDOWN);
+                }
 
                 if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected == true) {
                     // Surfaceflinger does not send Blank/unblank event to hwc
