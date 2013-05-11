@@ -41,6 +41,7 @@ public:
         UNSECURING, // Hardware unsecuring start/end notification
         CONNECT,
         SCREEN_REFRESH,
+        SET_MODE,
     };
     enum {
         END = 0,
@@ -50,6 +51,7 @@ public:
     virtual void unsecuring(uint32_t startEnd) = 0;
     virtual void connect(const android::sp<qClient::IQClient>& client) = 0;
     virtual android::status_t screenRefresh() = 0;
+    virtual android::status_t setMode(int32_t mode) = 0;
 };
 
 // ----------------------------------------------------------------------------

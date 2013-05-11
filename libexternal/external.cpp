@@ -83,17 +83,16 @@ void ExternalDisplay::updateExtDispDevFbIndex()
                                                        mHdmiFbNum, mWfdFbNum);
 }
 
-int ExternalDisplay::configureHDMIDisplay() {
+int ExternalDisplay::configureHDMIDisplay(int mode) {
     openFrameBuffer(mHdmiFbNum);
     if(mFd == -1)
         return -1;
     readCEUnderscanInfo();
     readResolution();
-    // TODO: Move this to activate
-    /* Used for changing the resolution
-     * getUserMode will get the preferred
-     * mode set thru adb shell */
-    int mode = getUserMode();
+    // Keeping this around for legacy reasons
+    int usermode = getUserMode();
+    if(usermode != -1)
+        mode = usermode;
     if (mode == -1) {
         //Get the best mode and set
         mode = getBestMode();
@@ -129,7 +128,8 @@ int ExternalDisplay::configureWFDDisplay() {
 int ExternalDisplay::teardownHDMIDisplay() {
     if(mConnectedFbNum == mHdmiFbNum) {
         // hdmi offline event..!
-        closeFrameBuffer();
+        if(!mHdmiPrimary)
+            closeFrameBuffer();
         resetInfo();
         setExternalDisplay(false);
         // unset system property
@@ -163,7 +163,8 @@ int ExternalDisplay::ignoreRequest(const char *str) {
 ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     mCurrentMode(-1), mConnected(0), mConnectedFbNum(0), mModeCount(0),
     mUnderscanSupported(false), mHwcContext(ctx), mHdmiFbNum(-1),
-    mWfdFbNum(-1), mExtDpyNum(HWC_DISPLAY_EXTERNAL), mHdmiPrimary(false)
+    mWfdFbNum(-1), mExtDpyNum(HWC_DISPLAY_EXTERNAL), mHdmiPrimary(false),
+    mHdmiPrimaryResChanged(false), mCustomMode(-1)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     //Determine the fb index for external display devices.
@@ -437,10 +438,11 @@ bool ExternalDisplay::openFrameBuffer(int fbNum)
 {
     if (mFd == -1) {
         if((fbNum == mHdmiFbNum) and mHdmiPrimary)
-            /*Donot open framebuffer corresponding to fb0*/
+            /*Do not open framebuffer corresponding to fb0*/
             mFd = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].fd;
         else
             mFd = open(msmFbDevicePath[fbNum], O_RDWR);
+
         if (mFd < 0)
             ALOGE("%s: %s is not available", __FUNCTION__,
                                             msmFbDevicePath[fbNum]);
@@ -540,6 +542,39 @@ int ExternalDisplay::getUserMode() {
     return -1;
 }
 
+/* This function fakes a secondary display and hotplugs it so that
+ * SurfaceFlinger can compose according to the HDMI resolution
+ * */
+int ExternalDisplay::setHdmiPrimaryMode() {
+    int mode = mCustomMode;
+    int dpy = HWC_DISPLAY_EXTERNAL;
+    ALOGI("%s: Attempting to set mode: %d", __FUNCTION__, mode);
+    configureHDMIDisplay(mode);
+
+    if(isValidMode(mode) && !isInterlacedMode(mode)) {
+        //Fake primary HDMI as secondary
+        mHwcContext->dpyAttr[dpy].isPause = false;
+        mHwcContext->dpyAttr[dpy].connected = true;
+        Locker::Autolock _l(mHwcContext->mExtSetLock);
+        mHwcContext->proc->hotplug(mHwcContext->proc, dpy, 1);
+        mHdmiPrimaryResChanged = true;
+        return EXT_MODE_CHANGED;
+    } else if(mHdmiPrimaryResChanged) {
+        //Go back to default HDMI as primary
+        teardownHDMIDisplay();
+        Locker::Autolock _l(mHwcContext->mExtSetLock);
+        mHwcContext->dpyAttr[dpy].connected = false;
+        mHwcContext->proc->hotplug(mHwcContext->proc, dpy, 0);
+        mHdmiPrimaryResChanged = false;
+        return EXT_MODE_RESET;
+    } else {
+        teardownHDMIDisplay();
+        ALOGE("%s: Invalid mode set for HDMI", __FUNCTION__);
+        return -EINVAL;
+    }
+
+}
+
 // Get the best mode for the current HD TV
 int ExternalDisplay::getBestMode() {
     int bestOrder = 0;
@@ -557,7 +592,7 @@ int ExternalDisplay::getBestMode() {
     return bestMode;
 }
 
-inline bool ExternalDisplay::isValidMode(int ID)
+bool ExternalDisplay::isValidMode(int ID)
 {
     bool valid = false;
     for (int i = 0; i < mModeCount; i++) {
@@ -579,8 +614,10 @@ bool ExternalDisplay::isInterlacedMode(int ID) {
         case m1440x576i50_16_9:
         case m1920x1080i60_16_9:
             interlaced = true;
+            break;
         default:
             interlaced = false;
+            break;
     }
     return interlaced;
 }

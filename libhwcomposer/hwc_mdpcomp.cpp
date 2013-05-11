@@ -35,6 +35,7 @@ IdleInvalidator *MDPComp::idleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
 bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
+int  MDPComp::sDpy = HWC_DISPLAY_PRIMARY;
 
 MDPComp* MDPComp::getObject(const int& width) {
     if(width <= MAX_DISPLAY_DIM) {
@@ -109,10 +110,9 @@ void MDPComp::timeout_handler(void *udata) {
 
 void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    LayerProp *layerProp = ctx->layerProp[dpy];
+    LayerProp *layerProp = ctx->layerProp[sDpy];
 
-    for(int index = 0; index < ctx->listStats[dpy].numAppLayers; index++ ) {
+    for(int index = 0; index < ctx->listStats[sDpy].numAppLayers; index++ ) {
         hwc_layer_1_t* layer = &(list->hwLayers[index]);
         layerProp[index].mFlags |= HWC_MDPCOMP;
         layer->compositionType = HWC_OVERLAY;
@@ -122,11 +122,10 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
 
 void MDPComp::unsetMDPCompLayerFlags(hwc_context_t* ctx,
         hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    LayerProp *layerProp = ctx->layerProp[dpy];
+    LayerProp *layerProp = ctx->layerProp[sDpy];
 
     for (int index = 0 ;
-            index < ctx->listStats[dpy].numAppLayers; index++) {
+            index < ctx->listStats[sDpy].numAppLayers; index++) {
         if(layerProp[index].mFlags & HWC_MDPCOMP) {
             layerProp[index].mFlags &= ~HWC_MDPCOMP;
         }
@@ -158,7 +157,6 @@ void MDPComp::reset(hwc_context_t *ctx,
 
 bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
 
-    const int dpy = HWC_DISPLAY_PRIMARY;
     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
     if(!hnd) {
@@ -166,8 +164,8 @@ bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
         return false;
     }
 
-    int hw_w = ctx->dpyAttr[dpy].xres;
-    int hw_h = ctx->dpyAttr[dpy].yres;
+    int hw_w = ctx->dpyAttr[sDpy].xres;
+    int hw_h = ctx->dpyAttr[sDpy].yres;
 
     hwc_rect_t sourceCrop = layer->sourceCrop;
     hwc_rect_t displayFrame = layer->displayFrame;
@@ -197,20 +195,19 @@ bool MDPComp::isWidthValid(hwc_context_t *ctx, hwc_layer_1_t *layer) {
 }
 
 ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
     ovutils::eDest mdp_pipe = ovutils::OV_INVALID;
 
     switch(type) {
         case MDPCOMP_OV_DMA:
-            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_DMA, dpy);
+            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_DMA, sDpy);
             if(mdp_pipe != ovutils::OV_INVALID) {
                 ctx->mDMAInUse = true;
                 return mdp_pipe;
             }
         case MDPCOMP_OV_ANY:
         case MDPCOMP_OV_RGB:
-            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, dpy);
+            mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, sDpy);
             if(mdp_pipe != ovutils::OV_INVALID) {
                 return mdp_pipe;
             }
@@ -220,7 +217,7 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
                 break;
             }
         case  MDPCOMP_OV_VG:
-            return ov.nextPipe(ovutils::OV_MDP_PIPE_VG, dpy);
+            return ov.nextPipe(ovutils::OV_MDP_PIPE_VG, sDpy);
         default:
             ALOGE("%s: Invalid pipe type",__FUNCTION__);
             return ovutils::OV_INVALID;
@@ -231,12 +228,11 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
 bool MDPComp::isDoable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     //Number of layers
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    int numAppLayers = ctx->listStats[dpy].numAppLayers;
+    int numAppLayers = ctx->listStats[sDpy].numAppLayers;
     int numDMAPipes = qdutils::MDPVersion::getInstance().getDMAPipes();
 
     overlay::Overlay& ov = *ctx->mOverlay;
-    int availablePipes = ov.availablePipes(dpy);
+    int availablePipes = ov.availablePipes(sDpy);
 
     if(ctx->mNeedsRotator)
         availablePipes -= numDMAPipes;
@@ -262,12 +258,12 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
         return false;
 
     //Check for skip layers
-    if(isSkipPresent(ctx, dpy)) {
+    if(isSkipPresent(ctx, sDpy)) {
         ALOGD_IF(isDebug(), "%s: Skip layers are present",__FUNCTION__);
         return false;
     }
 
-    if(ctx->listStats[dpy].needsAlphaScale
+    if(ctx->listStats[sDpy].needsAlphaScale
                      && ctx->mMDP.version < qdutils::MDSS_V5) {
         ALOGD_IF(isDebug(), "%s: frame needs alpha downscaling",__FUNCTION__);
         return false;
@@ -306,7 +302,6 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
 }
 
 bool MDPComp::setup(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     if(!ctx) {
         ALOGE("%s: invalid context", __FUNCTION__);
         return -1;
@@ -330,7 +325,8 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
 }
 
 bool MDPComp::prepare(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
+        hwc_display_contents_1_t* list, int dpy) {
+    sDpy = dpy;
     if(!isEnabled()) {
         ALOGE_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
         return false;
@@ -373,7 +369,6 @@ bool MDPComp::prepare(hwc_context_t *ctx,
  */
 int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
         PipeLayerPair& pipeLayerPair) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     MdpPipeInfoLowRes& mdp_info =
             *(static_cast<MdpPipeInfoLowRes*>(pipeLayerPair.pipeInfo));
     eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
@@ -381,32 +376,30 @@ int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     eIsFg isFg = IS_FG_OFF;
     eDest dest = mdp_info.index;
 
-    return configureLowRes(ctx, layer, dpy, mdpFlags, zOrder, isFg, dest,
+    return configureLowRes(ctx, layer, sDpy, mdpFlags, zOrder, isFg, dest,
             &pipeLayerPair.rot);
 }
 
 int MDPCompLowRes::pipesNeeded(hwc_context_t *ctx,
                         hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    return ctx->listStats[dpy].numAppLayers;
+    return ctx->listStats[sDpy].numAppLayers;
 }
 
 bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list,
         FrameInfo& currentFrame) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
-    int layer_count = ctx->listStats[dpy].numAppLayers;
+    int layer_count = ctx->listStats[sDpy].numAppLayers;
 
     currentFrame.count = layer_count;
     currentFrame.pipeLayer = (PipeLayerPair*)
             malloc(sizeof(PipeLayerPair) * currentFrame.count);
 
-    if(isYuvPresent(ctx, dpy)) {
-        int nYuvCount = ctx->listStats[dpy].yuvCount;
+    if(isYuvPresent(ctx, sDpy)) {
+        int nYuvCount = ctx->listStats[sDpy].yuvCount;
 
         for(int index = 0; index < nYuvCount; index ++) {
-            int nYuvIndex = ctx->listStats[dpy].yuvIndices[index];
+            int nYuvIndex = ctx->listStats[sDpy].yuvIndices[index];
             hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
             PipeLayerPair& info = currentFrame.pipeLayer[nYuvIndex];
             info.pipeInfo = new MdpPipeInfoLowRes;
@@ -467,11 +460,10 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(idleInvalidator)
         idleInvalidator->markForSleep();
 
-    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
-    LayerProp *layerProp = ctx->layerProp[dpy];
+    LayerProp *layerProp = ctx->layerProp[sDpy];
 
-    int numHwLayers = ctx->listStats[dpy].numAppLayers;
+    int numHwLayers = ctx->listStats[sDpy].numAppLayers;
     for(int i = 0; i < numHwLayers; i++ )
     {
         hwc_layer_1_t *layer = &list->hwLayers[i];
@@ -521,11 +513,10 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
 int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
                         hwc_display_contents_1_t* list) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    int numAppLayers = ctx->listStats[dpy].numAppLayers;
+    int numAppLayers = ctx->listStats[sDpy].numAppLayers;
     int pipesNeeded = 0;
 
-    int hw_w = ctx->dpyAttr[dpy].xres;
+    int hw_w = ctx->dpyAttr[sDpy].xres;
 
     for(int i = 0; i < numAppLayers; ++i) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
@@ -543,8 +534,7 @@ int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
 
 bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
                         MdpPipeInfoHighRes& pipe_info, ePipeType type) {
-     const int dpy = HWC_DISPLAY_PRIMARY;
-     int hw_w = ctx->dpyAttr[dpy].xres;
+     int hw_w = ctx->dpyAttr[sDpy].xres;
 
      hwc_rect_t dst = layer->displayFrame;
      if(dst.left > hw_w/2) {
@@ -570,19 +560,18 @@ bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
 bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list,
         FrameInfo& currentFrame) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
-    int layer_count = ctx->listStats[dpy].numAppLayers;
+    int layer_count = ctx->listStats[sDpy].numAppLayers;
 
     currentFrame.count = layer_count;
     currentFrame.pipeLayer = (PipeLayerPair*)
             malloc(sizeof(PipeLayerPair) * currentFrame.count);
 
-    if(isYuvPresent(ctx, dpy)) {
-        int nYuvCount = ctx->listStats[dpy].yuvCount;
+    if(isYuvPresent(ctx, sDpy)) {
+        int nYuvCount = ctx->listStats[sDpy].yuvCount;
 
         for(int index = 0; index < nYuvCount; index ++) {
-            int nYuvIndex = ctx->listStats[dpy].yuvIndices[index];
+            int nYuvIndex = ctx->listStats[sDpy].yuvIndices[index];
             hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
             PipeLayerPair& info = currentFrame.pipeLayer[nYuvIndex];
             info.pipeInfo = new MdpPipeInfoHighRes;
@@ -628,7 +617,6 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
  */
 int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
         PipeLayerPair& pipeLayerPair) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
     MdpPipeInfoHighRes& mdp_info =
             *(static_cast<MdpPipeInfoHighRes*>(pipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
@@ -636,7 +624,7 @@ int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
     eDest lDest = mdp_info.lIndex;
     eDest rDest = mdp_info.rIndex;
-    return configureHighRes(ctx, layer, dpy, mdpFlagsL, zOrder, isFg, lDest,
+    return configureHighRes(ctx, layer, sDpy, mdpFlagsL, zOrder, isFg, lDest,
             rDest, &pipeLayerPair.rot);
 }
 
@@ -656,11 +644,10 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(idleInvalidator)
         idleInvalidator->markForSleep();
 
-    const int dpy = HWC_DISPLAY_PRIMARY;
     overlay::Overlay& ov = *ctx->mOverlay;
-    LayerProp *layerProp = ctx->layerProp[dpy];
+    LayerProp *layerProp = ctx->layerProp[sDpy];
 
-    int numHwLayers = ctx->listStats[dpy].numAppLayers;
+    int numHwLayers = ctx->listStats[sDpy].numAppLayers;
     for(int i = 0; i < numHwLayers; i++ )
     {
         hwc_layer_1_t *layer = &list->hwLayers[i];

@@ -36,6 +36,11 @@ enum external_scansupport_type {
     EXT_SCAN_BOTH_SUPPORTED     = 3
 };
 
+enum mode_state {
+    EXT_MODE_CHANGED = 1,
+    EXT_MODE_RESET   = 2,
+};
+
 class ExternalDisplay
 {
 public:
@@ -53,26 +58,30 @@ public:
     void setHPD(uint32_t startEnd);
     void setEDIDMode(int resMode);
     void setActionSafeDimension(int w, int h);
+    void setCustomMode(int mode) {mCustomMode = mode;}
     int ignoreRequest(const char *str);
-    int  configureHDMIDisplay();
+    int  configureHDMIDisplay(int mode = -1);
     int  configureWFDDisplay();
     int  teardownHDMIDisplay();
     int  teardownWFDDisplay();
+    int  setHdmiPrimaryMode();
+    bool isHdmiPrimary() { return mHdmiPrimary; }
+    bool hasResolutionChanged() { return mHdmiPrimaryResChanged;}
+    bool readResolution();
+    bool isValidMode(int ID);
+    bool isInterlacedMode(int mode);
 
 private:
     void readCEUnderscanInfo();
-    bool readResolution();
     int  parseResolution(char* edidStr, int* edidModes);
     void setResolution(int ID);
     bool openFrameBuffer(int fbNum);
     bool closeFrameBuffer();
     bool writeHPDOption(int userOption) const;
-    bool isValidMode(int ID);
     void handleUEvent(char* str, int len);
     int  getModeOrder(int mode);
     int  getUserMode();
     int  getBestMode();
-    bool isInterlacedMode(int mode);
     void resetInfo();
     void setDpyHdmiAttr();
     void setDpyWfdAttr();
@@ -96,6 +105,8 @@ private:
     int mWfdFbNum;
     int mExtDpyNum;
     bool mHdmiPrimary;
+    bool mHdmiPrimaryResChanged;
+    int mCustomMode;
 };
 
 }; //qhwc
