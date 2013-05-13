@@ -29,6 +29,7 @@
 
 #include <cutils/log.h>
 #include <fcntl.h>
+#include <cutils/properties.h>
 #include "gralloc_priv.h"
 #include "alloc_controller.h"
 #include "memalloc.h"
@@ -54,8 +55,7 @@ static bool canFallback(int usage, bool triedSystem)
         return false;
     if(triedSystem)
         return false;
-    if(usage & (GRALLOC_HEAP_MASK | GRALLOC_USAGE_PROTECTED |
-                GRALLOC_USAGE_PRIVATE_CP_BUFFER))
+    if(usage & (GRALLOC_HEAP_MASK | GRALLOC_USAGE_PROTECTED))
         return false;
     if(usage & (GRALLOC_HEAP_MASK | GRALLOC_USAGE_PRIVATE_EXTERNAL_ONLY))
         return false;
@@ -116,8 +116,16 @@ int IonController::allocate(alloc_data& data, int usage)
     if(usage & GRALLOC_USAGE_PRIVATE_CAMERA_HEAP)
         ionFlags |= ION_HEAP(ION_CAMERA_HEAP_ID);
 
-    if(usage & GRALLOC_USAGE_PRIVATE_CP_BUFFER)
-        ionFlags |= ION_SECURE;
+    // For targets which do not have HW level content protection
+    // and for targets/OEMs which do not need HW level protection
+    // of heap, do not set ion secure flag.
+    if(usage & GRALLOC_USAGE_PROTECTED) {
+        char property[PROPERTY_VALUE_MAX];
+        if ((property_get("persist.gralloc.cp.level3", property, NULL) <= 0) ||
+                                (atoi(property) != 1)) {
+            ionFlags |= ION_SECURE;
+        }
+    }
 
     // if no flags are set, default to
     // SF + IOMMU heaps, so that bypass can work
