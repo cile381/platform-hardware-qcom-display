@@ -114,7 +114,14 @@ static int openFramebufferDevice(hwc_context_t *ctx)
 
 void initContext(hwc_context_t *ctx)
 {
-    openFramebufferDevice(ctx);
+    int ret;
+
+    ret = openFramebufferDevice(ctx);
+    if (ret != 0) {
+        ALOGE("Error opening framebuffer (%d)", ret);
+        abort();
+    }
+
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
