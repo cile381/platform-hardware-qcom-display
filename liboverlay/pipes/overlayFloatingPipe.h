@@ -153,13 +153,13 @@ inline bool FloatingPipe::close() {
         OvFD fd;
         if(!utils::openDev(fd, utils::PRIMARY, Res::fbPath, O_RDWR)) {
             ALOGE("%s: Failed to init fbnum=%d", __func__, 0);
-            ret = false;
+            return false;
         }
 
         if(!mdp_wrapper::unsetOverlay(fd.getFD(), mBorderFillId)) {
             ALOGE("%s: Failed during unsetOverlay",__func__);
             fd.close();
-            ret = false;
+            return false;
         }
         fd.close();
         mBorderFillId = -1;
