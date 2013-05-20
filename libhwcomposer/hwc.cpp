@@ -173,6 +173,10 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                 ctx->mExtDispConfiguring = false;
                 setListStats(ctx, list, dpy);
                 int fbZOrder = ctx->mMDPComp[dpy]->prepare(ctx, list);
+                if(ctx->deviceOrientation &&
+                    ctx->listStats[dpy].isDisplayAnimating) {
+                    fbZOrder = 0;
+                }
                 if(fbZOrder >= 0)
                     ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZOrder);
 
@@ -182,6 +186,14 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                 if((fbZOrder >= 0) && ctx->mCopyBit[dpy])
                     ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
                 */
+                if(ctx->listStats[dpy].isDisplayAnimating) {
+                    // Mark all app layers as HWC_OVERLAY for external during
+                    // animation, so that SF doesnt draw it on FB
+                    for(int i = 0 ;i < ctx->listStats[dpy].numAppLayers; i++) {
+                        hwc_layer_1_t *layer = &list->hwLayers[i];
+                        layer->compositionType = HWC_OVERLAY;
+                    }
+                }
             }
         } else {
             // External Display is in Pause state.
@@ -245,6 +257,14 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
             }
             ALOGD_IF (VSYNC_DEBUG, "VSYNC state changed to %s",
                       (enable)?"ENABLED":"DISABLED");
+            break;
+        case  HWC_EVENT_ORIENTATION:
+            if(dpy == HWC_DISPLAY_PRIMARY) {
+                // store the primary display orientation
+                // will be used in hwc_video::configure to disable
+                // rotation animation on external display
+                ctx->deviceOrientation = enable;
+            }
             break;
         default:
             ret = -EINVAL;
@@ -388,7 +408,7 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         if (display_commit(ctx, dpy) < 0) {
             ALOGE("%s: display commit fail!", __FUNCTION__);
-            return -1;
+            ret = -1;
         }
     }
 
@@ -425,12 +445,18 @@ static int hwc_set_external(hwc_context_t *ctx,
             ret = -1;
         }
 
+        int extOnlyLayerIndex =
+            ctx->listStats[dpy].extOnlyLayerIndex;
+
         private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
-        if(copybitDone) {
+        if(extOnlyLayerIndex!= -1) {
+            hwc_layer_1_t *extLayer = &list->hwLayers[extOnlyLayerIndex];
+            hnd = (private_handle_t *)extLayer->handle;
+        } else if(copybitDone) {
             hnd = ctx->mCopyBit[dpy]->getCurrentRenderBuffer();
         }
 
-        if(hnd) {
+        if(hnd && !isYuvBuffer(hnd)) {
             if (!ctx->mFBUpdate[dpy]->draw(ctx, hnd)) {
                 ALOGE("%s: FBUpdate::draw fail!", __FUNCTION__);
                 ret = -1;

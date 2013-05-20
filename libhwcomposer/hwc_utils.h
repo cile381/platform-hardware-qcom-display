@@ -91,8 +91,12 @@ struct ListStats {
     //Video specific
     int yuvCount;
     int yuvIndices[MAX_NUM_LAYERS];
+    int extOnlyLayerIndex;
     bool needsAlphaScale;
     bool preMultipliedAlpha;
+    // Notifies hwcomposer about the start and end of animation
+    // This will be set to true during animation, otherwise false.
+    bool isDisplayAnimating;
 };
 
 struct LayerProp {
@@ -132,6 +136,10 @@ void dumpsys_log(android::String8& buf, const char* fmt, ...);
 void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
                                         uint32_t& y, uint32_t& w, uint32_t& h);
 
+
+void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
+                        uint32_t& x, uint32_t& y, uint32_t& w, uint32_t& h);
+
 //Close acquireFenceFds of all layers of incoming list
 void closeAcquireFds(hwc_display_contents_1_t* list);
 
@@ -146,18 +154,32 @@ void trimLayer(hwc_context_t *ctx, const int& dpy, const int& transform,
 //Sets appropriate mdp flags for a layer.
 void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
-        int rotDownscale = 0);
+        int rotDownscale = 0, int transform = 0);
+
+int configRotator(overlay::Rotator *rot, const ovutils::Whf& whf,
+        const hwc_rect_t& crop, const ovutils::eMdpFlags& mdpFlags,
+        const ovutils::eTransform& orient, const int& downscale);
+
+int configMdp(overlay::Overlay *ov, const ovutils::PipeArgs& parg,
+        const ovutils::eTransform& orient, const hwc_rect_t& crop,
+        const hwc_rect_t& pos, const MetaData_t *metadata,
+        const ovutils::eDest& dest);
+
+void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
+        hwc_rect_t& crop);
+
+
 
 //Routine to configure low resolution panels (<= 2048 width)
 int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
-        ovutils::eMdpFlags& mdpFlags, const ovutils::eZorder& z,
-        const ovutils::eIsFg& isFg, const ovutils::eDest& dest,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& dest,
         overlay::Rotator **rot);
 
 //Routine to configure high resolution panels (> 2048 width)
 int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
-        ovutils::eMdpFlags& mdpFlags, const ovutils::eZorder& z,
-        const ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
         const ovutils::eDest& rDest, overlay::Rotator **rot);
 
 // Inline utility functions
@@ -261,6 +283,14 @@ struct hwc_context_t {
     qhwc::MDPComp *mMDPComp[MAX_DISPLAYS];
     qhwc::HwcDebug *mHwcDebug[MAX_DISPLAYS];
 
+    // No animation on External display feature
+    // Notifies hwcomposer about the device orientation before animation.
+    int deviceOrientation;
+    // Stores the crop, dest rect and transform value of video before animation.
+    hwc_rect_t mPrevCropVideo;
+    hwc_rect_t mPrevDestVideo;
+    int mPrevTransformVideo;
+
     //Securing in progress indicator
     bool mSecuring;
     //External Display configuring progress indicator
@@ -275,6 +305,8 @@ struct hwc_context_t {
     struct vsync_state vstate;
     //Drawing round when we use GPU
     bool isPaddingRound;
+    // External Orientation
+    int mExtOrientation;
 };
 
 namespace qhwc {
