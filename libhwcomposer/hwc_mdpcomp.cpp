@@ -561,12 +561,13 @@ int MDPComp::mark_layers(hwc_layer_list_t* list, layer_mdp_info* layer_info,
 
         if((layer_prop & MDPCOMP_LAYER_DOWNSCALE) &&
                         (layer_prop & MDPCOMP_LAYER_BLEND)) {
-            if (qdutils::MDPVersion::getInstance().getMDPVersion() >=
+            /*if (qdutils::MDPVersion::getInstance().getMDPVersion() >=
                     qdutils::MDP_V4_2) {
                 pipe_pref = PIPE_REQ_RGB;
             } else {
                 return MDPCOMP_ABORT;
-            }
+            }*/
+            return MDPCOMP_ABORT;
          }
 
         int allocated_pipe = sPipeMgr.req_for_pipe( pipe_pref);
@@ -703,6 +704,15 @@ bool MDPComp::setup(hwc_context_t* ctx, hwc_layer_list_t* list) {
          state = ovutils::OV_BYPASS_4_LAYER;
     } else if (current_frame.count == 0) {
          state = ovutils::OV_FB;
+    }
+
+    if((ov_state != state) && (ov_state != ovutils::OV_FB) &&
+        (sYUVLayerIndex == -1) && (sPIPLayerIndex == -1)){
+        /* Ensure that the fallback doesnt happen if video is present
+         * and state change happens*/
+        ov.setState(ovutils::OV_FB);
+        ov_state = state;
+        return false;
     }
 
     ov_state = state;
