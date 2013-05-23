@@ -315,6 +315,8 @@ bool isAlphaPresent(hwc_layer_1_t const* layer) {
         switch(format) {
         case HAL_PIXEL_FORMAT_RGBA_8888:
         case HAL_PIXEL_FORMAT_BGRA_8888:
+        case HAL_PIXEL_FORMAT_RGBA_5551:
+        case HAL_PIXEL_FORMAT_RGBA_4444:
             // In any more formats with Alpha go here..
             return true;
         default : return false;
@@ -329,7 +331,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].numAppLayers = list->numHwLayers - 1;
     ctx->listStats[dpy].fbLayerIndex = list->numHwLayers - 1;
     ctx->listStats[dpy].skipCount = 0;
-    ctx->listStats[dpy].needsAlphaScale = false;
+    ctx->listStats[dpy].numAlphaScaledLayers = 0;
     ctx->listStats[dpy].preMultipliedAlpha = false;
     ctx->listStats[dpy].yuvCount = 0;
     char property[PROPERTY_VALUE_MAX];
@@ -357,8 +359,9 @@ void setListStats(hwc_context_t *ctx,
         if(layer->blending == HWC_BLENDING_PREMULT)
             ctx->listStats[dpy].preMultipliedAlpha = true;
 
-        if(!ctx->listStats[dpy].needsAlphaScale)
-            ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
+        if(isAlphaScaled(layer)) {
+            ctx->listStats[dpy].numAlphaScaledLayers += 1;
+        }
     }
     if(ctx->listStats[dpy].yuvCount > 0) {
         if (property_get("hw.cabl.yuv", property, NULL) > 0) {

@@ -241,7 +241,7 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
     int numDMAPipes = qdutils::MDPVersion::getInstance().getDMAPipes();
 
     overlay::Overlay& ov = *ctx->mOverlay;
-    int availablePipes = ov.availablePipes(dpy);
+    int availablePipes = ov.availablePipes(dpy, ovutils::OV_MDP_PIPE_ANY);
 
     if(ctx->mNeedsRotator)
         availablePipes -= numDMAPipes;
@@ -272,9 +272,10 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
         return false;
     }
 
-    if(ctx->listStats[dpy].needsAlphaScale
+    if(((ctx->listStats[dpy].numAlphaScaledLayers >
+        ov.availablePipes(dpy, ovutils::OV_MDP_PIPE_RGB)))
                      && ctx->mMDP.version < qdutils::MDSS_V5) {
-        ALOGD_IF(isDebug(), "%s: frame needs alpha downscaling",__FUNCTION__);
+        ALOGD_IF(isDebug(), "%s: More RGB+A layers to downscale", __FUNCTION__);
         return false;
     }
 
@@ -407,6 +408,7 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
     currentFrame.count = layer_count;
     currentFrame.pipeLayer = (PipeLayerPair*)
             malloc(sizeof(PipeLayerPair) * currentFrame.count);
+    memset(currentFrame.pipeLayer, 0, sizeof(currentFrame.pipeLayer));
 
     if(isYuvPresent(ctx, dpy)) {
         int nYuvCount = ctx->listStats[dpy].yuvCount;
@@ -445,6 +447,11 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
         if(!qhwc::needsScaling(layer) && !ctx->mNeedsRotator
                              && ctx->mMDP.version >= qdutils::MDSS_V5) {
             type = MDPCOMP_OV_DMA;
+        } else if (qhwc::isAlphaScaled(layer)) {
+            // In MDP4 VG pipes don't support RGB+A downscaling
+            if ((ctx->mMDP.version < qdutils::MDSS_V5) && !ctx->mExtDisplay) {
+                type = MDPCOMP_OV_RGB;
+            }
         }
 
         pipe_info.index = getMdpPipe(ctx, type);
@@ -583,6 +590,7 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
     currentFrame.count = layer_count;
     currentFrame.pipeLayer = (PipeLayerPair*)
             malloc(sizeof(PipeLayerPair) * currentFrame.count);
+    memset(currentFrame.pipeLayer, 0, sizeof(currentFrame.pipeLayer));
 
     if(isYuvPresent(ctx, dpy)) {
         int nYuvCount = ctx->listStats[dpy].yuvCount;

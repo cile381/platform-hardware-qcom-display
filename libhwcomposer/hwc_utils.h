@@ -91,7 +91,7 @@ struct ListStats {
     //Video specific
     int yuvCount;
     int yuvIndices[MAX_NUM_LAYERS];
-    bool needsAlphaScale;
+    int numAlphaScaledLayers;
     bool preMultipliedAlpha;
 };
 
@@ -172,6 +172,7 @@ bool isSecuring(hwc_context_t* ctx);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
+bool isAlphaScaled(hwc_layer_1_t const* layer);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 bool setupBasePipe(hwc_context_t *ctx);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
