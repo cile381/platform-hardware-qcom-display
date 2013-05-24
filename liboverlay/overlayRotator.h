@@ -260,6 +260,9 @@ private:
     /* save mRotImgInfo to be last known good config*/
     void save();
 
+    /* set buffersize if alignments are needed*/
+    void setBufSize();
+
     /* rot info*/
     msm_rotator_img_info mRotImgInfo;
     /* Last saved rot info*/
