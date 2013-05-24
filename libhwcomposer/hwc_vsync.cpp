@@ -75,12 +75,7 @@ static void *vsync_loop(void *param)
     // Open the secondary display vsync_event sysfs node
     if(ctx->mMDP.hasOverlay) {
         fb1_timestamp = open(vsync_timestamp_fb1, O_RDONLY);
-        if (fb1_timestamp < 0) {
-            ALOGE("FATAL:%s:not able to open file:%s, %s",  __FUNCTION__,
-                                        vsync_timestamp_fb1, strerror(errno));
-            return NULL;
-        }
-    }
+   }
 
 
     /* Currently read vsync timestamp from drivers
@@ -95,6 +90,11 @@ static void *vsync_loop(void *param)
         // vsync for primary OR HDMI ?
         if(ctx->mExtDisplay->isHDMIConfigured() &&
                (hdmiconnected == EXTERN_DISPLAY_FB1)){
+        if (fb1_timestamp < 0) {
+            ALOGE("FATAL:%s:not able to open file:%s",  __FUNCTION__,
+                                        vsync_timestamp_fb1);
+            return NULL;
+        }
            fb1_vsync = true;
            fb_read = fb1_timestamp;
            ALOGD_IF(VSYNC_DEBUG,"%s: Use fb1 vsync", __FUNCTION__);
