@@ -82,6 +82,7 @@ void MdpRot::doTransform() {
 
 bool MdpRot::commit() {
     doTransform();
+    setBufSize();
     if(this->rotConfChanged()) {
         if(!overlay::mdp_wrapper::startRotator(mFd.getFD(), mRotImgInfo)) {
             ALOGE("MdpRot commit failed");
@@ -212,4 +213,14 @@ void MdpRot::dump() const {
     ALOGE("== Dump MdpRot end ==");
 }
 
+void MdpRot::setBufSize() {
+    if(MDP_Y_CR_CB_GH2V2 == mRotImgInfo.src.format)
+    {
+        int alignedw = utils::align(mRotImgInfo.dst.width, 16);
+        int alignedh = mRotImgInfo.dst.height;
+        mBufSize = (alignedw*alignedh) +
+                (utils::align(alignedw/2, 16) * (alignedh/2))*2;
+        mBufSize = utils::align(mBufSize, 4096);
+    }
+}
 } // namespace overlay
