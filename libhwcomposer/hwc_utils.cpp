@@ -897,4 +897,16 @@ void LayerCache::markCachedLayersAsOverlay(hwc_display_contents_1_t* list) {
     }
 }
 
+int display_commit(hwc_context_t *ctx, int dpy) {
+    struct mdp_display_commit commit_info;
+    memset(&commit_info, 0, sizeof(struct mdp_display_commit));
+    commit_info.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+    if(ioctl(ctx->dpyAttr[dpy].fd, MSMFB_DISPLAY_COMMIT, &commit_info) == -1) {
+        ALOGE("%s:MSMFB_DISPLAY_COMMIT failed for %d", __FUNCTION__,dpy);
+        return -errno;
+    } else {
+        ALOGE("Display commit has been called for dpy = %d and is successful, %s",dpy, __FUNCTION__);
+    }
+    return 0;
+}
 };//namespace qhwc

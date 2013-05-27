@@ -144,6 +144,16 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     switch(connected) {
         case EXTERNAL_OFFLINE:
             {   // disconnect event
+                {
+                    Locker::Autolock _l(ctx->mExtSetLock);
+                    ctx->dpyAttr[dpy].connected = false;
+                }
+                //Invalidate
+                ctx->proc->invalidate(ctx->proc);
+                sleep(1);
+                if (display_commit(ctx, dpy) < 0){
+                    ALOGE("%s:commit failed for external display in offline event!! ", __FUNCTION__);
+                }
                 const char *s1 = udata + strlen(HWC_UEVENT_SWITCH_STR);
                 if(!strncmp(s1,"hdmi",strlen(s1))) {
                     ctx->mExtDisplay->teardownHDMIDisplay();
@@ -154,7 +164,6 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 clear(ctx, dpy);
                 ALOGD("%s sending hotplug: connected = %d and dpy:%d",
                       __FUNCTION__, connected, dpy);
-                ctx->dpyAttr[dpy].connected = false;
                 //hwc comp could be on
                 ctx->proc->hotplug(ctx->proc, dpy, connected);
                 break;
