@@ -104,6 +104,11 @@ struct LayerProp {
     LayerProp():mFlags(0) {};
 };
 
+struct VsyncState {
+    bool enable;
+    bool fakevsync;
+};
+
 // LayerProp::flag values
 enum {
     HWC_MDPCOMP = 0x00000001,
@@ -154,7 +159,7 @@ void trimLayer(hwc_context_t *ctx, const int& dpy, const int& transform,
 //Sets appropriate mdp flags for a layer.
 void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
-        int rotDownscale = 0, int transform = 0);
+        int rotDownscale, int transform);
 
 int configRotator(overlay::Rotator *rot, const ovutils::Whf& whf,
         hwc_rect_t& crop, const ovutils::eMdpFlags& mdpFlags,
@@ -168,8 +173,6 @@ int configMdp(overlay::Overlay *ov, const ovutils::PipeArgs& parg,
 void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
         hwc_rect_t& crop);
 
-
-
 //Routine to configure low resolution panels (<= 2048 width)
 int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
@@ -181,6 +184,14 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
         const ovutils::eDest& rDest, overlay::Rotator **rot);
+
+//On certain targets DMA pipes are used for rotation and they won't be available
+//for line operations. On a per-target basis we can restrict certain use cases
+//from using rotator, since we know before-hand that such scenarios can lead to
+//extreme unavailability of pipes. This can also be done via hybrid calculations
+//also involving many more variables like number of write-back interfaces etc,
+//but the variety of scenarios is too high to warrant that.
+bool canUseRotator(hwc_context_t *ctx);
 
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
@@ -250,13 +261,6 @@ inline void swap(T& a, T& b) {
 
 }; //qhwc namespace
 
-struct vsync_state {
-    pthread_mutex_t lock;
-    pthread_cond_t  cond;
-    bool enable;
-    bool fakevsync;
-};
-
 // -----------------------------------------------------------------------------
 // HWC context
 // This structure contains overall state
@@ -277,6 +281,7 @@ struct hwc_context_t {
     // External display related information
     qhwc::ExternalDisplay *mExtDisplay;
     qhwc::MDPInfo mMDP;
+    qhwc::VsyncState vstate;
     qhwc::DisplayAttributes dpyAttr[MAX_DISPLAYS];
     qhwc::ListStats listStats[MAX_DISPLAYS];
     qhwc::LayerProp *layerProp[MAX_DISPLAYS];
@@ -301,8 +306,6 @@ struct hwc_context_t {
     mutable Locker mBlankLock;
     //Lock to protect prepare & set when detaching external disp
     mutable Locker mExtLock;
-    //Vsync
-    struct vsync_state vstate;
     //Drawing round when we use GPU
     bool isPaddingRound;
     // External Orientation

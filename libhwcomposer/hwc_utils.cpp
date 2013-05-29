@@ -151,8 +151,6 @@ void initContext(hwc_context_t *ctx)
     }
     MDPComp::init(ctx);
 
-    pthread_mutex_init(&(ctx->vstate.lock), NULL);
-    pthread_cond_init(&(ctx->vstate.cond), NULL);
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
     ctx->mExtDispConfiguring = false;
@@ -223,8 +221,6 @@ void closeContext(hwc_context_t *ctx)
     }
 
 
-    pthread_mutex_destroy(&(ctx->vstate.lock));
-    pthread_cond_destroy(&(ctx->vstate.cond));
 }
 
 
@@ -382,7 +378,8 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].yuvIndices[yuvCount] = i;
             yuvCount++;
 
-            if(layer->transform & HWC_TRANSFORM_ROT_90) {
+            if((layer->transform & HWC_TRANSFORM_ROT_90) &&
+                    canUseRotator(ctx)) {
                 if(ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
                     ctx->isPaddingRound = true;
                 }
@@ -436,7 +433,7 @@ void setListStats(hwc_context_t *ctx,
 }
 
 
-static inline void calc_cut(float& leftCutRatio, float& topCutRatio,
+static void calc_cut(float& leftCutRatio, float& topCutRatio,
         float& rightCutRatio, float& bottomCutRatio, int orient) {
     if(orient & HAL_TRANSFORM_FLIP_H) {
         swap(leftCutRatio, rightCutRatio);
@@ -753,7 +750,7 @@ void setMdpFlags(hwc_layer_1_t *layer,
     }
 }
 
-inline int configRotator(Rotator *rot, const Whf& whf,
+int configRotator(Rotator *rot, const Whf& whf,
         hwc_rect_t& crop, const eMdpFlags& mdpFlags,
         const eTransform& orient, const int& downscale) {
 
@@ -763,10 +760,12 @@ inline int configRotator(Rotator *rot, const Whf& whf,
         qdutils::MDSS_V5) {
         uint32_t crop_w = (crop.right - crop.left);
         uint32_t crop_h = (crop.bottom - crop.top);
-        ovutils::normalizeCrop((uint32_t&)crop.left, crop_w);
-        ovutils::normalizeCrop((uint32_t&)crop.top, crop_h);
-        crop.right = crop.left + crop_w;
-        crop.bottom = crop.top + crop_h;
+        if (ovutils::isYuv(whf.format)) {
+            ovutils::normalizeCrop((uint32_t&)crop.left, crop_w);
+            ovutils::normalizeCrop((uint32_t&)crop.top, crop_h);
+            crop.right = crop.left + crop_w;
+            crop.bottom = crop.top + crop_h;
+        }
         Dim rotCrop(crop.left, crop.top, crop_w, crop_h);
         rot->setCrop(rotCrop);
     }
@@ -778,7 +777,7 @@ inline int configRotator(Rotator *rot, const Whf& whf,
     return 0;
 }
 
-inline int configMdp(Overlay *ov, const PipeArgs& parg,
+int configMdp(Overlay *ov, const PipeArgs& parg,
         const eTransform& orient, const hwc_rect_t& crop,
         const hwc_rect_t& pos, const MetaData_t *metadata,
         const eDest& dest) {
@@ -804,7 +803,7 @@ inline int configMdp(Overlay *ov, const PipeArgs& parg,
     return 0;
 }
 
-inline void updateSource(eTransform& orient, Whf& whf,
+void updateSource(eTransform& orient, Whf& whf,
         hwc_rect_t& crop) {
     Dim srcCrop(crop.left, crop.top,
             crop.right - crop.left,
@@ -908,6 +907,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
+            ctx->mOverlay->clear(dpy);
             return -1;
         }
         whf.format = (*rot)->getDstFormat();
@@ -972,7 +972,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     }
 
 
-    setMdpFlags(layer, mdpFlagsL);
+    setMdpFlags(layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
     if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
@@ -981,6 +981,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
+            ctx->mOverlay->clear(dpy);
             return -1;
         }
         whf.format = (*rot)->getDstFormat();
@@ -1057,6 +1058,16 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     }
 
     return 0;
+}
+
+bool canUseRotator(hwc_context_t *ctx) {
+    if(qdutils::MDPVersion::getInstance().is8x26() &&
+            ctx->mExtDisplay->isExternalConnected()) {
+        return false;
+    }
+    if(ctx->mMDP.version == qdutils::MDP_V3_0_4)
+        return false;
+    return true;
 }
 
 };//namespace qhwc

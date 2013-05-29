@@ -144,13 +144,10 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
             if(fbZOrder >= 0)
                 ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZOrder);
 
-            /* Temporarily commenting out C2D until we support partial
-               copybit composition for mixed mode MDP
-
-            // Use Copybit, when MDP comp fails
-            if((fbZOrder >= 0) && ctx->mCopyBit[dpy])
-                ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
-            */
+            if (ctx->mMDP.version < qdutils::MDP_V4_0) {
+                if((fbZOrder >= 0) && ctx->mCopyBit[dpy])
+                    ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+            }
         }
     }
     return 0;
@@ -235,7 +232,6 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
 
     ctx->mOverlay->configDone();
     ctx->mRotMgr->configDone();
-    MDPComp::resetIdleFallBack();
 
     return ret;
 }
@@ -245,16 +241,14 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-    pthread_mutex_lock(&ctx->vstate.lock);
+    Locker::Autolock _l(ctx->mBlankLock);
     switch(event) {
         case HWC_EVENT_VSYNC:
             if (ctx->vstate.enable == enable)
                 break;
             ret = hwc_vsync_control(ctx, dpy, enable);
-            if(ret == 0) {
+            if(ret == 0)
                 ctx->vstate.enable = !!enable;
-                pthread_cond_signal(&ctx->vstate.cond);
-            }
             ALOGD_IF (VSYNC_DEBUG, "VSYNC state changed to %s",
                       (enable)?"ENABLED":"DISABLED");
             break;
@@ -269,7 +263,6 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
         default:
             ret = -EINVAL;
     }
-    pthread_mutex_unlock(&ctx->vstate.lock);
     return ret;
 }
 
@@ -501,6 +494,7 @@ static int hwc_set(hwc_composer_device_1 *dev,
     // This is only indicative of how many times SurfaceFlinger posts
     // frames to the display.
     CALC_FPS();
+    MDPComp::resetIdleFallBack();
     return ret;
 }
 
