@@ -117,17 +117,6 @@ static void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers) {
     ctx->layerProp[dpy] = new LayerProp[numAppLayers];
 }
 
-static int display_commit(hwc_context_t *ctx, int dpy) {
-    struct mdp_display_commit commit_info;
-    memset(&commit_info, 0, sizeof(struct mdp_display_commit));
-    commit_info.flags = MDP_DISPLAY_COMMIT_OVERLAY;
-    if(ioctl(ctx->dpyAttr[dpy].fd, MSMFB_DISPLAY_COMMIT, &commit_info) == -1) {
-       ALOGE("%s: MSMFB_DISPLAY_COMMIT for primary failed", __FUNCTION__);
-       return -errno;
-    }
-    return 0;
-}
-
 static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         hwc_display_contents_1_t *list) {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
