@@ -72,7 +72,7 @@ public:
     /* Returns the singleton instance of overlay */
     static Overlay* getInstance();
     /* Returns available ("unallocated") pipes for a display */
-    int availablePipes(int dpy);
+    int availablePipes(int dpy, utils::eMdpPipeType type);
     /* set the framebuffer index for external display */
     void setExtFbNum(int fbNum);
     /* Returns framebuffer index of the current external display */
@@ -154,15 +154,21 @@ inline void Overlay::validate(int index) {
             PipeBook::getDestStr((utils::eDest)index));
 }
 
-inline int Overlay::availablePipes(int dpy) {
-     int avail = 0;
+inline int Overlay::availablePipes(int dpy, utils::eMdpPipeType type) {
+     // Array to hold no. of available pipes
+     // holds free RGB, VG, DMA @ 0, 1, and 2 indices respectively
+     int avail[3] = {0};
      for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
        if((mPipeBook[i].mDisplay == PipeBook::DPY_UNUSED ||
            mPipeBook[i].mDisplay == dpy) && PipeBook::isNotAllocated(i)) {
-                avail++;
+                avail[(int)PipeBook::getPipeType((utils::eDest)i)]++;
         }
     }
-    return avail;
+    if(utils::OV_MDP_PIPE_ANY == type) {
+        return(avail[0]+avail[1]+avail[2]);
+    } else {
+        return(avail[(int)type]);
+    }
 }
 
 inline void Overlay::setExtFbNum(int fbNum) {
