@@ -168,7 +168,16 @@ bool VideoOverlayLowRes::draw(hwc_context_t *ctx,
         offset = rot->getDstOffset();
     }
 
-    if (!ov.queueBuffer(fd, offset, mDest)) {
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    VideoFrame_t *frc;
+    if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
+        ALOGD("VideoOverlayLowRes %s %lld %d", __FUNCTION__, metadata->videoFrame.timestamp, metadata->videoFrame.counter);
+        frc = &metadata->videoFrame;
+    } else {
+        frc = NULL;
+    }
+
+    if (!ov.queueBuffer(fd, offset, mDest, frc)) {
         ALOGE("%s: queueBuffer failed for dpy=%d", __FUNCTION__, mDpy);
         return false;
     }
@@ -284,16 +293,18 @@ bool VideoOverlayHighRes::draw(hwc_context_t *ctx,
         offset = rot->getDstOffset();
     }
 
+
     if(mDestL != ovutils::OV_INVALID) {
-        if (!ov.queueBuffer(fd, offset, mDestL)) {
+        if (!ov.queueBuffer(fd, offset, mDestL, NULL)) {
             ALOGE("%s: queueBuffer failed for dpy=%d's left mixer",
                     __FUNCTION__, mDpy);
             return false;
         }
     }
 
+
     if(mDestR != ovutils::OV_INVALID) {
-        if (!ov.queueBuffer(fd, offset, mDestR)) {
+        if (!ov.queueBuffer(fd, offset, mDestR, NULL)) {
             ALOGE("%s: queueBuffer failed for dpy=%d's right mixer"
                     , __FUNCTION__, mDpy);
             return false;

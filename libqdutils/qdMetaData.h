@@ -39,18 +39,27 @@ typedef struct {
 } HSICData_t;
 
 typedef struct {
+    bool frc_enable;
+    uint32_t fp100s;
+    uint32_t counter;
+    int64_t timestamp;
+} VideoFrame_t;
+
+typedef struct {
     int32_t operation;
     int32_t interlaced;
     HSICData_t hsicData;
     int32_t sharpness;
     int32_t video_interface;
+    VideoFrame_t videoFrame;
 } MetaData_t;
 
 typedef enum {
     PP_PARAM_HSIC       = 0x0001,
     PP_PARAM_SHARPNESS  = 0x0002,
     PP_PARAM_INTERLACED = 0x0004,
-    PP_PARAM_VID_INTFC  = 0x0008
+    PP_PARAM_VID_INTFC  = 0x0008,
+    PP_PARAM_VIDEO_FRAME  = 0x0010
 } DispParamType;
 
 int setMetaData(private_handle_t *handle, DispParamType paramType, void *param);
