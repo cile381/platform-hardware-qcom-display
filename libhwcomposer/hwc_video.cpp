@@ -173,6 +173,7 @@ bool VideoOverlayLowRes::draw(hwc_context_t *ctx,
     if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
         ALOGD("VideoOverlayLowRes %s %lld %d", __FUNCTION__, metadata->videoFrame.timestamp, metadata->videoFrame.counter);
         frc = &metadata->videoFrame;
+        frc->hwc_play_time = ns2us(systemTime());
     } else {
         frc = NULL;
     }

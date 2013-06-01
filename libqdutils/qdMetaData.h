@@ -43,6 +43,8 @@ typedef struct {
     uint32_t fp100s;
     uint32_t counter;
     int64_t timestamp;
+    int64_t hwc_play_time;
+    int64_t render_time;
 } VideoFrame_t;
 
 typedef struct {
@@ -63,6 +65,7 @@ typedef enum {
 } DispParamType;
 
 int setMetaData(private_handle_t *handle, DispParamType paramType, void *param);
+int getMetaData(private_handle_t *handle, DispParamType paramType, void *param);
 
 #endif /* _QDMETADATA_H */
 

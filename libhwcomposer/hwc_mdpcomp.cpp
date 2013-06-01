@@ -502,6 +502,7 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         VideoFrame_t *frc;
         if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
             frc = &metadata->videoFrame;
+            frc->hwc_play_time = ns2us(systemTime());
         } else {
             frc = NULL;
         }
