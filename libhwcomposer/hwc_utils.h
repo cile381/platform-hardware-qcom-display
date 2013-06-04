@@ -109,6 +109,12 @@ struct VsyncState {
     bool fakevsync;
 };
 
+struct BwcPM {
+    static void setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
+            const hwc_rect_t& dst, const int& transform,
+            ovutils::eMdpFlags& mdpFlags);
+};
+
 // LayerProp::flag values
 enum {
     HWC_MDPCOMP = 0x00000001,
@@ -130,7 +136,7 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 bool isSecuring(hwc_context_t* ctx, hwc_layer_1_t const* layer);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
-bool needsScaling(hwc_layer_1_t const* layer);
+bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 

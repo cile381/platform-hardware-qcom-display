@@ -109,6 +109,13 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
 
+    //Unblank primary on first boot
+    if(ioctl(fb_fd, FBIOBLANK,FB_BLANK_UNBLANK) < 0) {
+        ALOGE("%s: Failed to unblank display", __FUNCTION__);
+        return -errno;
+    }
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isActive = true;
+
     return 0;
 }
 
@@ -306,15 +313,16 @@ void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
 }
 
 
-bool needsScaling(hwc_layer_1_t const* layer) {
+bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+        const int& dpy) {
     int dst_w, dst_h, src_w, src_h;
 
     hwc_rect_t displayFrame  = layer->displayFrame;
     hwc_rect_t sourceCrop = layer->sourceCrop;
+    trimLayer(ctx, dpy, layer->transform, sourceCrop, displayFrame);
 
     dst_w = displayFrame.right - displayFrame.left;
     dst_h = displayFrame.bottom - displayFrame.top;
-
     src_w = sourceCrop.right - sourceCrop.left;
     src_h = sourceCrop.bottom - sourceCrop.top;
 
@@ -324,8 +332,9 @@ bool needsScaling(hwc_layer_1_t const* layer) {
     return false;
 }
 
-bool isAlphaScaled(hwc_layer_1_t const* layer) {
-    if(needsScaling(layer) && isAlphaPresent(layer)) {
+bool isAlphaScaled(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+        const int& dpy) {
+    if(needsScaling(ctx, layer, dpy) && isAlphaPresent(layer)) {
         return true;
     }
     return false;
@@ -390,14 +399,17 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].preMultipliedAlpha = true;
 
         if(!ctx->listStats[dpy].needsAlphaScale)
-            ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
+            ctx->listStats[dpy].needsAlphaScale =
+                    isAlphaScaled(ctx, layer, dpy);
 
         if(UNLIKELY(isExtOnly(hnd))){
             ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
+#ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
         }
+#endif
     }
     if(ctx->listStats[dpy].yuvCount > 0) {
         if (property_get("hw.cabl.yuv", property, NULL) > 0) {
@@ -721,12 +733,6 @@ void setMdpFlags(hwc_layer_1_t *layer,
         if(transform & HWC_TRANSFORM_ROT_90) {
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_SOURCE_ROTATED_90);
-            // enable bandwidth compression only if src width < 2048
-            if(qdutils::MDPVersion::getInstance().supportsBWC() &&
-                hnd->width < qdutils::MAX_DISPLAY_DIM) {
-                ovutils::setMdpFlags(mdpFlags,
-                                 ovutils::OV_MDSS_MDP_BWC_EN);
-            }
         }
     }
 
@@ -763,6 +769,9 @@ int configRotator(Rotator *rot, const Whf& whf,
         if (ovutils::isYuv(whf.format)) {
             ovutils::normalizeCrop((uint32_t&)crop.left, crop_w);
             ovutils::normalizeCrop((uint32_t&)crop.top, crop_h);
+            // For interlaced, crop.h should be 4-aligned
+            if ((mdpFlags & ovutils::OV_MDP_DEINTERLACE) && (crop_h % 4))
+                crop_h = ovutils::aligndown(crop_h, 4);
             crop.right = crop.left + crop_w;
             crop.bottom = crop.top + crop_h;
         }
@@ -860,6 +869,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             crop = ctx->mPrevCropVideo;
             dst = ctx->mPrevDestVideo;
             transform = ctx->mPrevTransformVideo;
+            orient = static_cast<eTransform>(transform);
             //In you tube use case when a device rotated from landscape to
             // portrait, set the isFg flag and zOrder to avoid displaying UI on
             // hdmi during animation
@@ -904,6 +914,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
         *rot = ctx->mRotMgr->getNext();
         if(*rot == NULL) return -1;
+        BwcPM::setBwc(ctx, crop, dst, transform, mdpFlags);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
@@ -961,6 +972,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             crop = ctx->mPrevCropVideo;
             dst = ctx->mPrevDestVideo;
             transform = ctx->mPrevTransformVideo;
+            orient = static_cast<eTransform>(transform);
             //In you tube use case when a device rotated from landscape to
             // portrait, set the isFg flag and zOrder to avoid displaying UI on
             // hdmi during animation
@@ -1068,6 +1080,45 @@ bool canUseRotator(hwc_context_t *ctx) {
     if(ctx->mMDP.version == qdutils::MDP_V3_0_4)
         return false;
     return true;
+}
+
+
+void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
+            const hwc_rect_t& dst, const int& transform,
+            ovutils::eMdpFlags& mdpFlags) {
+    //Target doesnt support Bwc
+    if(!qdutils::MDPVersion::getInstance().supportsBWC()) {
+        return;
+    }
+    //src width > MAX mixer supported dim
+    if((crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
+        return;
+    }
+    //External connected
+    if(ctx->mExtDisplay->isExternalConnected()) {
+        return;
+    }
+    //Decimation necessary, cannot use BWC. H/W requirement.
+    if(qdutils::MDPVersion::getInstance().supportsDecimation()) {
+        int src_w = crop.right - crop.left;
+        int src_h = crop.bottom - crop.top;
+        int dst_w = dst.right - dst.left;
+        int dst_h = dst.bottom - dst.top;
+        if(transform & HAL_TRANSFORM_ROT_90) {
+            swap(src_w, src_h);
+        }
+        float horDscale = 0.0f;
+        float verDscale = 0.0f;
+        ovutils::getDecimationFactor(src_w, src_h, dst_w, dst_h, horDscale,
+                verDscale);
+        if(horDscale || verDscale) return;
+    }
+    //Property
+    char value[PROPERTY_VALUE_MAX];
+    property_get("debug.disable.bwc", value, "0");
+     if(atoi(value)) return;
+
+    ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDSS_MDP_BWC_EN);
 }
 
 };//namespace qhwc
