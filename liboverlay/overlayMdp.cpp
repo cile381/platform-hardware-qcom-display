@@ -54,6 +54,7 @@ void MdpCtrl::reset() {
     mLkgo.id = MSMFB_NEW_REQUEST;
     mOrientation = utils::OVERLAY_TRANSFORM_0;
     mDownscale = 0;
+    mForceSet = false;
 #ifdef USES_POST_PROCESSING
     mPPChanged = false;
     memset(&mParams, 0, sizeof(struct compute_params));
@@ -143,19 +144,11 @@ void MdpCtrl::doDownscale() {
             minHorDeci = 2;
         }
 
-        float horDscale = ceilf((float)mOVInfo.src_rect.w /
-                (float)mOVInfo.dst_rect.w);
-        float verDscale = ceilf((float)mOVInfo.src_rect.h /
-                (float)mOVInfo.dst_rect.h);
+        float horDscale = 0.0f;
+        float verDscale = 0.0f;
 
-        //Next power of 2, if not already
-        horDscale = powf(2.0f, ceilf(log2f(horDscale)));
-        verDscale = powf(2.0f, ceilf(log2f(verDscale)));
-
-        //Since MDP can do 1/4 dscale and has better quality, split the task
-        //between decimator and MDP downscale
-        horDscale /= 4.0f;
-        verDscale /= 4.0f;
+        utils::getDecimationFactor(mOVInfo.src_rect.w, mOVInfo.src_rect.h,
+                mOVInfo.dst_rect.w, mOVInfo.dst_rect.h, horDscale, verDscale);
 
         if(horDscale < minHorDeci)
             horDscale = minHorDeci;
@@ -180,10 +173,16 @@ bool MdpCtrl::set() {
         if(mdpVersion < MDSS_V5) {
             utils::even_floor(mOVInfo.dst_rect.w);
             utils::even_floor(mOVInfo.dst_rect.h);
+        } else if (mOVInfo.flags & MDP_DEINTERLACE) {
+            // For interlaced, crop.h should be 4-aligned
+            if (!(mOVInfo.flags & MDP_SOURCE_ROTATED_90) &&
+                (mOVInfo.src_rect.h % 4))
+                mOVInfo.src_rect.h = utils::aligndown(mOVInfo.src_rect.h, 4);
         }
     }
 
-    if(this->ovChanged()) {
+    if(this->ovChanged() || mForceSet) {
+        mForceSet = false;
         if(!mdp_wrapper::setOverlay(mFd.getFD(), mOVInfo)) {
             ALOGE("MdpCtrl failed to setOverlay, restoring last known "
                   "good ov info");
