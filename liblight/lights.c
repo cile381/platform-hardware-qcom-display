@@ -37,6 +37,7 @@ static pthread_once_t g_init = PTHREAD_ONCE_INIT;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct light_state_t g_notification;
 static struct light_state_t g_battery;
+static struct light_state_t g_low_battery;
 static int g_attention = 0;
 
 char const*const RED_LED_FILE
@@ -51,17 +52,14 @@ char const*const BLUE_LED_FILE
 char const*const LCD_FILE
         = "/sys/class/leds/lcd-backlight/brightness";
 
-char const*const RED_FREQ_FILE
-        = "/sys/class/leds/red/device/grpfreq";
+char const*const RED_ON_MS_FILE
+        = "/sys/class/leds/red/device/on_ms";
 
-char const*const RED_PWM_FILE
-        = "/sys/class/leds/red/device/grppwm";
+char const*const RED_OFF_MS_FILE
+        = "/sys/class/leds/red/device/off_ms";
 
 char const*const RED_BLINK_FILE
         = "/sys/class/leds/red/device/blink";
-
-char const*const LED_LOCK_UPDATE_FILE
-        = "/sys/class/leds/red/device/lock";
 
 /**
  * device methods
@@ -127,7 +125,7 @@ set_speaker_light_locked(struct light_device_t* dev,
 {
     int len;
     int alpha, red, green, blue;
-    int blink, freq, pwm;
+    int blink;
     int onMS, offMS;
     unsigned int colorRGB;
 
@@ -146,49 +144,33 @@ set_speaker_light_locked(struct light_device_t* dev,
     colorRGB = state->color;
 
 #if 0
-    ALOGD("set_speaker_light_locked mode %d, colorRGB=%08X, onMS=%d, offMS=%d\n",
-            state->flashMode, colorRGB, onMS, offMS);
+    ALOGD("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
+            colorRGB, onMS, offMS);
 #endif
 
     red = (colorRGB >> 16) & 0xFF;
     green = (colorRGB >> 8) & 0xFF;
     blue = colorRGB & 0xFF;
 
-    if (onMS > 0 && offMS > 0) {
-        int totalMS = onMS + offMS;
-
-        // the LED appears to blink about once per second if freq is 20
-        // 1000ms / 20 = 50
-        freq = totalMS / 50;
-        // pwm specifies the ratio of ON versus OFF
-        // pwm = 0 -> always off
-        // pwm = 255 => always on
-        pwm = (onMS * 255) / totalMS;
-
-        // the low 4 bits are ignored, so round up if necessary
-        if (pwm > 0 && pwm < 16)
-            pwm = 16;
-
-        blink = 1;
-    } else {
-        blink = 0;
-        freq = 0;
-        pwm = 0;
-    }
-
-    write_int(LED_LOCK_UPDATE_FILE, 1); // for LED On/Off synchronization
-
     write_int(RED_LED_FILE, red);
     write_int(GREEN_LED_FILE, green);
     write_int(BLUE_LED_FILE, blue);
 
+    if (onMS > 0 && offMS > 0) {
+        /* the led need 260 ms to ramp up (and vice versa),
+           so subsract 260 ms on both onMS and offMS for closer period */
+        onMS = (onMS < 260)? 0 : onMS - 250;
+        offMS = (offMS < 260)? 0 : offMS - 250;
+        blink = 1;
+    } else {
+        blink = 0;
+    }
+
     if (blink) {
-        write_int(RED_FREQ_FILE, freq);
-        write_int(RED_PWM_FILE, pwm);
+        write_int(RED_ON_MS_FILE, onMS);
+        write_int(RED_OFF_MS_FILE, offMS);
     }
     write_int(RED_BLINK_FILE, blink);
-
-    write_int(LED_LOCK_UPDATE_FILE, 0);
 
     return 0;
 }
@@ -196,11 +178,35 @@ set_speaker_light_locked(struct light_device_t* dev,
 static void
 handle_speaker_battery_locked(struct light_device_t* dev)
 {
-    if (is_lit(&g_battery)) {
-        set_speaker_light_locked(dev, &g_battery);
-    } else {
+    if (is_lit(&g_low_battery)) {
+        set_speaker_light_locked(dev, &g_low_battery);
+    } else if (is_lit(&g_notification)) {
         set_speaker_light_locked(dev, &g_notification);
+    } else {
+        set_speaker_light_locked(dev, &g_battery);
     }
+}
+
+static int
+set_light_battery(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    pthread_mutex_lock(&g_lock);
+    g_battery = *state;
+    handle_speaker_battery_locked(dev);
+    pthread_mutex_unlock(&g_lock);
+    return 0;
+}
+
+static int
+set_light_low_battery(struct light_device_t* dev,
+        struct light_state_t const* state)
+{
+    pthread_mutex_lock(&g_lock);
+    g_low_battery = *state;
+    handle_speaker_battery_locked(dev);
+    pthread_mutex_unlock(&g_lock);
+    return 0;
 }
 
 static int
@@ -256,6 +262,10 @@ static int open_lights(const struct hw_module_t* module, char const* name,
 
     if (0 == strcmp(LIGHT_ID_BACKLIGHT, name))
         set_light = set_light_backlight;
+    else if (0 == strcmp(LIGHT_ID_BATTERY, name))
+        set_light = set_light_battery;
+    else if (0 == strcmp(LIGHT_ID_LOW_BATTERY, name))
+        set_light = set_light_low_battery;
     else if (0 == strcmp(LIGHT_ID_NOTIFICATIONS, name))
         set_light = set_light_notifications;
     else if (0 == strcmp(LIGHT_ID_ATTENTION, name))
