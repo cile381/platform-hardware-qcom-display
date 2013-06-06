@@ -195,9 +195,9 @@ void ExternalDisplay::setActionSafeDimension(int w, int h) {
     char actionsafeWidth[PROPERTY_VALUE_MAX];
     char actionsafeHeight[PROPERTY_VALUE_MAX];
     sprintf(actionsafeWidth, "%d", w);
-    property_set("hw.actionsafe.width", actionsafeWidth);
+    property_set("persist.sys.actionsafe.width", actionsafeWidth);
     sprintf(actionsafeHeight, "%d", h);
-    property_set("hw.actionsafe.height", actionsafeHeight);
+    property_set("persist.sys.actionsafe.height", actionsafeHeight);
     setExternalDisplay(true, mHdmiFbNum);
 }
 
