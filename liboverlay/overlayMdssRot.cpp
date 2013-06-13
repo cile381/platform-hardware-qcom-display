@@ -19,6 +19,8 @@
 
 #include "overlayUtils.h"
 #include "overlayRotator.h"
+#include <cutils/properties.h>
+
 
 #define DEBUG_MDSS_ROT 0
 
@@ -41,13 +43,26 @@ namespace overlay {
 MdssRot::MdssRot() {
     reset();
     init();
+    mExtSecureLink = 0;
+    // Read the property at object creation
+    char property[PROPERTY_VALUE_MAX];
+    if((property_get("hw.extSecureLink", property, NULL) > 0) &&
+            (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
+             (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
+        mExtSecureLink= 1;
+    }
 }
 
 MdssRot::~MdssRot() { close(); }
 
 bool MdssRot::enabled() const { return mEnabled; }
 
-void MdssRot::setRotations(uint32_t flags) { mRotInfo.flags |= flags; }
+void MdssRot::setRotations(uint32_t flags) {
+    mRotInfo.flags |= flags;
+    mRotData.dst_data.flags = 0;
+    if(mExtSecureLink)
+        mRotData.dst_data.flags |= utils::OV_MDP_SECURE_OVERLAY_SESSION;
+}
 
 int MdssRot::getDstMemId() const {
     return mRotData.dst_data.memory_id;
@@ -60,6 +75,10 @@ uint32_t MdssRot::getDstOffset() const {
 uint32_t MdssRot::getDstFormat() const {
     //For mdss src and dst formats are same
     return mRotInfo.src.format;
+}
+
+uint32_t MdssRot::getDstFlags() const {
+    return mRotData.dst_data.flags;
 }
 
 uint32_t MdssRot::getSessId() const { return mRotInfo.id; }
@@ -97,12 +116,18 @@ void MdssRot::setDownscale(int ds) {}
 
 void MdssRot::setFlags(const utils::eMdpFlags& flags) {
     mRotInfo.flags |= flags;
+    mRotData.dst_data.flags = 0;
+    if(mExtSecureLink)
+        mRotData.dst_data.flags |= utils::OV_MDP_SECURE_OVERLAY_SESSION;
 }
 
 void MdssRot::setTransform(const utils::eTransform& rot)
 {
     // reset rotation flags to avoid stale orientation values
     mRotInfo.flags &= ~MDSS_ROT_MASK;
+    mRotData.dst_data.flags = 0;
+    if(mExtSecureLink)
+        mRotData.dst_data.flags |= utils::OV_MDP_SECURE_OVERLAY_SESSION;
     int flags = utils::getMdpOrient(rot);
     if (flags != -1)
         setRotations(flags);
@@ -111,6 +136,10 @@ void MdssRot::setTransform(const utils::eTransform& rot)
 }
 
 void MdssRot::doTransform() {
+    mRotInfo.flags |= mOrientation;
+    mRotData.dst_data.flags = 0;
+    if(mExtSecureLink)
+        mRotData.dst_data.flags |= utils::OV_MDP_SECURE_OVERLAY_SESSION;
     if(mOrientation & utils::OVERLAY_TRANSFORM_ROT_90)
         utils::swap(mRotInfo.dst_rect.w, mRotInfo.dst_rect.h);
 }
@@ -118,6 +147,9 @@ void MdssRot::doTransform() {
 bool MdssRot::commit() {
     doTransform();
     mRotInfo.flags |= MDSS_MDP_ROT_ONLY;
+    mRotData.dst_data.flags = 0;
+    if(mExtSecureLink)
+        mRotData.dst_data.flags |= utils::OV_MDP_SECURE_OVERLAY_SESSION;
     mEnabled = true;
     if(!overlay::mdp_wrapper::setOverlay(mFd.getFD(), mRotInfo)) {
         ALOGE("MdssRot commit failed!");
@@ -165,7 +197,8 @@ bool MdssRot::open_i(uint32_t numbufs, uint32_t bufsz)
 {
     OvMem mem;
     OVASSERT(MAP_FAILED == mem.addr(), "MAP failed in open_i");
-    bool isSecure = mRotInfo.flags & utils::OV_MDP_SECURE_OVERLAY_SESSION;
+    //We need to allocate secure buffer even if it is non-secure input buffer and external link is secure
+    bool isSecure = mRotInfo.flags & utils::OV_MDP_SECURE_OVERLAY_SESSION || mExtSecureLink;
 
     if(!mem.open(numbufs, bufsz, isSecure)){
         ALOGE("%s: Failed to open", __func__);
@@ -238,6 +271,7 @@ void MdssRot::reset() {
     mMem.curr().mCurrOffset = 0;
     mMem.prev().mCurrOffset = 0;
     mOrientation = utils::OVERLAY_TRANSFORM_0;
+    mExtSecureLink = 0;
 }
 
 void MdssRot::dump() const {
@@ -260,7 +294,7 @@ uint32_t MdssRot::calcOutputBufSize() {
         opBufSize = Rotator::calcOutputBufSize(destWhf);
     }
 
-    if (mRotInfo.flags & utils::OV_MDP_SECURE_OVERLAY_SESSION)
+    if ((mRotInfo.flags & utils::OV_MDP_SECURE_OVERLAY_SESSION) || mExtSecureLink)
         opBufSize = utils::align(opBufSize, SIZE_1M);
 
     return opBufSize;

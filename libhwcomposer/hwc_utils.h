@@ -128,6 +128,7 @@ bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
+int display_commit(hwc_context_t *ctx, int dpy);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -295,8 +296,12 @@ struct hwc_context_t {
     bool mSecuring;
     //External Display configuring progress indicator
     bool mExtDispConfiguring;
+    //External Display Disconnecting  progress indicator
+    bool mExtDispDisconnecting;
     //Display in secure mode indicator
     bool mSecureMode;
+    // External secure link indicator
+    bool mExtSecureMode;
     //Lock to prevent set from being called while blanking
     mutable Locker mBlankLock;
     //Lock to protect set when detaching external disp

@@ -52,6 +52,7 @@ public:
     virtual int getDstMemId() const = 0;
     virtual uint32_t getDstOffset() const = 0;
     virtual uint32_t getDstFormat() const = 0;
+    virtual uint32_t getDstFlags() const = 0;
     virtual uint32_t getSessId() const = 0;
     virtual bool queueBuffer(int fd, uint32_t offset) = 0;
     virtual void dump() const = 0;
@@ -118,6 +119,7 @@ public:
     virtual int getDstMemId() const;
     virtual uint32_t getDstOffset() const;
     virtual uint32_t getDstFormat() const;
+    virtual uint32_t getDstFlags() const;
     virtual uint32_t getSessId() const;
     virtual bool queueBuffer(int fd, uint32_t offset);
     virtual void dump() const;
@@ -177,6 +179,7 @@ public:
     virtual int getDstMemId() const;
     virtual uint32_t getDstOffset() const;
     virtual uint32_t getDstFormat() const;
+    virtual uint32_t getDstFlags() const;
     virtual uint32_t getSessId() const;
     virtual bool queueBuffer(int fd, uint32_t offset);
     virtual void dump() const;
@@ -213,6 +216,8 @@ private:
     RotMem mMem;
     /* Enable/Disable Mdss Rot*/
     bool mEnabled;
+    /* mExtSecureLink enable/disable*/
+    bool mExtSecureLink;
 
     friend Rotator* Rotator::getRotator();
 };

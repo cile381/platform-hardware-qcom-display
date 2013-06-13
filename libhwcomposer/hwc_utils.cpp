@@ -121,6 +121,9 @@ void initContext(hwc_context_t *ctx)
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = new RotMgr();
+    //This flag will be set to true if External Link is in HDCP mode
+    // what if framework reboot happens and External link is already connected in secure mode
+    ctx->mExtSecureMode = false;
 
     //Is created and destroyed only once for primary
     //For external it could get created and destroyed multiple times depending
@@ -156,6 +159,7 @@ void initContext(hwc_context_t *ctx)
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
     ctx->mExtDispConfiguring = false;
+    ctx->mExtDispDisconnecting = false;
     ctx->mExtOrientation = 0;
 
     //Right now hwc starts the service but anybody could do it, or it could be
@@ -349,6 +353,18 @@ bool isAlphaPresent(hwc_layer_1_t const* layer) {
     }
     return false;
 }
+
+int display_commit(hwc_context_t *ctx, int dpy) {
+    struct mdp_display_commit commit_info;
+    memset(&commit_info, 0, sizeof(struct mdp_display_commit));
+    commit_info.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+    if(ioctl(ctx->dpyAttr[dpy].fd, MSMFB_DISPLAY_COMMIT, &commit_info) == -1) {
+       ALOGE("%s: MSMFB_DISPLAY_COMMIT for primary failed", __FUNCTION__);
+       return -errno;
+    }
+    return 0;
+}
+
 
 void setListStats(hwc_context_t *ctx,
         const hwc_display_contents_1_t *list, int dpy) {
@@ -888,6 +904,9 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         whf.format = (*rot)->getDstFormat();
         updateSource(orient, whf, crop);
         rotFlags |= ovutils::ROT_PREROTATED;
+
+        //Update mdpFlags with Rotator Output flags.
+        ovutils::setMdpFlags(mdpFlags, (eMdpFlags)(*rot)->getDstFlags());
     }
 
     //For the mdp, since either we are pre-rotating or MDP does flips

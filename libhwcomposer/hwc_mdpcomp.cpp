@@ -370,6 +370,14 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
     } else if(sIdleFallBack) {
         ALOGD_IF(isDebug(), "%s: idle fallback",__FUNCTION__);
         ret = false;
+    } else if(ctx->mExtDispDisconnecting) {
+        // Since External Display is disconnected, HAL needs to cleanup
+        // rotator sessions(if any) by inducing a padding frame. This is
+        // required for DRM playback support
+        ALOGD_IF( isDebug(),"%s: External Display connection is pending",
+                  __FUNCTION__);
+        ctx->mExtDispDisconnecting = false;
+        ret = false;
     }
 
     return ret;

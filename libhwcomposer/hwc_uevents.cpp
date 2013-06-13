@@ -142,6 +142,20 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     switch(connected) {
         case EXTERNAL_OFFLINE:
             {   // disconnect event
+
+                //Extra things required to clean up secure references
+                {
+		    Locker::Autolock _l(ctx->mExtSetLock);
+                    ctx->dpyAttr[dpy].connected = false;
+                    // set system property
+                    property_set("hw.extSecureLink", "0");
+                }
+                //Invalidate
+                ctx->proc->invalidate(ctx->proc);
+                sleep(1);
+                if(display_commit(ctx,dpy) < 0) {
+                    ALOGE("commit failed for external display in offline event");
+                }
                 const char *s1 = udata + strlen(HWC_UEVENT_SWITCH_STR);
                 if(!strncmp(s1,"hdmi",strlen(s1))) {
                     ctx->mExtDisplay->teardownHDMIDisplay();
@@ -152,7 +166,11 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 clear(ctx, dpy);
                 ALOGD("%s sending hotplug: connected = %d and dpy:%d",
                       __FUNCTION__, connected, dpy);
-                ctx->dpyAttr[dpy].connected = false;
+                // Update the context to inform external display is disconnected
+                // Since External Display is disconnected, HAL needs to cleanup
+                // rotator sessions(if any) by inducing a padding frame. This is
+                // required for DRM playback support software solution
+                ctx->mExtDispDisconnecting = true;
                 //hwc comp could be on
                 ctx->proc->hotplug(ctx->proc, dpy, connected);
                 break;
@@ -189,6 +207,18 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 } else if(!strncmp(s1,"wfd",strlen(s1))) {
                     // wfd online event..!
                     ctx->mExtDisplay->configureWFDDisplay();
+                    ctx->mExtSecureMode = false;
+                    // set system property
+                    property_set("hw.extSecureLink", "0");
+                    // Check whether the link is secure
+                    char property[PROPERTY_VALUE_MAX];
+                    if((property_get("system.wfd.hdcp.enabled", property, NULL) > 0) &&
+                        (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
+                        (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
+                        ctx->mExtSecureMode = true;
+                        // set system property
+                        property_set("hw.extSecureLink", "1");
+                    }
                 }
                 ctx->dpyAttr[dpy].isPause = false;
                 setup(ctx, dpy, usecopybit);
@@ -246,6 +276,9 @@ void init_uevent_thread(hwc_context_t* ctx)
 {
     pthread_t uevent_thread;
     int ret;
+
+    // reset external secure link status to zero
+    property_set("hw.extSecureLink", "0");
 
     ALOGI("Initializing UEVENT Thread");
     ret = pthread_create(&uevent_thread, NULL, uevent_loop, (void*) ctx);
