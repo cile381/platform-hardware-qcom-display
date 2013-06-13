@@ -366,6 +366,10 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
         ctx->isPaddingRound = false;
         ALOGD_IF(isDebug(), "%s: padding round",__FUNCTION__);
         ret = false;
+    } else if(numAppLayers > MAX_NUM_APP_LAYERS) {
+        ALOGD_IF(isDebug(), "%s: Number of App layers exceeded the limit ",
+                 __FUNCTION__);
+        ret = false;
     }
     return ret;
 }
@@ -971,7 +975,8 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
 
         hwc_layer_1_t* layer = &list->hwLayers[index];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        PipeLayerPair& info = mCurrentFrame.mdpToLayer[index];
+        int mdpIndex = mCurrentFrame.layerToMDP[index];
+        PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
         info.pipeInfo = new MdpPipeInfoHighRes;
         info.rot = NULL;
         MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
