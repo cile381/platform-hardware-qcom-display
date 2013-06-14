@@ -74,7 +74,7 @@ private:
 */
 struct RotMem {
     // Max rotator memory allocations
-    enum { MAX_ROT_MEM = 2};
+    enum { MAX_ROT_MEM = 3};
 
     //Manages the rotator buffer offsets.
     struct Mem {
@@ -83,7 +83,7 @@ struct RotMem {
         bool close() { return m.close(); }
         uint32_t size() const { return m.bufSz(); }
         // Max rotator buffers
-        enum { ROT_NUM_BUFS = 2 };
+        enum { ROT_NUM_BUFS = 3 };
         // rotator data info dst offset
         uint32_t mRotOffset[ROT_NUM_BUFS];
         // current offset slot from mRotOffset
