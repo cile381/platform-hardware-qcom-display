@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 #define HWC_UTILS_DEBUG 0
+#include <math.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 #include <binder/IServiceManager.h>
@@ -248,6 +249,18 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     if(ctx->mExtDisplay->isCEUnderscanSupported())
         return;
 
+    char value[PROPERTY_VALUE_MAX];
+    // Read action safe properties
+    property_get("persist.sys.actionsafe.width", value, "0");
+    int asWidthRatio = atoi(value);
+    property_get("persist.sys.actionsafe.height", value, "0");
+    int asHeightRatio = atoi(value);
+
+    if(!asWidthRatio && !asHeightRatio) {
+        //No action safe ratio set, return
+        return;
+    }
+
     float wRatio = 1.0;
     float hRatio = 1.0;
     float xRatio = 1.0;
@@ -256,17 +269,15 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     float fbWidth = ctx->dpyAttr[dpy].xres;
     float fbHeight = ctx->dpyAttr[dpy].yres;
 
+    // Since external is rotated 90, need to swap width/height
+    if(ctx->mExtOrientation & HWC_TRANSFORM_ROT_90)
+        swap(fbWidth, fbHeight);
+
     float asX = 0;
     float asY = 0;
     float asW = fbWidth;
     float asH= fbHeight;
-    char value[PROPERTY_VALUE_MAX];
 
-    // Apply action safe parameters
-    property_get("persist.sys.actionsafe.width", value, "0");
-    int asWidthRatio = atoi(value);
-    property_get("persist.sys.actionsafe.height", value, "0");
-    int asHeightRatio = atoi(value);
     // based on the action safe ratio, get the Action safe rectangle
     asW = fbWidth * (1.0f -  asWidthRatio / 100.0f);
     asH = fbHeight * (1.0f -  asHeightRatio / 100.0f);
@@ -368,12 +379,21 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
 
-    for (size_t i = 0; i < list->numHwLayers; i++) {
+    //reset yuv indices
+    memset(ctx->listStats[dpy].yuvIndices, -1, MAX_NUM_APP_LAYERS);
+
+    for (size_t i = 0; i < (list->numHwLayers - 1); i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        //reset stored yuv index
-        ctx->listStats[dpy].yuvIndices[i] = -1;
+#ifdef QCOM_BSP
+        if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
+            ctx->listStats[dpy].isDisplayAnimating = true;
+        }
+#endif
+        // continue if i reaches MAX_NUM_APP_LAYERS
+        if(i >= MAX_NUM_APP_LAYERS)
+            continue;
 
         if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
             continue;
@@ -405,11 +425,6 @@ void setListStats(hwc_context_t *ctx,
         if(UNLIKELY(isExtOnly(hnd))){
             ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
-#ifdef QCOM_BSP
-        if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
-            ctx->listStats[dpy].isDisplayAnimating = true;
-        }
-#endif
     }
     if(ctx->listStats[dpy].yuvCount > 0) {
         if (property_get("hw.cabl.yuv", property, NULL) > 0) {
@@ -596,7 +611,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                                                         int fd) {
     int ret = 0;
     struct mdp_buf_sync data;
-    int acquireFd[MAX_NUM_LAYERS];
+    int acquireFd[MAX_NUM_APP_LAYERS];
     int count = 0;
     int releaseFd = -1;
     int fbFd = -1;
@@ -880,14 +895,16 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         }
     }
 
-    uint32_t x = dst.left, y  = dst.right;
+    uint32_t x = dst.left, y  = dst.top;
     uint32_t w = dst.right - dst.left;
     uint32_t h = dst.bottom - dst.top;
 
-    if(dpy && ctx->mExtOrientation) {
+    if(dpy) {
         // Just need to set the position to portrait as the transformation
         // will already be set to required orientation on TV
         getAspectRatioPosition(ctx, dpy, ctx->mExtOrientation, x, y, w, h);
+        // Calculate the actionsafe dimensions for External(dpy = 1 or 2)
+        getActionSafePosition(ctx, dpy, x, y, w, h);
         // Convert position to hwc_rect_t
         dst.left = x;
         dst.top = y;
@@ -1109,9 +1126,16 @@ void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
         }
         float horDscale = 0.0f;
         float verDscale = 0.0f;
+        int horzDeci = 0;
+        int vertDeci = 0;
         ovutils::getDecimationFactor(src_w, src_h, dst_w, dst_h, horDscale,
                 verDscale);
-        if(horDscale || verDscale) return;
+        //TODO Use log2f once math.h has it
+        if((int)horDscale)
+            horzDeci = (int)(log(horDscale) / log(2));
+        if((int)verDscale)
+            vertDeci = (int)(log(verDscale) / log(2));
+        if(horzDeci || vertDeci) return;
     }
     //Property
     char value[PROPERTY_VALUE_MAX];
