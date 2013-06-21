@@ -58,9 +58,12 @@ public:
     void setHPD(uint32_t startEnd);
     void setEDIDMode(int resMode);
     void setActionSafeDimension(int w, int h);
-    void setCustomMode(int mode) {mCustomMode = mode;}
+    void setCustomMode(int mode) {mNewMode = mode; mCustomMode = mode;}
+    void setNewMode(int mode) {mNewMode = mode;}
     int ignoreRequest(const char *str);
     int  configureHDMIDisplay(int mode = -1);
+    int  getNewMode();
+    int  getCurMode();
     int  configureWFDDisplay();
     int  teardownHDMIDisplay();
     int  teardownWFDDisplay();
@@ -107,6 +110,8 @@ private:
     bool mHdmiPrimary;
     bool mHdmiPrimaryResChanged;
     int mCustomMode;
+    int mCurMode;
+    int mNewMode;
 };
 
 }; //qhwc

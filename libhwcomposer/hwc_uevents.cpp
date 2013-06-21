@@ -56,12 +56,17 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     int vsync = 0;
     int64_t timestamp = 0;
     const char *str = udata;
+    bool hdmi_as_primary = false;
 
     if(!strcasestr("change@/devices/virtual/switch/hdmi", str) &&
+       !strcasestr("change@/devices/virtual/switch/hdmi_as_primary", str) &&
        !strcasestr("change@/devices/virtual/switch/wfd", str)) {
         ALOGD_IF(UEVENT_DEBUG, "%s: Not Ext Disp Event ", __FUNCTION__);
         return;
     }
+    if (strcasestr("change@/devices/virtual/switch/hdmi_as_primary", str))
+        hdmi_as_primary = true;
+
     int connected = -1; // initial value - will be set to  1/0 based on hotplug
     int extDpyNum = HWC_DISPLAY_EXTERNAL;
     char property[PROPERTY_VALUE_MAX];
@@ -83,6 +88,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     while(*str) {
         if (!strncmp(str, "SWITCH_STATE=", strlen("SWITCH_STATE="))) {
             connected = atoi(str + strlen("SWITCH_STATE="));
+            if (hdmi_as_primary)
+                break;
             //Disabled until SF calls unblank
             ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = false;
             //Ignored for Virtual Displays
@@ -95,6 +102,9 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             break;
     }
     ALOGD_IF(UEVENT_DEBUG, "Received str:%s",udata);
+
+    if ((hdmi_as_primary) && (connected != EXTERNAL_ONLINE))
+        return;
 
     if(connected != EXTERNAL_ONLINE) {
         if(ctx->mExtDisplay->ignoreRequest(udata)) {
@@ -129,7 +139,21 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             {   // connect case
                 ctx->mExtDispConfiguring = true;
                 const char *s1 = udata + strlen(HWC_UEVENT_SWITCH_STR);
-                if(!strncmp(s1,"hdmi",strlen(s1))) {
+                if (hdmi_as_primary) {
+                    int newMode = ctx->mExtDisplay->getNewMode();
+                    int curMode =  ctx->mExtDisplay->getCurMode();
+                    ALOGI("%s New Mode = %d, curMode = %d",
+                        __FUNCTION__, newMode, curMode);
+                    if ((curMode != -1) && (newMode != curMode)) {
+                        if (ctx->mExtDisplay->isValidMode(newMode) &&
+                            !ctx->mExtDisplay->isInterlacedMode(newMode)) {
+                            ctx->mResChanged = true;
+                            ctx->mExtDisplay->setNewMode(newMode);
+                            ctx->proc->invalidate(ctx->proc);
+                        }
+                    }
+                    break;
+                } else if(!strncmp(s1,"hdmi",strlen(s1))) {
                     // hdmi online event..!
                     // check if WFD is configured
                     if(ctx->mExtDisplay->isWFDActive()) {

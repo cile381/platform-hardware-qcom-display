@@ -97,12 +97,61 @@ int ExternalDisplay::configureHDMIDisplay(int mode) {
         //Get the best mode and set
         mode = getBestMode();
     }
+    mCurMode = mode;
     setResolution(mode);
     setDpyHdmiAttr();
     setExternalDisplay(true, mHdmiFbNum);
     // set system property
     property_set("hw.hdmiON", "1");
     return 0;
+}
+
+int ExternalDisplay::getNewMode() {
+    readResolution();
+    if (mCustomMode != -1) {
+        /* check if the mode is valid */
+        Mutex::Autolock lock(mExtDispLock);
+        // for all the edid read, get the best mode
+        for(int i = 0; i < mModeCount; i++) {
+            if (mCustomMode == mEDIDModes[i])
+                return mCustomMode;
+        }
+    }
+    return getBestMode();
+}
+
+int ExternalDisplay::getCurMode() {
+
+    if (mCurMode != -1)
+        return mCurMode;
+
+    char sysFsVideoModeFilePath[255];
+    sprintf(sysFsVideoModeFilePath ,
+        "/sys/devices/virtual/graphics/fb%d/video_mode",
+            mHdmiFbNum);
+
+    int hdmiVideoModeFile = open(sysFsVideoModeFilePath, O_RDONLY, 0);
+    int curMode = mCurMode, len = -1;
+    char videoMode[4];
+
+    if (hdmiVideoModeFile < 0) {
+        ALOGE("%s: video_mode file '%s' not found",
+                 __FUNCTION__, sysFsVideoModeFilePath);
+        return curMode;
+    } else {
+        len = read(hdmiVideoModeFile, videoMode, sizeof(videoMode));
+        ALOGD_IF(DEBUG, "%s: EDID string: %s length = %d",
+                 __FUNCTION__, mEDIDs, len);
+        if (len <= 0) {
+            ALOGE("%s: video mode file empty '%s'",
+                     __FUNCTION__, sysFsVideoModeFilePath);
+        }
+    }
+    close(hdmiVideoModeFile);
+    if(len > 0) {
+        curMode = atoi(videoMode);
+    }
+    return curMode;
 }
 
 int ExternalDisplay::configureWFDDisplay() {
@@ -164,7 +213,7 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     mCurrentMode(-1), mConnected(0), mConnectedFbNum(0), mModeCount(0),
     mUnderscanSupported(false), mHwcContext(ctx), mHdmiFbNum(-1),
     mWfdFbNum(-1), mExtDpyNum(HWC_DISPLAY_EXTERNAL), mHdmiPrimary(false),
-    mHdmiPrimaryResChanged(false), mCustomMode(-1)
+    mHdmiPrimaryResChanged(false), mCustomMode(-1), mCurMode(-1), mNewMode(-1)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     //Determine the fb index for external display devices.
@@ -173,6 +222,7 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     // when the display powers on
     // This helps for framework reboot or adb shell stop/start
     writeHPDOption(0);
+    mCurMode = getCurMode();
 
 }
 
@@ -546,7 +596,7 @@ int ExternalDisplay::getUserMode() {
  * SurfaceFlinger can compose according to the HDMI resolution
  * */
 int ExternalDisplay::setHdmiPrimaryMode() {
-    int mode = mCustomMode;
+    int mode = mNewMode;
     int dpy = HWC_DISPLAY_EXTERNAL;
     ALOGI("%s: Attempting to set mode: %d", __FUNCTION__, mode);
     configureHDMIDisplay(mode);
