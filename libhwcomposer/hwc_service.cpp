@@ -279,6 +279,20 @@ status_t HWComposerService::startConfigChange(
     return NO_ERROR;
 }
 
+status_t HWComposerService::ConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) {
+    status_t ret = NO_ERROR;
+    
+    pthread_mutex_lock(&(mHwcContext->mConfigLock));
+    ret = startConfigChange(configChangeType);
+    ret = doConfigChange(configChangeType, params);
+    ret = stopConfigChange(configChangeType);
+    pthread_mutex_unlock(&(mHwcContext->mConfigLock));
+
+    return ret;
+}
+
 status_t HWComposerService::doConfigChange(
         qhwc::CONFIG_CHANGE_TYPE configChangeType,
         qhwc::ConfigChangeParams params) {

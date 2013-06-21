@@ -266,6 +266,19 @@ public:
         result = reply.readInt32();
         return result;
     }
+    virtual android::status_t ConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IHWComposer::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        data.writeFloat(params.param1);
+        data.writeFloat(params.param2);
+        status_t result = remote()->transact(
+                          CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
 
 };
 
@@ -449,6 +462,17 @@ status_t BnHWComposer::onTransact(
             status_t res = getCurrentFrameratePixclock(&params);
             reply->writeFloat(params.param1);
             reply->writeFloat(params.param2);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case CONFIG_CHANGE:{
+            qhwc::CONFIG_CHANGE_TYPE configType;
+            qhwc::ConfigChangeParams params;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            configType = (qhwc::CONFIG_CHANGE_TYPE)data.readInt32();
+            params.param1 = data.readFloat();
+            params.param2 = data.readFloat();
+            status_t res = ConfigChange(configType,params);
             reply->writeInt32(res);
             return NO_ERROR;
         } break;

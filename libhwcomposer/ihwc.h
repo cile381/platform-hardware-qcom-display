@@ -52,6 +52,7 @@ enum {
     GET_CURRENT_FRAMERATE_PIXCLOCK,
     SET_OVERSCANCOMPENSATION_PARAMS,
     SET_OVERSCAN_PARAMS,
+    CONFIG_CHANGE,
 };
 
 class IHWComposer : public android::IInterface
@@ -92,6 +93,9 @@ public:
         qhwc::ConfigChangeParams *params) = 0;
     virtual android::status_t getCurrentFrameratePixclock(
         qhwc::ConfigChangeParams *params) = 0;
+    virtual android::status_t ConfigChange(
+            qhwc::CONFIG_CHANGE_TYPE configChangeType,
+            qhwc::ConfigChangeParams params) = 0;
 };
 
 // ----------------------------------------------------------------------------

@@ -78,6 +78,9 @@ public:
         qhwc::ConfigChangeParams *params);
     virtual android::status_t getCurrentFrameratePixclock(
         qhwc::ConfigChangeParams *params);
+    virtual android::status_t ConfigChange(
+             qhwc::CONFIG_CHANGE_TYPE configChangeType,
+             qhwc::ConfigChangeParams params);
 
     // Secure Intent Hooks
     virtual android::status_t setOpenSecureStart();
