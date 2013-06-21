@@ -530,7 +530,7 @@ struct hwc_context_t {
 
     pthread_mutex_t mConfigChangeLock;
     pthread_cond_t mConfigChangeCond;
-
+    pthread_mutex_t mConfigLock;
     // Post-processing parameters
     qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
 

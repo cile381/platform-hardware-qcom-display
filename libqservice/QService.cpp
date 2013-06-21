@@ -158,7 +158,14 @@ android::status_t QService::setPQCState(int value){
     }
     return result;
 }
-
+android::status_t QService::ConfigChange(CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->ConfigChange(configChangeType,params);
+    }
+    return result;
+}
 void QService::setExtOrientation(uint32_t orientation) {
     if(mClient.get()) {
         mClient->notifyCallback(EXTERNAL_ORIENTATION, orientation);

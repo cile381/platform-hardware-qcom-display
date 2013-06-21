@@ -52,6 +52,7 @@ public:
         STOP_CONFIG_CHANGE,
         SET_PP_PARAMS,
         SET_PQCSTATE,
+        CONFIG_CHANGE,
         SCREEN_REFRESH,
         EXTERNAL_ORIENTATION,
         BUFFER_MIRRORMODE,
@@ -88,6 +89,8 @@ public:
         CONFIG_CHANGE_TYPE configChangeType) = 0;
     virtual android::status_t setPQCState(int value) = 0;
     virtual android::status_t setMode(int32_t mode) = 0;
+    virtual android::status_t ConfigChange(CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) = 0;
 };
 
 // ----------------------------------------------------------------------------

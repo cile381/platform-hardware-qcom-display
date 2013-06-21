@@ -320,6 +320,20 @@ status_t QClient::setPQCState(int value) {
     return NO_ERROR;
 }
 
+status_t QClient::ConfigChange(
+        qhwc::CONFIG_CHANGE_TYPE configChangeType,
+        qhwc::ConfigChangeParams params) {
+    status_t ret = NO_ERROR;
+    
+    pthread_mutex_lock(&(mHwcContext->mConfigLock));
+    ret = startConfigChange(configChangeType);
+    ret = doConfigChange(configChangeType, params);
+    ret = stopConfigChange(configChangeType);
+    pthread_mutex_unlock(&(mHwcContext->mConfigLock));
+
+    return ret;
+}
+
 void QClient::inValidate() {
     //Invalidate
     hwc_procs* proc = (hwc_procs*)mHwcContext->proc;

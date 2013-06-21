@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -43,6 +43,8 @@ enum {
     STOP_CONFIG_CHANGE,
     SET_PP_PARAMS,
     SET_PQCSTATE,
+    CONFIG_CHANGE,
+
 };
 
 class BpQClient : public BpInterface<IQClient>
@@ -181,6 +183,20 @@ public:
         return result;
     }
 
+    virtual status_t ConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQClient::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        data.writeFloat(params.param1);
+        data.writeFloat(params.param2);
+        status_t result = remote()->transact(
+                          CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
 };
 
 IMPLEMENT_META_INTERFACE(QClient, "android.display.IQClient");
@@ -304,7 +320,17 @@ status_t BnQClient::onTransact(
            reply->writeInt32(res);
            return NO_ERROR;
         } break;
-
+        case CONFIG_CHANGE:{
+            qhwc::CONFIG_CHANGE_TYPE configType;
+            qhwc::ConfigChangeParams params;
+            CHECK_INTERFACE(IQClient, data, reply);
+            configType = (qhwc::CONFIG_CHANGE_TYPE)data.readInt32();
+            params.param1 = data.readFloat();
+            params.param2 = data.readFloat();
+            status_t res = ConfigChange(configType,params);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

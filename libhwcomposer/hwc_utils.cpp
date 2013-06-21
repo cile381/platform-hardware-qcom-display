@@ -308,9 +308,8 @@ bool changePLLSettings(hwc_context_t* ctx, int dpy) {
     int h_bk_porch2 = 0;
     int h_total     = 2200;
     int v_total     = 1125;
-    float req_fps   = ((((float)req_bitclk / 7) *
-                        ((float) m->default_framerate / 1000.0)) /
-                            (float)m->default_pixclock) * 2;
+    float req_fps  = ((((float)req_bitclk / 7) * (float) ctx->default_framerate) /
+                            (float)ctx->default_pixclock) * 2;
 
     if (req_bitclk != pll_bitclk) {
         bit_clk_match = 1;
