@@ -142,6 +142,7 @@ bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *lis
         // use ext orientation if any
         int extOrient = getExtOrientation(ctx);
 
+#if 0
         // Do not use getNonWormholeRegion() function to calculate the
         // sourceCrop during animation on external display and
         // Dont do wormhole calculation when extorientation is set on External
@@ -158,6 +159,7 @@ bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *lis
                 displayFrame = sourceCrop;
             }
         }
+#endif
         calcExtDisplayPosition(ctx, hnd, mDpy, sourceCrop, displayFrame,
                                    transform, orient);
         setMdpFlags(layer, mdpFlags, 0, transform);
