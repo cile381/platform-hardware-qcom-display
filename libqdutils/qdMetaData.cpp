@@ -31,6 +31,7 @@
 #include <sys/mman.h>
 #include <cutils/log.h>
 #include <gralloc_priv.h>
+#include <performance.h>
 #include "qdMetaData.h"
 
 int setMetaData(private_handle_t *handle, DispParamType paramType,
@@ -120,3 +121,14 @@ int getMetaData(private_handle_t *handle, DispParamType paramType,
     return 0;
 }
 
+mpd_handle display_perf_boost_on()
+{
+    int params[1] = { CPUS_ONLINE_2 };
+    return perf_lock_acq(0, 0, params, sizeof(params) / sizeof(int));
+}
+
+void display_perf_boost_off(mpd_handle mpDecisionHandle)
+{
+    perf_lock_rel(mpDecisionHandle);
+    return;
+}

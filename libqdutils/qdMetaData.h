@@ -31,6 +31,7 @@
 #define _QDMETADATA_H
 
 #define MAX_IGC_LUT_ENTRIES 256
+typedef int mpd_handle;
 
 struct HSICData_t {
     int32_t hue;
@@ -83,8 +84,14 @@ typedef enum {
     PP_PARAM_VIDEO_FRAME  = 0x0080
 } DispParamType;
 
+extern "C" int perf_lock_acq(int, int, int[], int);
+extern "C" int perf_lock_rel(int);
+
 int setMetaData(private_handle_t *handle, DispParamType paramType, void *param);
 int getMetaData(private_handle_t *handle, DispParamType paramType, void *param);
+
+mpd_handle display_perf_boost_on();
+void display_perf_boost_off(mpd_handle mpDecisionHandle);
 
 #endif /* _QDMETADATA_H */
 
