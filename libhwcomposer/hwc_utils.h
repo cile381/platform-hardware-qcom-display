@@ -93,6 +93,7 @@ struct ListStats {
     int yuvIndices[MAX_NUM_LAYERS];
     int numAlphaScaledLayers;
     bool preMultipliedAlpha;
+    bool isDisplayAnimating;
 };
 
 struct LayerProp {
@@ -198,18 +199,19 @@ void trimLayer(hwc_context_t *ctx, const int& dpy, const int& transform,
 //Sets appropriate mdp flags for a layer.
 void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
-        int rotDownscale = 0);
+        int rotDownscale = 0,
+         int transfor=0);
 
 //Routine to configure low resolution panels (<= 2048 width)
 int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
-        ovutils::eMdpFlags& mdpFlags, const ovutils::eZorder& z,
-        const ovutils::eIsFg& isFg, const ovutils::eDest& dest,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& dest,
         overlay::Rotator **rot);
 
 //Routine to configure high resolution panels (> 2048 width)
 int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
-        ovutils::eMdpFlags& mdpFlags, const ovutils::eZorder& z,
-        const ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
         const ovutils::eDest& rDest, overlay::Rotator **rot);
 
 // Inline utility functions
@@ -315,6 +317,12 @@ struct hwc_context_t {
     qhwc::MDPComp *mMDPComp;
     qhwc::LayerRotMap *mLayerRotMap[MAX_DISPLAYS];
 
+
+    int deviceOrientation;
+    // Stores the crop, dest rect and transform value of video before animation.
+    hwc_rect_t mPrevCropVideo;
+    hwc_rect_t mPrevDestVideo;
+    int mPrevTransformVideo;
     //Securing in progress indicator
     bool mSecuring;
     //External Display configuring progress indicator

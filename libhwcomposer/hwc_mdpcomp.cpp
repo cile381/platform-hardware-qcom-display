@@ -266,8 +266,11 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
     if(ctx->mSecureMode)
         return false;
 
-    //Check for skip layers
-    if(isSkipPresent(ctx, dpy)) {
+    bool extAnimBlockFeature = dpy && ctx->listStats[dpy].isDisplayAnimating;
+
+    //Check for skip layers. Also, if the display is external and exernal
+    //animation is disabled, return false.
+    if(isSkipPresent(ctx, dpy) && !extAnimBlockFeature) {
         ALOGD_IF(isDebug(), "%s: Skip layers are present",__FUNCTION__);
         return false;
     }
@@ -412,8 +415,16 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
 
     if(isYuvPresent(ctx, dpy)) {
         int nYuvCount = ctx->listStats[dpy].yuvCount;
-
-        for(int index = 0; index < nYuvCount; index ++) {
+        if(!nYuvCount) {
+            //Reset "No animation on external display" related  parameters.
+            ctx->mPrevCropVideo.left = ctx->mPrevCropVideo.top =
+                ctx->mPrevCropVideo.right = ctx->mPrevCropVideo.bottom = 0;
+            ctx->mPrevDestVideo.left = ctx->mPrevDestVideo.top =
+                ctx->mPrevDestVideo.right = ctx->mPrevDestVideo.bottom = 0;
+            ctx->mPrevTransformVideo = 0;
+            return false;
+        }
+       for(int index = 0; index < nYuvCount; index ++) {
             int nYuvIndex = ctx->listStats[dpy].yuvIndices[index];
             hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
             PipeLayerPair& info = currentFrame.pipeLayer[nYuvIndex];
