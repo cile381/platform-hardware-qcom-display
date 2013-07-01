@@ -366,6 +366,13 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
         ret = false;
+    } else if(qdutils::MDPVersion::getInstance().is8x26() &&
+            ctx->mVideoTransFlag &&
+            ctx->mExtDisplay->isExternalConnected()) {
+        //1 Padding round to shift pipes across mixers
+        ALOGD_IF(isDebug(),"%s: MDP Comp. video transition padding round",
+                __FUNCTION__);
+        ret = false;
     } else if(ctx->mExtDispConfiguring) {
         ALOGD_IF( isDebug(),"%s: External Display connection is pending",
                   __FUNCTION__);
@@ -426,6 +433,14 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
                 __FUNCTION__);
             return false;
         }
+
+        //For 8x26 with panel width>1k, if RGB layer needs HFLIP fail mdp comp
+        // may not need it if Gfx pre-rotation can handle all flips & rotations
+        if(qdutils::MDPVersion::getInstance().is8x26() &&
+                                (ctx->dpyAttr[mDpy].xres > 1024) &&
+                                (layer->transform & HWC_TRANSFORM_FLIP_H) &&
+                                (!isYuvBuffer(hnd)))
+                   return false;
     }
 
     //If all above hard conditions are met we can do full or partial MDP comp.

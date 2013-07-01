@@ -375,7 +375,8 @@ bool isAlphaPresent(hwc_layer_1_t const* layer) {
 
 void setListStats(hwc_context_t *ctx,
         const hwc_display_contents_1_t *list, int dpy) {
-
+    const int prevYuvCount = ctx->listStats[dpy].yuvCount;
+    memset(&ctx->listStats[dpy], 0, sizeof(ListStats));
     ctx->listStats[dpy].numAppLayers = list->numHwLayers - 1;
     ctx->listStats[dpy].fbLayerIndex = list->numHwLayers - 1;
     ctx->listStats[dpy].skipCount = 0;
@@ -386,10 +387,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
 
-    //reset yuv indices
-    memset(ctx->listStats[dpy].yuvIndices, -1, MAX_NUM_APP_LAYERS);
-
-    for (size_t i = 0; i < (list->numHwLayers - 1); i++) {
+    for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
@@ -398,14 +396,14 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].isDisplayAnimating = true;
         }
 #endif
-        // continue if i reaches MAX_NUM_APP_LAYERS
-        if(i >= MAX_NUM_APP_LAYERS)
+        // continue if number of app layers exceeds MAX_NUM_APP_LAYERS
+        if(ctx->listStats[dpy].numAppLayers > MAX_NUM_APP_LAYERS)
             continue;
 
-        if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
-            continue;
-        //We disregard FB being skip for now! so the else if
-        } else if (isSkipLayer(&list->hwLayers[i])) {
+        //reset yuv indices
+        ctx->listStats[dpy].yuvIndices[i] = -1;
+
+        if (isSkipLayer(&list->hwLayers[i])) {
             ctx->listStats[dpy].skipCount++;
         }
 
@@ -463,6 +461,12 @@ void setListStats(hwc_context_t *ctx,
             }
             Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
         }
+    }
+
+    //The marking of video begin/end is useful on some targets where we need
+    //to have a padding round to be able to shift pipes across mixers.
+    if(prevYuvCount != ctx->listStats[dpy].yuvCount) {
+        ctx->mVideoTransFlag = true;
     }
 }
 
