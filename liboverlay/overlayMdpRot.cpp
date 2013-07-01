@@ -47,6 +47,12 @@ uint32_t MdpRot::getDstFormat() const {
     return mRotImgInfo.dst.format;
 }
 
+uint32_t MdpRot::getDstFlags() const {
+    // stub (not applicable for MDP related targets
+    return 0;
+}
+
+
 uint32_t MdpRot::getSessId() const { return mRotImgInfo.session_id; }
 
 void MdpRot::setDownscale(int ds) {
