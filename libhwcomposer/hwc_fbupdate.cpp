@@ -112,7 +112,11 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx,
         ov.setSource(parg, dest);
 
         hwc_rect_t sourceCrop;
-        getNonWormholeRegion(list, sourceCrop);
+        if(ctx->listStats[mDpy].isDisplayAnimating && mDpy) {
+            sourceCrop = layer->displayFrame;
+        } else {
+           getNonWormholeRegion(list, sourceCrop);
+        }
         // x,y,w,h
         ovutils::Dim dcrop(sourceCrop.left, sourceCrop.top,
                 sourceCrop.right - sourceCrop.left,
@@ -238,7 +242,12 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         ov.setSource(pargR, destR);
 
         hwc_rect_t sourceCrop;
-        getNonWormholeRegion(list, sourceCrop);
+        if(ctx->listStats[mDpy].isDisplayAnimating && mDpy) {
+            sourceCrop = layer->displayFrame;
+        } else {
+            getNonWormholeRegion(list, sourceCrop);
+        }
+
         ovutils::Dim dcropL(sourceCrop.left, sourceCrop.top,
                 (sourceCrop.right - sourceCrop.left) / 2,
                 sourceCrop.bottom - sourceCrop.top);

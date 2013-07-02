@@ -185,9 +185,18 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                 ctx->mVidOv[dpy]->prepare(ctx, list);
                 ctx->mFBUpdate[dpy]->prepare(ctx, list);
                 ctx->mLayerCache[dpy]->updateLayerCache(list);
-                if(ctx->mCopyBit[dpy])
+                if(ctx->mCopyBit[dpy]&&
+                    !(ctx->listStats[dpy].isDisplayAnimating))
                     ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
             }
+
+            if(ctx->listStats[dpy].isDisplayAnimating) {
+              // Mark all layers as HWC_OVERLAY, so SF does not draw that
+              for(int i = 0 ;i < ctx->listStats[dpy].numAppLayers; i++) {
+                  hwc_layer_1_t *layer = &list->hwLayers[i];
+                  layer->compositionType = HWC_OVERLAY;
+             }
+          }
         } else {
             // External Display is in Pause state.
             // ToDo:
@@ -249,6 +258,14 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
             }
             ALOGD_IF (VSYNC_DEBUG, "VSYNC state changed to %s",
                       (enable)?"ENABLED":"DISABLED");
+            break;
+        case HWC_EVENT_ORIENTATION:
+            if(dpy == HWC_DISPLAY_PRIMARY) {
+            // store the primary display orientation
+            // will be used in hwc_video::configure to disable
+            // rotation animation on external display
+            ctx->deviceOrientation = enable;
+            }
             break;
         default:
             ret = -EINVAL;
