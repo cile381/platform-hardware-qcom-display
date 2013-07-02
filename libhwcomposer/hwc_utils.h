@@ -59,6 +59,7 @@ class IFBUpdate;
 class IVideoOverlay;
 class MDPComp;
 class CopyBit;
+class HwcDebug;
 
 
 struct MDPInfo {
@@ -284,6 +285,7 @@ struct hwc_context_t {
     qhwc::LayerCache *mLayerCache[MAX_DISPLAYS];
     qhwc::LayerProp *layerProp[MAX_DISPLAYS];
     qhwc::MDPComp *mMDPComp;
+    qhwc::HwcDebug *mHwcDebug[MAX_DISPLAYS];
 
     //Securing in progress indicator
     bool mSecuring;

@@ -33,6 +33,7 @@
 #include "hwc_video.h"
 #include "hwc_fbupdate.h"
 #include "hwc_mdpcomp.h"
+#include "hwc_dump_layers.h"
 #include "external.h"
 #include "hwc_copybit.h"
 #include "profiler.h"
@@ -396,8 +397,14 @@ static int hwc_set_primary(hwc_context_t *ctx,
         bool copybitDone = false;
         if(ctx->mCopyBit[dpy])
             copybitDone = ctx->mCopyBit[dpy]->draw(ctx, list, dpy, &fd);
+
         if(list->numHwLayers > 1)
             hwc_sync(ctx, list, dpy, fd);
+
+        if(!ctx->mHwcDebug[dpy])
+            ctx->mHwcDebug[dpy] = new HwcDebug(dpy);
+        ctx->mHwcDebug[dpy]->dumpFrameBuffer(list);
+
         if (!ctx->mVidOv[dpy]->draw(ctx, list)) {
             ALOGE("%s: VideoOverlay draw failed", __FUNCTION__);
             ret = -1;
@@ -450,6 +457,10 @@ static int hwc_set_external(hwc_context_t *ctx,
 
         if(list->numHwLayers > 1)
             hwc_sync(ctx, list, dpy, fd);
+
+        if(!ctx->mHwcDebug[dpy])
+            ctx->mHwcDebug[dpy] = new HwcDebug(dpy);
+        ctx->mHwcDebug[dpy]->dumpFrameBuffer(list);
 
         if (!ctx->mVidOv[dpy]->draw(ctx, list)) {
             ALOGE("%s: VideoOverlay::draw fail!", __FUNCTION__);
