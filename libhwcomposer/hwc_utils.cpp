@@ -140,8 +140,6 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDPComp = MDPComp::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres);
     MDPComp::init(ctx);
 
-    pthread_mutex_init(&(ctx->vstate.lock), NULL);
-    pthread_cond_init(&(ctx->vstate.cond), NULL);
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
     ctx->mExtDispConfiguring = false;
@@ -209,8 +207,6 @@ void closeContext(hwc_context_t *ctx)
         ctx->mMDPComp = NULL;
     }
 
-    pthread_mutex_destroy(&(ctx->vstate.lock));
-    pthread_cond_destroy(&(ctx->vstate.cond));
 }
 
 
