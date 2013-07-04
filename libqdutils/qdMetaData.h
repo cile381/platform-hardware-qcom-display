@@ -30,6 +30,7 @@
 #ifndef _QDMETADATA_H
 #define _QDMETADATA_H
 
+typedef int mpd_handle;
 
 typedef struct {
     int32_t hue;
@@ -64,8 +65,14 @@ typedef enum {
     PP_PARAM_VIDEO_FRAME  = 0x0010
 } DispParamType;
 
+extern "C" int perf_lock_acq(int, int, int[], int);
+extern "C" int perf_lock_rel(int);
+
 int setMetaData(private_handle_t *handle, DispParamType paramType, void *param);
 int getMetaData(private_handle_t *handle, DispParamType paramType, void *param);
+
+mpd_handle display_perf_boost_on();
+void display_perf_boost_off(mpd_handle mpDecisionHandle);
 
 #endif /* _QDMETADATA_H */
 
