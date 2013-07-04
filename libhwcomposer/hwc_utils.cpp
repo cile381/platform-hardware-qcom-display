@@ -913,6 +913,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     PipeArgs parg(mdpFlags, whf, z, isFg, static_cast<eRotFlags>(rotFlags));
     if(configMdp(ctx->mOverlay, parg, orient, crop, dst, dest) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
+        ctx->mLayerRotMap[dpy]->reset();
         return -1;
     }
     return 0;
