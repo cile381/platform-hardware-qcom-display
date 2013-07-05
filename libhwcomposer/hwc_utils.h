@@ -20,10 +20,12 @@
 
 #include <hardware/hwcomposer.h>
 #include <gralloc_priv.h>
+#include <cutils/sockets.h>
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
+#define DAEMON_SOCKET "pps"
 
 //Fwrd decls
 struct hwc_context_t;
@@ -140,6 +142,15 @@ inline void getLayerResolution(const hwc_layer_t* layer,
     width = displayFrame.right - displayFrame.left;
     height = displayFrame.bottom - displayFrame.top;
 }
+
+struct CablProp {
+    bool enabled;
+    bool start;
+    bool videoOnly;
+    //daemon_socket for connection to pp-daemon
+    int daemon_socket;
+};
+
 }; //qhwc namespace
 
 struct vsync_state {
@@ -178,6 +189,8 @@ struct hwc_context_t {
     qhwc::ExternalDisplay *mExtDisplay;
 
     qhwc::MDPInfo mMDP;
+
+    qhwc::CablProp mCablProp;
 
     //Vsync
     struct vsync_state vstate;
