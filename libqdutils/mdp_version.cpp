@@ -101,8 +101,8 @@ MDPVersion::MDPVersion()
             ptype = fb_finfo.id;
         }
         panel_type = *ptype;
-
     }
+    mPanelType = panel_type;
     close(fb_fd);
     mMDPVersion = mdp_version;
     mHasOverlay = false;
@@ -113,9 +113,26 @@ MDPVersion::MDPVersion()
     if(mMDPVersion >= MDSS_V5) {
         //TODO get this from driver
         mMDPDownscale = 4;
-    }
 
-    mPanelType = panel_type;
+        char split[64];
+        FILE* fp = fopen("/sys/class/graphics/fb0/msm_fb_split", "r");
+        if(fp){
+            //Format "left right" space as delimiter
+            if(fread(split, sizeof(char), 64, fp)) {
+                mSplit.mLeft = atoi(split);
+                ALOGI_IF(mSplit.mLeft, "Left Split=%d", mSplit.mLeft);
+                char *rght = strpbrk(split, " ");
+                if(rght)
+                    mSplit.mRight = atoi(rght + 1);
+                ALOGI_IF(rght, "Right Split=%d", mSplit.mRight);
+            }
+        } else {
+            ALOGE("Failed to open mdss_fb_split node");
+        }
+
+        if(fp)
+            fclose(fp);
+    }
 }
 
 bool MDPVersion::supportsDecimation() {
@@ -132,7 +149,17 @@ bool MDPVersion::supportsBWC() {
 }
 
 bool MDPVersion::is8x26() {
-    return mMdpRev == MDSS_MDP_HW_REV_101;
+    // check for 8x26 variants
+    // chip variants have same major number and minor numbers usually vary
+    // for e.g., MDSS_MDP_HW_REV_101 is 0x10010000
+    //                                    1001       -  major number
+    //                                        0000   -  minor number
+    // 8x26 v1 minor number is 0000
+    //      v2 minor number is 0001 etc..
+    if( mMdpRev >= MDSS_MDP_HW_REV_101 && mMdpRev < MDSS_MDP_HW_REV_102) {
+        return true;
+    }
+    return false;
 }
 
 }; //namespace qdutils
