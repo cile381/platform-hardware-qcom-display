@@ -113,7 +113,7 @@ int getMetaData(private_handle_t *handle, DispParamType paramType,
 
 mpd_handle display_perf_boost_on()
 {
-    int params[1] = { CPUS_ONLINE_3 };
+    int params[1] = { CPUS_ONLINE_MIN_3 };
     return perf_lock_acq(0, 0, params, sizeof(params) / sizeof(int));
 }
 
