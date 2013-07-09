@@ -921,8 +921,6 @@ int display_commit(hwc_context_t *ctx, int dpy) {
     if(ioctl(ctx->dpyAttr[dpy].fd, MSMFB_DISPLAY_COMMIT, &commit_info) == -1) {
         ALOGE("%s:MSMFB_DISPLAY_COMMIT failed for %d", __FUNCTION__,dpy);
         return -errno;
-    } else {
-        ALOGE("Display commit has been called for dpy = %d and is successful, %s",dpy, __FUNCTION__);
     }
     return 0;
 }
