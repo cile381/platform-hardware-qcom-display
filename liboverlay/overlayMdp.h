@@ -251,7 +251,7 @@ public:
     int getSrcMemoryId() const;
 
     /* calls wrapper play */
-    bool play(int fd, uint32_t offset);
+    bool play(int fd, uint32_t offset, VideoFrame_t *frc);
 
     /* dump state of the object */
     void dump() const;
@@ -513,9 +513,19 @@ inline void MdpData::setFlags(int mdpFlags) {
 
 inline int MdpData::getFd() const { return mFd.getFD(); }
 
-inline bool MdpData::play(int fd, uint32_t offset) {
+inline bool MdpData::play(int fd, uint32_t offset, VideoFrame_t *frc) {
     mOvData.data.memory_id = fd;
     mOvData.data.offset = offset;
+    if (frc) {
+        memset(&mOvData.frc_data, 0 , sizeof(struct msmfb_frc_data));
+        mOvData.frc_data.enable = frc->frc_enable;
+        mOvData.frc_data.frame_rate = frc->fp100s;
+        mOvData.frc_data.frame_cnt = frc->counter;
+        mOvData.frc_data.timestamp = (uint32_t)(frc->timestamp / 100);
+        mOvData.frc_data.render_delay =(uint32_t)((frc->hwc_play_time - frc->render_time) / 100);
+    } else {
+        mOvData.frc_data.enable = false;
+    }
     if(!mdp_wrapper::play(mFd.getFD(), mOvData)){
         ALOGE("MdpData failed to play");
         dump();

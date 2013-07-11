@@ -48,7 +48,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -160,8 +160,8 @@ inline bool FloatingPipe::commit() {
     mSessionOpen = true;
     return true;
 }
-inline bool FloatingPipe::queueBuffer(int fd, uint32_t offset) {
-    return mFloating.queueBuffer(fd, offset);
+inline bool FloatingPipe::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mFloating.queueBuffer(fd, offset, frc);
 }
 inline bool FloatingPipe::setCrop(const utils::Dim& dim) {
     mBorderFill_rect_w = dim.w;

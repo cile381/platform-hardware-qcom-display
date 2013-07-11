@@ -49,7 +49,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -73,8 +73,8 @@ inline bool VideoExtPipe::init(RotatorBase* rot) {
 }
 inline bool VideoExtPipe::close() { return mVideoExt.close(); }
 inline bool VideoExtPipe::commit() { return mVideoExt.commit(); }
-inline bool VideoExtPipe::queueBuffer(int fd, uint32_t offset) {
-    return mVideoExt.queueBuffer(fd, offset);
+inline bool VideoExtPipe::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mVideoExt.queueBuffer(fd, offset, frc);
 }
 inline bool VideoExtPipe::setCrop(const utils::Dim& dim) {
     return mVideoExt.setCrop(dim);

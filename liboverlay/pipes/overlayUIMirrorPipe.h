@@ -49,7 +49,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& dim);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -76,8 +76,8 @@ inline bool UIMirrorPipe::init(RotatorBase* rot) {
 }
 inline bool UIMirrorPipe::close() { return mUI.close(); }
 inline bool UIMirrorPipe::commit() { return mUI.commit(); }
-inline bool UIMirrorPipe::queueBuffer(int fd, uint32_t offset) {
-    return mUI.queueBuffer(fd, offset);
+inline bool UIMirrorPipe::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mUI.queueBuffer(fd, offset, frc);
 }
 inline bool UIMirrorPipe::setCrop(const utils::Dim& dim) {
     return mUI.setCrop(dim); }

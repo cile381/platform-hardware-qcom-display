@@ -53,7 +53,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -85,7 +85,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -117,7 +117,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -150,7 +150,7 @@ public:
     bool init(RotatorBase* rot);
     bool close();
     bool commit();
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
     bool setCrop(const utils::Dim& d);
     bool setPosition(const utils::Dim& dim);
     bool setTransform(const utils::eTransform& param);
@@ -194,8 +194,8 @@ inline bool M3DExtPipe<CHAN>::close() {
 template <int CHAN>
 inline bool M3DExtPipe<CHAN>::commit() { return mM3d.commit(); }
 template <int CHAN>
-inline bool M3DExtPipe<CHAN>::queueBuffer(int fd, uint32_t offset) {
-    return mM3d.queueBuffer(fd, offset);
+inline bool M3DExtPipe<CHAN>::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mM3d.queueBuffer(fd, offset, frc);
 }
 template <int CHAN>
 inline bool M3DExtPipe<CHAN>::setCrop(const utils::Dim& d) {
@@ -274,8 +274,8 @@ inline bool M3DPrimaryPipe<CHAN>::close() {
 template <int CHAN>
 inline bool M3DPrimaryPipe<CHAN>::commit() { return mM3d.commit(); }
 template <int CHAN>
-inline bool M3DPrimaryPipe<CHAN>::queueBuffer(int fd, uint32_t offset) {
-    return mM3d.queueBuffer(fd, offset);
+inline bool M3DPrimaryPipe<CHAN>::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mM3d.queueBuffer(fd, offset, frc);
 }
 template <int CHAN>
 inline bool M3DPrimaryPipe<CHAN>::setCrop(const utils::Dim& d) {
@@ -351,8 +351,8 @@ inline bool S3DExtPipe<CHAN>::commit() {
     return mS3d.commit();
 }
 template <int CHAN>
-inline bool S3DExtPipe<CHAN>::queueBuffer(int fd, uint32_t offset) {
-    return mS3d.queueBuffer(fd, offset);
+inline bool S3DExtPipe<CHAN>::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mS3d.queueBuffer(fd, offset, frc);
 }
 template <int CHAN>
 inline bool S3DExtPipe<CHAN>::setCrop(const utils::Dim& d) {
@@ -441,8 +441,8 @@ inline bool S3DPrimaryPipe<CHAN>::commit() {
     return mS3d.commit();
 }
 template <int CHAN>
-inline bool S3DPrimaryPipe<CHAN>::queueBuffer(int fd, uint32_t offset) {
-    return mS3d.queueBuffer(fd, offset);
+inline bool S3DPrimaryPipe<CHAN>::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mS3d.queueBuffer(fd, offset, frc);
 }
 template <int CHAN>
 inline bool S3DPrimaryPipe<CHAN>::setCrop(const utils::Dim& d) {
