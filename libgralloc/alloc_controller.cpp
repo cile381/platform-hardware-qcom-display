@@ -75,10 +75,9 @@ static bool canFallback(int usage, bool triedSystem)
 
 static bool useUncached(int usage)
 {
-    // System heaps cannot be uncached
-    if(usage & GRALLOC_USAGE_PRIVATE_SYSTEM_HEAP)
-        return false;
-    if (usage & GRALLOC_USAGE_PRIVATE_UNCACHED)
+    if (usage & GRALLOC_USAGE_PRIVATE_UNCACHED ||
+        usage & GRALLOC_USAGE_SW_WRITE_RARELY  ||
+        usage & GRALLOC_USAGE_SW_READ_RARELY)
         return true;
     return false;
 }
@@ -224,6 +223,9 @@ int IonController::allocate(alloc_data& data, int usage)
                                 trying to use IOMMU instead !!");
         ionFlags |= ION_HEAP(ION_IOMMU_HEAP_ID);
     }
+
+    if(usage & GRALLOC_USAGE_PRIVATE_CAMERA_HEAP)
+        ionFlags |= ION_HEAP(ION_CAMERA_HEAP_ID);
 
     if(usage & GRALLOC_USAGE_PRIVATE_ADSP_HEAP)
         ionFlags |= ION_HEAP(ION_ADSP_HEAP_ID);

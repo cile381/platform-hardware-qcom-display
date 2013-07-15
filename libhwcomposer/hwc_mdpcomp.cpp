@@ -37,6 +37,7 @@ IdleInvalidator *MDPComp::idleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
 bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
+bool MDPComp::sEnableMixedMode = true;
 int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
 
 MDPComp* MDPComp::getObject(const int& width, int dpy) {
@@ -95,6 +96,13 @@ bool MDPComp::init(hwc_context_t *ctx) {
             ALOGE("%s: Failed to setup primary base pipe", __FUNCTION__);
             return false;
         }
+    }
+
+    sEnableMixedMode = true;
+    if((property_get("debug.mdpcomp.mixedmode.disable", property, NULL) > 0) &&
+       (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
+        (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
+        sEnableMixedMode = false;
     }
 
     sDebugLogs = false;
@@ -352,11 +360,18 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
 }
 
 bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
-    int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     bool ret = true;
+    const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
 
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
+        ret = false;
+    } else if(qdutils::MDPVersion::getInstance().is8x26() &&
+            ctx->mVideoTransFlag &&
+            ctx->mExtDisplay->isExternalConnected()) {
+        //1 Padding round to shift pipes across mixers
+        ALOGD_IF(isDebug(),"%s: MDP Comp. video transition padding round",
+                __FUNCTION__);
         ret = false;
     } else if(ctx->mExtDispConfiguring) {
         ALOGD_IF( isDebug(),"%s: External Display connection is pending",
@@ -418,13 +433,21 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
                 __FUNCTION__);
             return false;
         }
+
+        //For 8x26 with panel width>1k, if RGB layer needs HFLIP fail mdp comp
+        // may not need it if Gfx pre-rotation can handle all flips & rotations
+        if(qdutils::MDPVersion::getInstance().is8x26() &&
+                                (ctx->dpyAttr[mDpy].xres > 1024) &&
+                                (layer->transform & HWC_TRANSFORM_FLIP_H) &&
+                                (!isYuvBuffer(hnd)))
+                   return false;
     }
 
     //If all above hard conditions are met we can do full or partial MDP comp.
     bool ret = false;
     if(fullMDPComp(ctx, list)) {
         ret = true;
-    } else if (partialMDPComp(ctx, list)) {
+    } else if(partialMDPComp(ctx, list)) {
         ret = true;
     }
     return ret;
@@ -458,6 +481,12 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 bool MDPComp::partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list)
 {
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+
+    if(!sEnableMixedMode) {
+        //Mixed mode is disabled. No need to even try caching.
+        return false;
+    }
+
     //Setup mCurrentFrame
     mCurrentFrame.reset(numAppLayers);
     updateLayerCache(ctx, list);
@@ -718,8 +747,16 @@ bool MDPComp::programYUV(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
-    //reset old data
     const int numLayers = ctx->listStats[mDpy].numAppLayers;
+
+    //number of app layers exceeds MAX_NUM_APP_LAYERS fall back to GPU
+    //do not cache the information for next draw cycle.
+    if(numLayers > MAX_NUM_APP_LAYERS) {
+        ALOGD_IF(isDebug(), "%s: Number of App layers exceeded the limit ",
+                 __FUNCTION__);
+        return 0;
+    }
+    //reset old data
     mCurrentFrame.reset(numLayers);
 
     //Hard conditions, if not met, cannot do MDP comp
@@ -760,7 +797,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         //Destination over
         mCurrentFrame.fbZ = -1;
         if(mCurrentFrame.fbCount)
-            mCurrentFrame.fbZ = ctx->listStats[mDpy].yuvCount;
+            mCurrentFrame.fbZ = mCurrentFrame.mdpCount;
 
         mCurrentFrame.map();
         if(!programYUV(ctx, list)) {
@@ -829,7 +866,7 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
-        } else if(!qhwc::needsScaling(layer)
+        } else if(!qhwc::needsScaling(ctx, layer, mDpy)
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
             type = MDPCOMP_OV_DMA;
@@ -971,7 +1008,8 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
 
         hwc_layer_1_t* layer = &list->hwLayers[index];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        PipeLayerPair& info = mCurrentFrame.mdpToLayer[index];
+        int mdpIndex = mCurrentFrame.layerToMDP[index];
+        PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
         info.pipeInfo = new MdpPipeInfoHighRes;
         info.rot = NULL;
         MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
@@ -979,7 +1017,7 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
-        } else if(!qhwc::needsScaling(layer)
+        } else if(!qhwc::needsScaling(ctx, layer, mDpy)
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
             type = MDPCOMP_OV_DMA;
