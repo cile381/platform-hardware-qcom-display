@@ -122,6 +122,7 @@ struct BwcPM {
 enum {
     HWC_MDPCOMP = 0x00000001,
     HWC_COPYBIT = 0x00000002,
+    HWC_FORMAT_RB_SWAP = 0x00000040,
 };
 
 class LayerRotMap {
