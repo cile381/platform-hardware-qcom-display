@@ -64,6 +64,7 @@ struct private_module_t {
     bool fbPanDone;
     pthread_mutex_t fbPanLock;
     pthread_cond_t fbPanCond;
+    bool bPremultAlpha;
 };
 
 

@@ -188,10 +188,23 @@ void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list)
     bool isExtBlockPresent = false; //is BLOCK layer present
     bool yuvSecure = false;
     int layerS3DFormat = 0; // is the layer format 3D
+    framebuffer_device_t *fbDev = ctx->mFbDev;
+    private_module_t* m;
+    if(fbDev){
+        m = reinterpret_cast<private_module_t*>(
+                fbDev->common.module);
+        m->bPremultAlpha = false;
+    }
 
     for (size_t i = 0; i < list->numHwLayers; i++) {
         private_handle_t *hnd =
             (private_handle_t *)list->hwLayers[i].handle;
+
+        if(HWC_BLENDING_PREMULT == list->hwLayers[i].blending){
+            if(fbDev){
+                m->bPremultAlpha = true;
+            }
+        }
 
         if (UNLIKELY(isYuvBuffer(hnd))) {
             MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
