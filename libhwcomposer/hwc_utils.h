@@ -33,7 +33,7 @@
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
-#define MAX_NUM_LAYERS 32 //includes fb layer
+#define MAX_NUM_APP_LAYERS 32
 
 // For support of virtual displays
 #define HWC_DISPLAY_VIRTUAL     (HWC_DISPLAY_EXTERNAL+1)
@@ -90,7 +90,7 @@ struct ListStats {
     int fbLayerIndex; //Always last for now. = numAppLayers
     //Video specific
     int yuvCount;
-    int yuvIndices[MAX_NUM_LAYERS];
+    int yuvIndices[MAX_NUM_APP_LAYERS];
     int extOnlyLayerIndex;
     bool needsAlphaScale;
     bool preMultipliedAlpha;
@@ -107,6 +107,12 @@ struct LayerProp {
 struct VsyncState {
     bool enable;
     bool fakevsync;
+};
+
+struct BwcPM {
+    static void setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
+            const hwc_rect_t& dst, const int& transform,
+            ovutils::eMdpFlags& mdpFlags);
 };
 
 // LayerProp::flag values
@@ -130,7 +136,7 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 bool isSecuring(hwc_context_t* ctx, hwc_layer_1_t const* layer);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
-bool needsScaling(hwc_layer_1_t const* layer);
+bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 
@@ -310,6 +316,8 @@ struct hwc_context_t {
     bool isPaddingRound;
     // External Orientation
     int mExtOrientation;
+    //Flags the transition of a video session
+    bool mVideoTransFlag;
 };
 
 namespace qhwc {

@@ -82,8 +82,13 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         ovutils::Whf info(hnd->width, hnd->height,
                           ovutils::getMdpFormat(hnd->format), hnd->size);
 
-        //Request an RGB pipe
-        ovutils::eDest dest = ov.nextPipe(ovutils::OV_MDP_PIPE_ANY, mDpy);
+        //Request a pipe
+        ovutils::eMdpPipeType type = ovutils::OV_MDP_PIPE_ANY;
+        if(qdutils::MDPVersion::getInstance().is8x26() && mDpy) {
+            //For 8x26 external always use DMA pipe
+            type = ovutils::OV_MDP_PIPE_DMA;
+        }
+        ovutils::eDest dest = ov.nextPipe(type, mDpy);
         if(dest == ovutils::OV_INVALID) { //None available
             ALOGE("%s: No pipes available to configure fb for dpy %d",
                 __FUNCTION__, mDpy);
@@ -120,21 +125,23 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
             displayFrame = sourceCrop;
         } else if((!mDpy || (mDpy && !ctx->mExtOrientation))
                                && extOnlyLayerIndex == -1) {
-            getNonWormholeRegion(list, sourceCrop);
-            displayFrame = sourceCrop;
+            if(!qdutils::MDPVersion::getInstance().is8x26()) {
+                getNonWormholeRegion(list, sourceCrop);
+                displayFrame = sourceCrop;
+            }
         }
 #endif
         ovutils::Dim dpos(displayFrame.left,
                           displayFrame.top,
                           displayFrame.right - displayFrame.left,
                           displayFrame.bottom - displayFrame.top);
-        // Calculate the actionsafe dimensions for External(dpy = 1 or 2)
-        if(mDpy && !ctx->mExtOrientation)
-            getActionSafePosition(ctx, mDpy, dpos.x, dpos.y, dpos.w, dpos.h);
 
-        if(mDpy) {
+        if(mDpy && !qdutils::MDPVersion::getInstance().is8x26()) {
+            // Get Aspect Ratio for external
             getAspectRatioPosition(ctx, mDpy, ctx->mExtOrientation, dpos.x,
                                     dpos.y, dpos.w, dpos.h);
+            // Calculate the actionsafe dimensions for External(dpy = 1 or 2)
+            getActionSafePosition(ctx, mDpy, dpos.x, dpos.y, dpos.w, dpos.h);
             // Convert dim to hwc_rect_t
             displayFrame.left = dpos.x;
             displayFrame.top = dpos.y;
@@ -233,15 +240,15 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         ovutils::Whf info(hnd->width, hnd->height,
                           ovutils::getMdpFormat(hnd->format), hnd->size);
 
-        //Request left RGB pipe
-        ovutils::eDest destL = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, mDpy);
+        //Request left pipe
+        ovutils::eDest destL = ov.nextPipe(ovutils::OV_MDP_PIPE_ANY, mDpy);
         if(destL == ovutils::OV_INVALID) { //None available
             ALOGE("%s: No pipes available to configure fb for dpy %d's left"
                     " mixer", __FUNCTION__, mDpy);
             return false;
         }
-        //Request right RGB pipe
-        ovutils::eDest destR = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, mDpy);
+        //Request right pipe
+        ovutils::eDest destR = ov.nextPipe(ovutils::OV_MDP_PIPE_ANY, mDpy);
         if(destR == ovutils::OV_INVALID) { //None available
             ALOGE("%s: No pipes available to configure fb for dpy %d's right"
                     " mixer", __FUNCTION__, mDpy);

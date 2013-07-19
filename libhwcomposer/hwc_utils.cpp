@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 #define HWC_UTILS_DEBUG 0
+#include <math.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 #include <binder/IServiceManager.h>
@@ -108,6 +109,13 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xdpi = xdpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
+
+    //Unblank primary on first boot
+    if(ioctl(fb_fd, FBIOBLANK,FB_BLANK_UNBLANK) < 0) {
+        ALOGE("%s: Failed to unblank display", __FUNCTION__);
+        return -errno;
+    }
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isActive = true;
 
     return 0;
 }
@@ -241,6 +249,18 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     if(ctx->mExtDisplay->isCEUnderscanSupported())
         return;
 
+    char value[PROPERTY_VALUE_MAX];
+    // Read action safe properties
+    property_get("persist.sys.actionsafe.width", value, "0");
+    int asWidthRatio = atoi(value);
+    property_get("persist.sys.actionsafe.height", value, "0");
+    int asHeightRatio = atoi(value);
+
+    if(!asWidthRatio && !asHeightRatio) {
+        //No action safe ratio set, return
+        return;
+    }
+
     float wRatio = 1.0;
     float hRatio = 1.0;
     float xRatio = 1.0;
@@ -249,17 +269,15 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     float fbWidth = ctx->dpyAttr[dpy].xres;
     float fbHeight = ctx->dpyAttr[dpy].yres;
 
+    // Since external is rotated 90, need to swap width/height
+    if(ctx->mExtOrientation & HWC_TRANSFORM_ROT_90)
+        swap(fbWidth, fbHeight);
+
     float asX = 0;
     float asY = 0;
     float asW = fbWidth;
     float asH= fbHeight;
-    char value[PROPERTY_VALUE_MAX];
 
-    // Apply action safe parameters
-    property_get("persist.sys.actionsafe.width", value, "0");
-    int asWidthRatio = atoi(value);
-    property_get("persist.sys.actionsafe.height", value, "0");
-    int asHeightRatio = atoi(value);
     // based on the action safe ratio, get the Action safe rectangle
     asW = fbWidth * (1.0f -  asWidthRatio / 100.0f);
     asH = fbHeight * (1.0f -  asHeightRatio / 100.0f);
@@ -290,12 +308,19 @@ void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
     switch(orientation) {
         case HAL_TRANSFORM_ROT_90:
         case HAL_TRANSFORM_ROT_270:
-            x = (fbWidth - (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres
-                        * fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres))/2;
             y = 0;
-            w = (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres *
-                    fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres);
             h = fbHeight;
+            if (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres <
+                ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres) {
+                // Portrait primary panel
+                w = (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres *
+                     fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres);
+            } else {
+                //Landscape primary panel
+                w = (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres *
+                     fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres);
+            }
+            x = (fbWidth - w)/2;
             break;
         default:
             //Do nothing
@@ -306,15 +331,16 @@ void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
 }
 
 
-bool needsScaling(hwc_layer_1_t const* layer) {
+bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+        const int& dpy) {
     int dst_w, dst_h, src_w, src_h;
 
     hwc_rect_t displayFrame  = layer->displayFrame;
     hwc_rect_t sourceCrop = layer->sourceCrop;
+    trimLayer(ctx, dpy, layer->transform, sourceCrop, displayFrame);
 
     dst_w = displayFrame.right - displayFrame.left;
     dst_h = displayFrame.bottom - displayFrame.top;
-
     src_w = sourceCrop.right - sourceCrop.left;
     src_h = sourceCrop.bottom - sourceCrop.top;
 
@@ -324,8 +350,9 @@ bool needsScaling(hwc_layer_1_t const* layer) {
     return false;
 }
 
-bool isAlphaScaled(hwc_layer_1_t const* layer) {
-    if(needsScaling(layer) && isAlphaPresent(layer)) {
+bool isAlphaScaled(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+        const int& dpy) {
+    if(needsScaling(ctx, layer, dpy) && isAlphaPresent(layer)) {
         return true;
     }
     return false;
@@ -348,7 +375,8 @@ bool isAlphaPresent(hwc_layer_1_t const* layer) {
 
 void setListStats(hwc_context_t *ctx,
         const hwc_display_contents_1_t *list, int dpy) {
-
+    const int prevYuvCount = ctx->listStats[dpy].yuvCount;
+    memset(&ctx->listStats[dpy], 0, sizeof(ListStats));
     ctx->listStats[dpy].numAppLayers = list->numHwLayers - 1;
     ctx->listStats[dpy].fbLayerIndex = list->numHwLayers - 1;
     ctx->listStats[dpy].skipCount = 0;
@@ -359,12 +387,21 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
 
-    for (size_t i = 0; i < list->numHwLayers; i++) {
+    //reset yuv indices
+    memset(ctx->listStats[dpy].yuvIndices, -1, MAX_NUM_APP_LAYERS);
+
+    for (size_t i = 0; i < (list->numHwLayers - 1); i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        //reset stored yuv index
-        ctx->listStats[dpy].yuvIndices[i] = -1;
+#ifdef QCOM_BSP
+        if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
+            ctx->listStats[dpy].isDisplayAnimating = true;
+        }
+#endif
+        // continue if i reaches MAX_NUM_APP_LAYERS
+        if(i >= MAX_NUM_APP_LAYERS)
+            continue;
 
         if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
             continue;
@@ -390,13 +427,11 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].preMultipliedAlpha = true;
 
         if(!ctx->listStats[dpy].needsAlphaScale)
-            ctx->listStats[dpy].needsAlphaScale = isAlphaScaled(layer);
+            ctx->listStats[dpy].needsAlphaScale =
+                    isAlphaScaled(ctx, layer, dpy);
 
         if(UNLIKELY(isExtOnly(hnd))){
             ctx->listStats[dpy].extOnlyLayerIndex = i;
-        }
-        if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
-            ctx->listStats[dpy].isDisplayAnimating = true;
         }
     }
     if(ctx->listStats[dpy].yuvCount > 0) {
@@ -429,6 +464,12 @@ void setListStats(hwc_context_t *ctx,
             }
             Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
         }
+    }
+
+    //The marking of video begin/end is useful on some targets where we need
+    //to have a padding round to be able to shift pipes across mixers.
+    if(prevYuvCount != ctx->listStats[dpy].yuvCount) {
+        ctx->mVideoTransFlag = true;
     }
 }
 
@@ -584,7 +625,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                                                         int fd) {
     int ret = 0;
     struct mdp_buf_sync data;
-    int acquireFd[MAX_NUM_LAYERS];
+    int acquireFd[MAX_NUM_APP_LAYERS];
     int count = 0;
     int releaseFd = -1;
     int fbFd = -1;
@@ -721,12 +762,6 @@ void setMdpFlags(hwc_layer_1_t *layer,
         if(transform & HWC_TRANSFORM_ROT_90) {
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_SOURCE_ROTATED_90);
-            // enable bandwidth compression only if src width < 2048
-            if(qdutils::MDPVersion::getInstance().supportsBWC() &&
-                hnd->width < qdutils::MAX_DISPLAY_DIM) {
-                ovutils::setMdpFlags(mdpFlags,
-                                 ovutils::OV_MDSS_MDP_BWC_EN);
-            }
         }
     }
 
@@ -763,6 +798,9 @@ int configRotator(Rotator *rot, const Whf& whf,
         if (ovutils::isYuv(whf.format)) {
             ovutils::normalizeCrop((uint32_t&)crop.left, crop_w);
             ovutils::normalizeCrop((uint32_t&)crop.top, crop_h);
+            // For interlaced, crop.h should be 4-aligned
+            if ((mdpFlags & ovutils::OV_MDP_DEINTERLACE) && (crop_h % 4))
+                crop_h = ovutils::aligndown(crop_h, 4);
             crop.right = crop.left + crop_w;
             crop.bottom = crop.top + crop_h;
         }
@@ -860,6 +898,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             crop = ctx->mPrevCropVideo;
             dst = ctx->mPrevDestVideo;
             transform = ctx->mPrevTransformVideo;
+            orient = static_cast<eTransform>(transform);
             //In you tube use case when a device rotated from landscape to
             // portrait, set the isFg flag and zOrder to avoid displaying UI on
             // hdmi during animation
@@ -870,14 +909,16 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         }
     }
 
-    uint32_t x = dst.left, y  = dst.right;
+    uint32_t x = dst.left, y  = dst.top;
     uint32_t w = dst.right - dst.left;
     uint32_t h = dst.bottom - dst.top;
 
-    if(dpy && ctx->mExtOrientation) {
+    if(dpy) {
         // Just need to set the position to portrait as the transformation
         // will already be set to required orientation on TV
         getAspectRatioPosition(ctx, dpy, ctx->mExtOrientation, x, y, w, h);
+        // Calculate the actionsafe dimensions for External(dpy = 1 or 2)
+        getActionSafePosition(ctx, dpy, x, y, w, h);
         // Convert position to hwc_rect_t
         dst.left = x;
         dst.top = y;
@@ -904,6 +945,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
         *rot = ctx->mRotMgr->getNext();
         if(*rot == NULL) return -1;
+        BwcPM::setBwc(ctx, crop, dst, transform, mdpFlags);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
@@ -961,6 +1003,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             crop = ctx->mPrevCropVideo;
             dst = ctx->mPrevDestVideo;
             transform = ctx->mPrevTransformVideo;
+            orient = static_cast<eTransform>(transform);
             //In you tube use case when a device rotated from landscape to
             // portrait, set the isFg flag and zOrder to avoid displaying UI on
             // hdmi during animation
@@ -1068,6 +1111,52 @@ bool canUseRotator(hwc_context_t *ctx) {
     if(ctx->mMDP.version == qdutils::MDP_V3_0_4)
         return false;
     return true;
+}
+
+
+void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
+            const hwc_rect_t& dst, const int& transform,
+            ovutils::eMdpFlags& mdpFlags) {
+    //Target doesnt support Bwc
+    if(!qdutils::MDPVersion::getInstance().supportsBWC()) {
+        return;
+    }
+    //src width > MAX mixer supported dim
+    if((crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
+        return;
+    }
+    //External connected
+    if(ctx->mExtDisplay->isExternalConnected()) {
+        return;
+    }
+    //Decimation necessary, cannot use BWC. H/W requirement.
+    if(qdutils::MDPVersion::getInstance().supportsDecimation()) {
+        int src_w = crop.right - crop.left;
+        int src_h = crop.bottom - crop.top;
+        int dst_w = dst.right - dst.left;
+        int dst_h = dst.bottom - dst.top;
+        if(transform & HAL_TRANSFORM_ROT_90) {
+            swap(src_w, src_h);
+        }
+        float horDscale = 0.0f;
+        float verDscale = 0.0f;
+        int horzDeci = 0;
+        int vertDeci = 0;
+        ovutils::getDecimationFactor(src_w, src_h, dst_w, dst_h, horDscale,
+                verDscale);
+        //TODO Use log2f once math.h has it
+        if((int)horDscale)
+            horzDeci = (int)(log(horDscale) / log(2));
+        if((int)verDscale)
+            vertDeci = (int)(log(verDscale) / log(2));
+        if(horzDeci || vertDeci) return;
+    }
+    //Property
+    char value[PROPERTY_VALUE_MAX];
+    property_get("debug.disable.bwc", value, "0");
+     if(atoi(value)) return;
+
+    ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDSS_MDP_BWC_EN);
 }
 
 };//namespace qhwc
