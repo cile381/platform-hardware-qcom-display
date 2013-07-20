@@ -530,17 +530,17 @@ int ExternalDisplay::getModeOrder(int mode)
         case m1440x576i50_16_9:
             return 4; // 576i 16:9
         case m640x480p60_4_3:
-            return 5; // 640x480 4:3
+            return 6; // 640x480 4:3
         case m720x480p60_4_3:
-            return 6; // 480p 4:3
+            return 7; // 480p 4:3
         case m720x480p60_16_9:
-            return 7; // 480p 16:9
+            return 8; // 480p 16:9
         case m720x576p50_4_3:
-            return 8; // 576p 4:3
+            return 9; // 576p 4:3
         case m720x576p50_16_9:
-            return 9; // 576p 16:9
+            return 10; // 576p 16:9
         case m1920x1080i60_16_9:
-            return 10; // 1080i 16:9
+            return 5; // 1080i 16:9
         case m1280x720p50_16_9:
             return 11; // 720p@50Hz
         case m1280x720p60_16_9:
