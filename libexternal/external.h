@@ -26,6 +26,26 @@
 
 struct hwc_context_t;
 
+/* Video formates supported by the HDMI Standard */
+/* Indicates the resolution, pix clock and the aspect ratio */
+#define m640x480p60_4_3         1
+#define m720x480p60_4_3         2
+#define m720x480p60_16_9        3
+#define m1280x720p60_16_9       4
+#define m1920x1080i60_16_9      5
+#define m1440x480i60_4_3        6
+#define m1440x480i60_16_9       7
+#define m1920x1080p60_16_9      16
+#define m720x576p50_4_3         17
+#define m720x576p50_16_9        18
+#define m1280x720p50_16_9       19
+#define m1440x576i50_4_3        21
+#define m1440x576i50_16_9       22
+#define m1920x1080p50_16_9      31
+#define m1920x1080p24_16_9      32
+#define m1920x1080p25_16_9      33
+#define m1920x1080p30_16_9      34
+
 namespace qhwc {
 
 //Type of scanning of EDID(Video Capability Data Block)
@@ -60,6 +80,7 @@ public:
     void setActionSafeDimension(int w, int h);
     void setCustomMode(int mode) {mNewMode = mode; mCustomMode = mode;}
     void setNewMode(int mode) {mNewMode = mode;}
+    int getCustomMode() {return mCustomMode;};
     int ignoreRequest(const char *str);
     int  configureHDMIDisplay(int mode = -1);
     int  getNewMode();

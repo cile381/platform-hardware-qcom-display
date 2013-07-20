@@ -602,9 +602,18 @@ void trimLayer(hwc_context_t *ctx, const int& dpy, const int& transform,
         hwc_rect_t& crop, hwc_rect_t& dst) {
     int hw_w = ctx->dpyAttr[dpy].xres;
     int hw_h = ctx->dpyAttr[dpy].yres;
-    if(dst.left < 0 || dst.top < 0 ||
-            dst.right > hw_w || dst.bottom > hw_h) {
-        hwc_rect_t scissor = {0, 0, hw_w, hw_h };
+    hwc_rect_t scissor = {0, 0, hw_w, hw_h };
+    int custMode = ctx->mExtDisplay->getCustomMode();
+    if (((hw_h == 480) || (hw_h == 576)) && ((custMode == m720x480p60_4_3) ||
+        (custMode == m720x480p60_16_9) || (custMode == m640x480p60_4_3) ||
+        (custMode == m720x576p50_4_3) || (custMode == m720x576p50_16_9))) {
+        /* Keep 16:9 ratio, assuming the primary mode is either 1080p or 720p */
+        int new_hw_h = hw_w * 9 / 16;
+        scissor.top = (hw_h - new_hw_h) / 2;
+        scissor.bottom = scissor.top + new_hw_h;
+    }
+    if(dst.left < 0 || dst.top < scissor.top ||
+            dst.right > hw_w || dst.bottom > scissor.bottom) {
         qhwc::calculate_crop_rects(crop, dst, scissor, transform);
     }
 }
