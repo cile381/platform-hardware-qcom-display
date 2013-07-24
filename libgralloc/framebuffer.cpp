@@ -189,6 +189,7 @@ static void update_framebuffer(struct private_module_t* m) {
 static int fb_compositionComplete(struct framebuffer_device_t* dev)
 {
     // TODO: Properly implement composition complete callback
+    glFinish();
 
     return 0;
 }
