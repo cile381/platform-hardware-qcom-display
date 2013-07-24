@@ -610,8 +610,14 @@ int ExternalDisplay::getBestMode() {
     int bestOrder = 0;
     int bestMode = m640x480p60_4_3;
     Mutex::Autolock lock(mExtDispLock);
+    if (mEDIDModes[0]) {
+        /*Preferred mode at 0th index*/
+        bestMode = mEDIDModes[0];
+        return bestMode;
+    }
     // for all the edid read, get the best mode
-    for(int i = 0; i < mModeCount; i++) {
+    // start from 1st index if not preferred
+    for(int i = 1; i < mModeCount; i++) {
         int mode = mEDIDModes[i];
         int order = getModeOrder(mode);
         if (order > bestOrder) {
