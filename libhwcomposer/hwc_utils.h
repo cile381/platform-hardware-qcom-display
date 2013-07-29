@@ -325,6 +325,8 @@ struct hwc_context_t {
     pthread_mutex_t mConfigChangeLock;
     pthread_cond_t mConfigChangeCond;
 
+    pthread_mutex_t mConfigLock;
+
     // used for signalling the commit Ext Disp thread
     bool mExtCommit;
     pthread_mutex_t mExtCommitLock;
