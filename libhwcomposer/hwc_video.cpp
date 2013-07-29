@@ -238,7 +238,7 @@ bool VideoOverlay::configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
 
     ovutils::PipeArgs parg(mdpFlags,
             info,
-            ovutils::ZORDER_1,
+            ovutils::ZORDER_0,
             isFgFlag,
             ovutils::ROT_DOWNSCALE_ENABLED);
     ov.setSource(parg, ovutils::OV_PIPE0);
