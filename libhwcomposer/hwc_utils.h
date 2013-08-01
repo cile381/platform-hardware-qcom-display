@@ -140,6 +140,7 @@ bool isSecuring(hwc_context_t* ctx);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
+bool setupBasePipe(hwc_context_t *ctx);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -269,6 +270,8 @@ struct hwc_context_t {
     struct vsync_state vstate;
     //DMA used for rotator
     bool mDMAInUse;
+    //Check if base pipe is set up
+    bool mBasePipeSetup;
 };
 
 static inline bool isSkipPresent (hwc_context_t *ctx, int dpy) {
