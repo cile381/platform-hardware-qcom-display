@@ -22,6 +22,7 @@
 #include "qdMetaData.h"
 #include "mdp_version.h"
 #include <overlayRotator.h>
+#include <math.h>
 
 using overlay::Rotator;
 using namespace overlay::utils;
@@ -226,6 +227,46 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
     return ovutils::OV_INVALID;
 }
 
+bool MDPComp::needToFallbackToGPU(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list) {
+    /* Fallback to GPU due to badwidth limitations */
+    int numAppLayers = ctx->listStats[sDpy].numAppLayers;
+    int bpp = 0, fps;
+    unsigned long quota = 0;
+    unsigned long long ab_quota_total = 0;
+    unsigned long shift = 16;
+    unsigned long long fallback_factor = 0x8E620000UL;
+    int ab_factor = 200;
+    bool isRGB = true;
+
+    fps = round(1000000000l /
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period);
+
+    for(int i = 0; i < numAppLayers; ++i) {
+        hwc_layer_1_t* layer = &list->hwLayers[i];
+        if(!layer)
+            continue;
+
+        hwc_rect_t sourceCrop = layer->sourceCrop;
+        hwc_rect_t crop =  sourceCrop;
+        int crop_w = crop.right - crop.left;
+        int crop_h = crop.bottom - crop.top;
+
+        bpp = getBppandFormat(layer,&isRGB);
+        if(!isRGB)
+            return false;
+        quota = crop_w * crop_h * fps * bpp;
+        quota >>= shift;
+        quota = quota * ab_factor / 100;
+        ab_quota_total += (quota << shift);
+    }
+
+    if(ab_quota_total > fallback_factor)
+        return true;
+
+    return false;
+}
+
 bool MDPComp::isDoable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     //Number of layers
@@ -247,6 +288,11 @@ bool MDPComp::isDoable(hwc_context_t *ctx,
     if(ctx->mExtDispConfiguring) {
         ALOGD_IF( isDebug(),"%s: External Display connection is pending",
                 __FUNCTION__);
+        return false;
+    }
+
+    if(needToFallbackToGPU(ctx, list)) {
+        ALOGD_IF(isDebug(),"%s: High BW requirement fall back to GPU",__FUNCTION__);
         return false;
     }
 

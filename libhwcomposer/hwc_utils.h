@@ -149,6 +149,7 @@ bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
+int getBppandFormat(hwc_layer_1_t const* layer, bool* isRGB);
 bool setupBasePipe(hwc_context_t *ctx, int dpy);
 void setupExternalObjs(hwc_context_t* ctx, int dpy);
 void cleanExternalObjs(hwc_context_t* ctx, int dpy);

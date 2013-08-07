@@ -301,6 +301,8 @@ bool isAlphaScaled(hwc_layer_1_t const* layer) {
 
 bool isAlphaPresent(hwc_layer_1_t const* layer) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
+    if(!hnd)
+        return false;
     int format = hnd->format;
     switch(format) {
         case HAL_PIXEL_FORMAT_RGBA_8888:
@@ -310,6 +312,47 @@ bool isAlphaPresent(hwc_layer_1_t const* layer) {
         default : return false;
     }
     return false;
+}
+
+int getBppandFormat(hwc_layer_1_t const* layer, bool* isRGB) {
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
+    if(!hnd)
+        return false;
+    int format = hnd->format;
+    int bpp = 4;
+
+    *isRGB = true;
+    switch(format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_BGRA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+                bpp = 4;
+                break;
+        case HAL_PIXEL_FORMAT_RGB_565:
+        case HAL_PIXEL_FORMAT_RGBA_5551:
+        case HAL_PIXEL_FORMAT_RGBA_4444:
+                bpp = 2;
+                break;
+        case HAL_PIXEL_FORMAT_RGB_888:
+                bpp = 3;
+                break;
+        case HAL_PIXEL_FORMAT_YCrCb_420_SP_ADRENO:
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED:
+        case HAL_PIXEL_FORMAT_NV12_ENCODEABLE:
+        case HAL_PIXEL_FORMAT_YV12:
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP:
+        case HAL_PIXEL_FORMAT_YCrCb_420_SP:
+        case HAL_PIXEL_FORMAT_YCbCr_422_SP:
+        case HAL_PIXEL_FORMAT_YCrCb_422_SP:
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
+                bpp = 2;
+               *isRGB = false;
+                break;
+        default:
+                bpp = 4;
+                break;
+    }
+    return bpp;
 }
 
 void setListStats(hwc_context_t *ctx,

@@ -101,6 +101,9 @@ protected:
     void reset( hwc_context_t *ctx, hwc_display_contents_1_t* list );
     /* allocate MDP pipes from overlay */
     ovutils::eDest getMdpPipe(hwc_context_t *ctx, ePipeType type);
+    bool needToFallbackToGPU(hwc_context_t *ctx,
+                hwc_display_contents_1_t* list);
+
     /* checks for conditions where mdpcomp is not possible */
     bool isDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     /* sets up MDP comp for current frame */
