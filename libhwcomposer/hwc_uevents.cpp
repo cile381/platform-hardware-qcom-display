@@ -136,7 +136,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
         if(ctx->mExtDisplay->ignoreRequest(udata)) {
             ALOGD_IF(UEVENT_DEBUG,"No need to process this connection request"
                                   "str:%s",udata);
-           ctx->dpyAttr[dpy].isActive = true;
+           ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = true;
            return;
         }
     }
@@ -181,6 +181,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                         {
                             Locker::Autolock _l(ctx->mExtLock);
                             clear(ctx, dpy);
+                            ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
 #ifdef ANDROID_JELLYBEAN_MR1
                             //send hotplug disconnect event
                             ALOGD_IF(UEVENT_DEBUG, "sending hotplug: disconnect"
