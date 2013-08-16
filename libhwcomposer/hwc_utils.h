@@ -50,11 +50,13 @@ namespace qhwc {
 //fwrd decl
 class QueuedBufferStore;
 class ExternalDisplay;
+class VirtualDisplay;
 class IFBUpdate;
 class IVideoOverlay;
 class MDPComp;
 class CopyBit;
 class HwcDebug;
+class AssertiveDisplay;
 
 
 struct MDPInfo {
@@ -78,6 +80,9 @@ struct DisplayAttributes {
     // In pause state, composition is bypassed
     // used for WFD displays only
     bool isPause;
+    // To trigger padding round to clean up mdp
+    // pipes
+    bool isConfiguring;
 };
 
 struct ListStats {
@@ -314,6 +319,7 @@ struct hwc_context_t {
     qhwc::IFBUpdate *mFBUpdate[HWC_NUM_DISPLAY_TYPES];
     // External display related information
     qhwc::ExternalDisplay *mExtDisplay;
+    qhwc::VirtualDisplay *mVirtualDisplay;
     qhwc::MDPInfo mMDP;
     qhwc::VsyncState vstate;
     qhwc::DisplayAttributes dpyAttr[HWC_NUM_DISPLAY_TYPES];
@@ -321,6 +327,7 @@ struct hwc_context_t {
     qhwc::LayerProp *layerProp[HWC_NUM_DISPLAY_TYPES];
     qhwc::MDPComp *mMDPComp[HWC_NUM_DISPLAY_TYPES];
     qhwc::HwcDebug *mHwcDebug[HWC_NUM_DISPLAY_TYPES];
+    qhwc::AssertiveDisplay *mAD;
 
     // No animation on External display feature
     // Notifies hwcomposer about the device orientation before animation.
@@ -331,8 +338,8 @@ struct hwc_context_t {
     int mPrevTransformVideo;
     //Securing in progress indicator
     bool mSecuring;
-    //External Display configuring progress indicator
-    bool mExtDispConfiguring;
+    //WFD on proprietary stack
+    bool mVirtualonExtActive;
     //Display in secure mode indicator
     bool mSecureMode;
     //Lock to prevent set from being called while blanking
