@@ -27,13 +27,16 @@
 #include <gralloc_priv.h>
 #include <overlay.h>
 #include <overlayRotator.h>
+#include <overlayWriteback.h>
 #include "hwc_utils.h"
 #include "hwc_mdpcomp.h"
 #include "hwc_fbupdate.h"
+#include "hwc_ad.h"
 #include "mdp_version.h"
 #include "hwc_copybit.h"
 #include "hwc_dump_layers.h"
 #include "external.h"
+#include "virtual.h"
 #include "hwc_qclient.h"
 #include "QService.h"
 #include "comptype.h"
@@ -150,10 +153,17 @@ void initContext(hwc_context_t *ctx)
     }
 
     ctx->mExtDisplay = new ExternalDisplay(ctx);
+    ctx->mVirtualDisplay = new VirtualDisplay(ctx);
+    ctx->mVirtualonExtActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
 
     ctx->mMDPComp[HWC_DISPLAY_PRIMARY] =
          MDPComp::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
                 rightSplit, HWC_DISPLAY_PRIMARY);
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         ctx->mHwcDebug[i] = new HwcDebug(i);
@@ -161,10 +171,10 @@ void initContext(hwc_context_t *ctx)
     }
 
     MDPComp::init(ctx);
+    ctx->mAD = new AssertiveDisplay();
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
-    ctx->mExtDispConfiguring = false;
     ctx->mExtOrientation = 0;
 
     //Right now hwc starts the service but anybody could do it, or it could be
@@ -233,6 +243,10 @@ void closeContext(hwc_context_t *ctx)
             delete ctx->mLayerRotMap[i];
             ctx->mLayerRotMap[i] = NULL;
         }
+    }
+    if(ctx->mAD) {
+        delete ctx->mAD;
+        ctx->mAD = NULL;
     }
 
 
@@ -474,6 +488,9 @@ void setListStats(hwc_context_t *ctx,
     //to have a padding round to be able to shift pipes across mixers.
     if(prevYuvCount != ctx->listStats[dpy].yuvCount) {
         ctx->mVideoTransFlag = true;
+    }
+    if(dpy == HWC_DISPLAY_PRIMARY) {
+        ctx->mAD->markDoable(ctx, list);
     }
 }
 
@@ -991,6 +1008,13 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     setMdpFlags(layer, mdpFlags, downscale, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
+    //Will do something only if feature enabled and conditions suitable
+    //hollow call otherwise
+    if(ctx->mAD->prepare(ctx, crop, whf, hnd)) {
+        overlay::Writeback *wb = overlay::Writeback::getInstance();
+        whf.format = wb->getOutputFormat();
+    }
+
     if(isYuvBuffer(hnd) && //if 90 component or downscale, use rot
             ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
         *rot = ctx->mRotMgr->getNext();
@@ -1068,6 +1092,13 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
+
+    //Will do something only if feature enabled and conditions suitable
+    //hollow call otherwise
+    if(ctx->mAD->prepare(ctx, crop, whf, hnd)) {
+        overlay::Writeback *wb = overlay::Writeback::getInstance();
+        whf.format = wb->getOutputFormat();
+    }
 
     if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
         (*rot) = ctx->mRotMgr->getNext();
@@ -1159,7 +1190,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
 bool canUseRotator(hwc_context_t *ctx) {
     if(qdutils::MDPVersion::getInstance().is8x26() &&
-            ctx->mExtDisplay->isExternalConnected()) {
+                       ctx->mVirtualDisplay->isConnected()) {
         return false;
     }
     if(ctx->mMDP.version == qdutils::MDP_V3_0_4)
@@ -1190,7 +1221,7 @@ void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
         return;
     }
     //External connected
-    if(ctx->mExtDisplay->isExternalConnected()) {
+    if(ctx->mExtDisplay->isConnected()|| ctx->mVirtualDisplay->isConnected()) {
         return;
     }
     //Decimation necessary, cannot use BWC. H/W requirement.
