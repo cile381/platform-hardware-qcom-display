@@ -141,6 +141,7 @@ bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_layer_1_t const* layer);
 bool setupBasePipe(hwc_context_t *ctx);
+int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -228,6 +229,7 @@ struct vsync_state {
     pthread_mutex_t lock;
     pthread_cond_t  cond;
     bool enable;
+    bool fakevsync;
 };
 
 // -----------------------------------------------------------------------------
