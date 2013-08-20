@@ -570,14 +570,20 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                 ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd;
             rotData.acq_fen_fd = acquireFenceFd;
             rotData.session_id = ctx->mLayerRotMap[dpy]->getRot(i)->getSessId();
-            ioctl(rotFd, MSM_ROTATOR_IOCTL_BUFFER_SYNC, &rotData);
-            close(acquireFenceFd);
-             //For MDP to wait on.
-            acquireFenceFd = dup(rotData.rel_fen_fd);
-            //A buffer is free to be used by producer as soon as its copied to
-            //rotator.
-            ctx->mLayerRotMap[dpy]->getLayer(i)->releaseFenceFd =
+            rotData.rel_fen_fd = -1;
+            if(ioctl(rotFd, MSM_ROTATOR_IOCTL_BUFFER_SYNC, &rotData) < 0) {
+               ALOGE("Failed to call ioctl MSM_ROTATOR_IOCTL_BUFFER_SYNC=%s",
+                   strerror(errno));
+            }
+            else {
+               close(acquireFenceFd);
+               //For MDP to wait on.
+               acquireFenceFd = dup(rotData.rel_fen_fd);
+               //A buffer is free to be used by producer as soon as its copied to
+               //rotator.
+               ctx->mLayerRotMap[dpy]->getLayer(i)->releaseFenceFd =
                     rotData.rel_fen_fd;
+            }
         }
     } else {
         //TODO B-family
@@ -631,10 +637,9 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
            } else if(isExtAnimating) {
                 hwc_layer_1_t const* layer = &list->hwLayers[i];
                 private_handle_t *hnd = (private_handle_t *)layer->handle;
-                if(isYuvBuffer(hnd)) {
+                if(isYuvBuffer(hnd) && (list->hwLayers[i].releaseFenceFd < 0)) {
                   list->hwLayers[i].releaseFenceFd = dup(releaseFd);
-                } else
-                  list->hwLayers[i].releaseFenceFd = -1;
+                }
             } else if(list->hwLayers[i].releaseFenceFd < 0) {
                 //If rotator has not already populated this field.
                 list->hwLayers[i].releaseFenceFd = dup(releaseFd);
