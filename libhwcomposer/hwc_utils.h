@@ -83,6 +83,8 @@ struct DisplayAttributes {
     // To trigger padding round to clean up mdp
     // pipes
     bool isConfiguring;
+    // External Display is in MDP Downscale mode indicator
+    bool mDownScaleMode;
 };
 
 struct ListStats {
@@ -175,12 +177,25 @@ int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
 
 /* Calculates the destination position based on the action safe rectangle */
-void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
-                                        uint32_t& y, uint32_t& w, uint32_t& h);
+void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& dst);
 
+void getAspectRatioPosition(int destWidth, int destHeight, int srcWidth,
+                                int srcHeight, hwc_rect_t& rect);
 
-void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
-                        uint32_t& x, uint32_t& y, uint32_t& w, uint32_t& h);
+void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
+                                hwc_rect_t& inRect, hwc_rect_t& outRect);
+
+bool isPrimaryPortrait(hwc_context_t *ctx);
+
+bool isOrientationPortrait(hwc_context_t *ctx);
+
+void calcExtDisplayPosition(hwc_context_t *ctx,
+                               int dpy,
+                               hwc_rect_t& sourceCrop,
+                               hwc_rect_t& displayFrame);
+// Returns the orientation that needs to be set on external for
+// BufferMirrirMode(Sidesync)
+int getMirrorModeOrientation(hwc_context_t *ctx);
 
 //Close acquireFenceFds of all layers of incoming list
 void closeAcquireFds(hwc_display_contents_1_t* list);
@@ -346,12 +361,24 @@ struct hwc_context_t {
     mutable Locker mBlankLock;
     //Lock to protect prepare & set when detaching external disp
     mutable Locker mExtLock;
+    /*Lock to set both mSecureMode and mSecuring as part
+      of binder thread without context switch to composition
+      thread. This lock is needed only for A-family targets
+      since the state of mSecureMode and mSecuring variables
+      are not checked in B-family targets.
+    */
+    mutable Locker mSecureLock;
     //Drawing round when we use GPU
     bool isPaddingRound;
     // External Orientation
     int mExtOrientation;
     //Flags the transition of a video session
     bool mVideoTransFlag;
+
+    //Used for SideSync feature
+    //which overrides the mExtOrientation
+    bool mBufferMirrorMode;
+
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
 };
 
