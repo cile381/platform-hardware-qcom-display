@@ -159,6 +159,9 @@ void initContext(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
+    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
+    ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].mDownScaleMode = false;
 
     ctx->mMDPComp[HWC_DISPLAY_PRIMARY] =
          MDPComp::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
@@ -192,6 +195,8 @@ void initContext(hwc_context_t *ctx)
     ctx->mPrevDestVideo.left = ctx->mPrevDestVideo.top =
         ctx->mPrevDestVideo.right = ctx->mPrevDestVideo.bottom = 0;
     ctx->mPrevTransformVideo = 0;
+
+    ctx->mBufferMirrorMode = false;
 
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
@@ -262,8 +267,11 @@ void dumpsys_log(android::String8& buf, const char* fmt, ...)
 }
 
 /* Calculates the destination position based on the action safe rectangle */
-void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
-                           uint32_t& y, uint32_t& w, uint32_t& h) {
+void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
+    // Position
+    int x = rect.left, y = rect.top;
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
 
     // if external supports underscan, do nothing
     // it will be taken care in the driver
@@ -291,7 +299,11 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     float fbHeight = ctx->dpyAttr[dpy].yres;
 
     // Since external is rotated 90, need to swap width/height
-    if(ctx->mExtOrientation & HWC_TRANSFORM_ROT_90)
+    int extOrient = ctx->mExtOrientation;
+    if(ctx->mBufferMirrorMode)
+        extOrient = getMirrorModeOrientation(ctx);
+
+    if(extOrient & HWC_TRANSFORM_ROT_90)
         swap(fbWidth, fbHeight);
 
     float asX = 0;
@@ -317,40 +329,245 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, uint32_t& x,
     w = (wRatio * asW);
     h = (hRatio * asH);
 
+    // Convert it back to hwc_rect_t
+    rect.left = x;
+    rect.top = y;
+    rect.right = w + rect.left;
+    rect.bottom = h + rect.top;
+
     return;
 }
 
-/* Calculates the aspect ratio for external based on the primary */
-void getAspectRatioPosition(hwc_context_t *ctx, int dpy, int orientation,
-                        uint32_t& x, uint32_t& y, uint32_t& w, uint32_t& h) {
-    int fbWidth  = ctx->dpyAttr[dpy].xres;
-    int fbHeight = ctx->dpyAttr[dpy].yres;
+/* Calculates the aspect ratio for based on src & dest */
+void getAspectRatioPosition(int destWidth, int destHeight, int srcWidth,
+                                int srcHeight, hwc_rect_t& rect) {
+   int x =0, y =0;
 
-    switch(orientation) {
-        case HAL_TRANSFORM_ROT_90:
-        case HAL_TRANSFORM_ROT_270:
-            y = 0;
-            h = fbHeight;
-            if (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres <
-                ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres) {
-                // Portrait primary panel
-                w = (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres *
-                     fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres);
-            } else {
-                //Landscape primary panel
-                w = (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres *
-                     fbHeight/ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres);
-            }
-            x = (fbWidth - w)/2;
-            break;
-        default:
-            //Do nothing
-            break;
-     }
-    ALOGD_IF(HWC_UTILS_DEBUG, "%s: Position: x = %d, y = %d w = %d h = %d",
-                    __FUNCTION__, x, y, w ,h);
+   if (srcWidth * destHeight > destWidth * srcHeight) {
+        srcHeight = destWidth * srcHeight / srcWidth;
+        srcWidth = destWidth;
+    } else if (srcWidth * destHeight < destWidth * srcHeight) {
+        srcWidth = destHeight * srcWidth / srcHeight;
+        srcHeight = destHeight;
+    } else {
+        srcWidth = destWidth;
+        srcHeight = destHeight;
+    }
+    if (srcWidth > destWidth) srcWidth = destWidth;
+    if (srcHeight > destHeight) srcHeight = destHeight;
+    x = (destWidth - srcWidth) / 2;
+    y = (destHeight - srcHeight) / 2;
+    ALOGD_IF(HWC_UTILS_DEBUG, "%s: AS Position: x = %d, y = %d w = %d h = %d",
+             __FUNCTION__, x, y, srcWidth , srcHeight);
+    // Convert it back to hwc_rect_t
+    rect.left = x;
+    rect.top = y;
+    rect.right = srcWidth + rect.left;
+    rect.bottom = srcHeight + rect.top;
 }
 
+// This function gets the destination position for Seconday display
+// based on the position and aspect ratio with orientation
+void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
+                            hwc_rect_t& inRect, hwc_rect_t& outRect) {
+    // Physical display resolution
+    float fbWidth  = ctx->dpyAttr[dpy].xres;
+    float fbHeight = ctx->dpyAttr[dpy].yres;
+    //display position(x,y,w,h) in correct aspectratio after rotation
+    int xPos = 0;
+    int yPos = 0;
+    float width = fbWidth;
+    float height = fbHeight;
+    // Width/Height used for calculation, after rotation
+    float actualWidth = fbWidth;
+    float actualHeight = fbHeight;
+
+    float wRatio = 1.0;
+    float hRatio = 1.0;
+    float xRatio = 1.0;
+    float yRatio = 1.0;
+    hwc_rect_t rect = {0, 0, (int)fbWidth, (int)fbHeight};
+
+    Dim inPos(inRect.left, inRect.top, inRect.right - inRect.left,
+                inRect.bottom - inRect.top);
+    Dim outPos(outRect.left, outRect.top, outRect.right - outRect.left,
+                outRect.bottom - outRect.top);
+
+    Whf whf(fbWidth, fbHeight, 0);
+    eTransform extorient = static_cast<eTransform>(extOrientation);
+    // To calculate the destination co-ordinates in the new orientation
+    preRotateSource(extorient, whf, inPos);
+
+    if(extOrientation & HAL_TRANSFORM_ROT_90) {
+        // Swap width/height for input position
+        swapWidthHeight(actualWidth, actualHeight);
+        getAspectRatioPosition(fbWidth, fbHeight, (int)actualWidth,
+                               (int)actualHeight, rect);
+        xPos = rect.left;
+        yPos = rect.top;
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+    }
+
+    //Calculate the position...
+    xRatio = inPos.x/actualWidth;
+    yRatio = inPos.y/actualHeight;
+    wRatio = inPos.w/actualWidth;
+    hRatio = inPos.h/actualHeight;
+
+    outPos.x = (xRatio * width) + xPos;
+    outPos.y = (yRatio * height) + yPos;
+    outPos.w = wRatio * width;
+    outPos.h = hRatio * height;
+    ALOGD_IF(HWC_UTILS_DEBUG, "%s: Calculated AspectRatio Position: x = %d,"
+                 "y = %d w = %d h = %d", __FUNCTION__, outPos.x, outPos.y,
+                 outPos.w, outPos.h);
+
+    // For sidesync, the dest fb will be in portrait orientation, and the crop
+    // will be updated to avoid the black side bands, and it will be upscaled
+    // to fit the dest RB, so recalculate
+    // the position based on the new width and height
+    if ((extOrientation & HWC_TRANSFORM_ROT_90) &&
+                        isOrientationPortrait(ctx)) {
+        hwc_rect_t r;
+        //Calculate the position
+        xRatio = (outPos.x - xPos)/width;
+        // GetaspectRatio -- tricky to get the correct aspect ratio
+        // But we need to do this.
+        getAspectRatioPosition(width, height, width, height, r);
+        xPos = r.left;
+        yPos = r.top;
+        float tempWidth = r.right - r.left;
+        float tempHeight = r.bottom - r.top;
+        yRatio = yPos/height;
+        wRatio = outPos.w/width;
+        hRatio = tempHeight/height;
+
+        //Map the coordinates back to Framebuffer domain
+        outPos.x = (xRatio * fbWidth);
+        outPos.y = (yRatio * fbHeight);
+        outPos.w = wRatio * fbWidth;
+        outPos.h = hRatio * fbHeight;
+
+        ALOGD_IF(HWC_UTILS_DEBUG, "%s: Calculated AspectRatio for device in"
+                 "portrait: x = %d,y = %d w = %d h = %d", __FUNCTION__,
+                 outPos.x, outPos.y,
+                 outPos.w, outPos.h);
+    }
+    if(ctx->dpyAttr[dpy].mDownScaleMode) {
+        int extW, extH;
+        if(dpy == HWC_DISPLAY_EXTERNAL)
+            ctx->mExtDisplay->getAttributes(extW, extH);
+        else
+            ctx->mVirtualDisplay->getAttributes(extW, extH);
+        fbWidth  = ctx->dpyAttr[dpy].xres;
+        fbHeight = ctx->dpyAttr[dpy].yres;
+        //Calculate the position...
+        xRatio = outPos.x/fbWidth;
+        yRatio = outPos.y/fbHeight;
+        wRatio = outPos.w/fbWidth;
+        hRatio = outPos.h/fbHeight;
+
+        outPos.x = xRatio * extW;
+        outPos.y = yRatio * extH;
+        outPos.w = wRatio * extW;
+        outPos.h = hRatio * extH;
+    }
+    // Convert Dim to hwc_rect_t
+    outRect.left = outPos.x;
+    outRect.top = outPos.y;
+    outRect.right = outPos.x + outPos.w;
+    outRect.bottom = outPos.y + outPos.h;
+
+    return;
+}
+
+bool isPrimaryPortrait(hwc_context_t *ctx) {
+    int fbWidth = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+    int fbHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+    if(fbWidth < fbHeight) {
+        return true;
+    }
+    return false;
+}
+
+bool isOrientationPortrait(hwc_context_t *ctx) {
+    if(isPrimaryPortrait(ctx)) {
+        return !(ctx->deviceOrientation & 0x1);
+    }
+    return (ctx->deviceOrientation & 0x1);
+}
+
+void calcExtDisplayPosition(hwc_context_t *ctx, int dpy,
+                               hwc_rect_t& sourceCrop,
+                               hwc_rect_t& displayFrame) {
+    // Swap width and height when there is a 90deg transform
+    int extOrient = ctx->mExtOrientation;
+    if(ctx->mBufferMirrorMode)
+        extOrient = getMirrorModeOrientation(ctx);
+    if(extOrient & HWC_TRANSFORM_ROT_90) {
+        int dstWidth = ctx->dpyAttr[dpy].xres;
+        int dstHeight = ctx->dpyAttr[dpy].yres;;
+        int srcWidth = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+        int srcHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+        if(!isPrimaryPortrait(ctx)) {
+            swap(srcWidth, srcHeight);
+        }                    // Get Aspect Ratio for external
+        getAspectRatioPosition(dstWidth, dstHeight, srcWidth,
+                            srcHeight, displayFrame);
+        // Crop - this is needed, because for sidesync, the dest fb will
+        // be in portrait orientation, so update the crop to not show the
+        // black side bands.
+        if (isOrientationPortrait(ctx)) {
+            sourceCrop = displayFrame;
+            displayFrame.left = 0;
+            displayFrame.top = 0;
+            displayFrame.right = dstWidth;
+            displayFrame.bottom = dstHeight;
+        }
+    }
+    if(ctx->dpyAttr[dpy].mDownScaleMode) {
+        int extW, extH;
+        // if downscale is enabled, map the co-ordinates to new
+        // domain(downscaled)
+        float fbWidth  = ctx->dpyAttr[dpy].xres;
+        float fbHeight = ctx->dpyAttr[dpy].yres;
+        // query MDP configured attributes
+        if(dpy == HWC_DISPLAY_EXTERNAL)
+            ctx->mExtDisplay->getAttributes(extW, extH);
+        else
+            ctx->mVirtualDisplay->getAttributes(extW, extH);
+        //Calculate the ratio...
+        float wRatio = ((float)extW)/fbWidth;
+        float hRatio = ((float)extH)/fbHeight;
+
+        //convert Dim to hwc_rect_t
+        displayFrame.left *= wRatio;
+        displayFrame.top *= hRatio;
+        displayFrame.right *= wRatio;
+        displayFrame.bottom *= hRatio;
+    }
+}
+
+/* Returns the orientation which needs to be set on External for
+ *  SideSync/Buffer Mirrormode
+ */
+int getMirrorModeOrientation(hwc_context_t *ctx) {
+    int extOrientation = 0;
+    int deviceOrientation = ctx->deviceOrientation;
+    if(!isPrimaryPortrait(ctx))
+        deviceOrientation = (deviceOrientation + 1) % 4;
+     if (deviceOrientation == 0)
+         extOrientation = HWC_TRANSFORM_ROT_270;
+     else if (deviceOrientation == 1)//90
+         extOrientation = 0;
+     else if (deviceOrientation == 2)//180
+         extOrientation = HWC_TRANSFORM_ROT_90;
+     else if (deviceOrientation == 3)//270
+         extOrientation = HWC_TRANSFORM_FLIP_V | HWC_TRANSFORM_FLIP_H;
+
+    return extOrientation;
+}
 
 bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer,
         const int& dpy) {
@@ -474,9 +691,10 @@ void setListStats(hwc_context_t *ctx,
         ctx->mExtOrientation = atoi(value); */
         // Assuming the orientation value is in terms of HAL_TRANSFORM,
         // This needs mapping to HAL, if its in different convention
-        if(ctx->mExtOrientation) {
-            ALOGD_IF(HWC_UTILS_DEBUG, "%s: ext orientation = %d",
-                     __FUNCTION__, ctx->mExtOrientation);
+        if(ctx->mExtOrientation || ctx->mBufferMirrorMode) {
+            ALOGD_IF(HWC_UTILS_DEBUG, "%s: ext orientation = %d"
+                     "BufferMirrorMode = %d", __FUNCTION__,
+                     ctx->mExtOrientation, ctx->mBufferMirrorMode);
             if(ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
                 ctx->isPaddingRound = true;
             }
@@ -975,22 +1193,21 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             }
         }
     }
-
-    uint32_t x = dst.left, y  = dst.top;
-    uint32_t w = dst.right - dst.left;
-    uint32_t h = dst.bottom - dst.top;
-
     if(dpy) {
+        int extOrient = ctx->mExtOrientation;
+        if(ctx->mBufferMirrorMode)
+            extOrient = getMirrorModeOrientation(ctx);
         // Just need to set the position to portrait as the transformation
         // will already be set to required orientation on TV
-        getAspectRatioPosition(ctx, dpy, ctx->mExtOrientation, x, y, w, h);
+        if(extOrient || ctx->dpyAttr[dpy].mDownScaleMode) {
+            getAspectRatioPosition(ctx, dpy, extOrient, dst, dst);
+            if(extOrient) {
+                transform = extOrient;
+                orient = static_cast<eTransform>(transform);
+            }
+        }
         // Calculate the actionsafe dimensions for External(dpy = 1 or 2)
-        getActionSafePosition(ctx, dpy, x, y, w, h);
-        // Convert position to hwc_rect_t
-        dst.left = x;
-        dst.top = y;
-        dst.right = w + dst.left;
-        dst.bottom = h + dst.top;
+        getActionSafePosition(ctx, dpy, dst);
     }
 
     if(isYuvBuffer(hnd) && ctx->mMDP.version >= qdutils::MDP_V4_2 &&
