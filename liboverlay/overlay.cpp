@@ -70,9 +70,12 @@ void Overlay::configDone() {
             //fds
             if(mPipeBook[i].valid()) {
                 char str[32];
-                sprintf(str, "Unset pipe=%s dpy=%d; ",
-                        PipeBook::getDestStr((eDest)i), mPipeBook[i].mDisplay);
+                sprintf(str, "Unset=%s dpy=%d mix=%d; ",
+                        PipeBook::getDestStr((eDest)i),
+                        mPipeBook[i].mDisplay, mPipeBook[i].mMixer);
+#if PIPE_DEBUG
                 strncat(mDumpStr, str, strlen(str));
+#endif
             }
             mPipeBook[i].destroy();
         }
@@ -81,44 +84,41 @@ void Overlay::configDone() {
     PipeBook::save();
 }
 
-eDest Overlay::nextPipe(eMdpPipeType type, int dpy) {
+eDest Overlay::nextPipe(eMdpPipeType type, int dpy, int mixer) {
     eDest dest = OV_INVALID;
 
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
-        //Match requested pipe type
-        if(type == OV_MDP_PIPE_ANY || type == PipeBook::getPipeType((eDest)i)) {
-            //If the pipe is not allocated to any display or used by the
-            //requesting display already in previous round.
-            if((mPipeBook[i].mDisplay == PipeBook::DPY_UNUSED ||
-                    mPipeBook[i].mDisplay == dpy) &&
-                    PipeBook::isNotAllocated(i)) {
-                //In block mode we don't allow line operations
-                if(sDMAMode == DMA_BLOCK_MODE &&
-                    PipeBook::getPipeType((eDest)i) == OV_MDP_PIPE_DMA)
-                    continue;
-
-                dest = (eDest)i;
-                PipeBook::setAllocation(i);
-                break;
-            }
+        if( (type == OV_MDP_PIPE_ANY || //Pipe type match
+             type == PipeBook::getPipeType((eDest)i)) &&
+            (mPipeBook[i].mDisplay == DPY_UNUSED || //Free or same display
+             mPipeBook[i].mDisplay == dpy) &&
+            (mPipeBook[i].mMixer == MIXER_UNUSED || //Free or same mixer
+             mPipeBook[i].mMixer == mixer) &&
+            PipeBook::isNotAllocated(i) && //Free pipe
+            !(sDMAMode == DMA_BLOCK_MODE && //DMA pipe in Line mode
+               PipeBook::getPipeType((eDest)i) == OV_MDP_PIPE_DMA)) {
+            dest = (eDest)i;
+            PipeBook::setAllocation(i);
+            break;
         }
     }
 
     if(dest != OV_INVALID) {
         int index = (int)dest;
-        //If the pipe is not registered with any display OR if the pipe is
-        //requested again by the same display using it, then go ahead.
         mPipeBook[index].mDisplay = dpy;
+        mPipeBook[index].mMixer = mixer;
         if(not mPipeBook[index].valid()) {
             mPipeBook[index].mPipe = new GenericPipe(dpy);
             char str[32];
-            snprintf(str, 32, "Set pipe=%s dpy=%d; ",
-                     PipeBook::getDestStr(dest), dpy);
+            snprintf(str, 32, "Set=%s dpy=%d mix=%d; ",
+                     PipeBook::getDestStr(dest), dpy, mixer);
+#if PIPE_DEBUG
             strncat(mDumpStr, str, strlen(str));
+#endif
         }
     } else {
-        ALOGD_IF(PIPE_DEBUG, "Pipe unavailable type=%d display=%d",
-                (int)type, dpy);
+        ALOGD_IF(PIPE_DEBUG, "Pipe unavailable type=%d display=%d mixer=%d",
+                (int)type, dpy, mixer);
     }
 
     return dest;
@@ -127,7 +127,7 @@ eDest Overlay::nextPipe(eMdpPipeType type, int dpy) {
 bool Overlay::isPipeTypeAttached(eMdpPipeType type) {
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
         if(type == PipeBook::getPipeType((eDest)i) &&
-                mPipeBook[i].mDisplay != PipeBook::DPY_UNUSED) {
+                mPipeBook[i].mDisplay != DPY_UNUSED) {
             return true;
         }
     }
@@ -252,7 +252,7 @@ int Overlay::initOverlay() {
         mdp_mixer_info *minfo = NULL;
         char name[64];
         int fd = -1;
-        for(int i = 0; i < NUM_FB_DEVICES; i++) {
+        for(int i = 0; i < MAX_FB_DEVICES; i++) {
             snprintf(name, 64, FB_DEVICE_TEMPLATE, i);
             ALOGD("initoverlay:: opening the device:: %s", name);
             fd = ::open(name, O_RDWR, 0);
@@ -288,13 +288,54 @@ int Overlay::initOverlay() {
             fd = -1;
         }
     }
+
+    FILE *displayDeviceFP = NULL;
+    const int MAX_FRAME_BUFFER_NAME_SIZE = 128;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
+    const char *strDtvPanel = "dtv panel";
+    const char *strWbPanel = "writeback panel";
+
+    for(int num = 1; num < MAX_FB_DEVICES; num++) {
+        snprintf (msmFbTypePath, sizeof(msmFbTypePath),
+                "/sys/class/graphics/fb%d/msm_fb_type", num);
+        displayDeviceFP = fopen(msmFbTypePath, "r");
+
+        if(displayDeviceFP){
+            fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                    displayDeviceFP);
+
+            if(strncmp(fbType, strDtvPanel, strlen(strDtvPanel)) == 0) {
+                sDpyFbMap[DPY_EXTERNAL] = num;
+            } else if(strncmp(fbType, strWbPanel, strlen(strWbPanel)) == 0) {
+                sDpyFbMap[DPY_WRITEBACK] = num;
+            }
+
+            fclose(displayDeviceFP);
+        }
+    }
+
     return 0;
 }
 
-void Overlay::dump() const {
-    if(strlen(mDumpStr)) { //dump only on state change
-        ALOGD_IF(PIPE_DEBUG, "%s\n", mDumpStr);
+bool Overlay::displayCommit(const int& fd) {
+    //Commit
+    struct mdp_display_commit info;
+    memset(&info, 0, sizeof(struct mdp_display_commit));
+    info.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+    if(!mdp_wrapper::displayCommit(fd, info)) {
+       ALOGE("%s: commit failed", __func__);
+       return false;
     }
+    return true;
+}
+
+void Overlay::dump() const {
+#if PIPE_DEBUG
+    if(strlen(mDumpStr)) { //dump only on state change
+        ALOGD("%s\n", mDumpStr);
+    }
+#endif
 }
 
 void Overlay::getDump(char *buf, size_t len) {
@@ -331,6 +372,7 @@ void Overlay::clear(int dpy) {
 void Overlay::PipeBook::init() {
     mPipe = NULL;
     mDisplay = DPY_UNUSED;
+    mMixer = MIXER_UNUSED;
 }
 
 void Overlay::PipeBook::destroy() {
@@ -339,10 +381,11 @@ void Overlay::PipeBook::destroy() {
         mPipe = NULL;
     }
     mDisplay = DPY_UNUSED;
+    mMixer = MIXER_UNUSED;
 }
 
 Overlay* Overlay::sInstance = 0;
-int Overlay::sExtFbIndex = 1;
+int Overlay::sDpyFbMap[DPY_MAX] = {0, -1, -1};
 int Overlay::sDMAMode = DMA_LINE_MODE;
 int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
