@@ -64,9 +64,6 @@ status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
         case IQService::EXTERNAL_ORIENTATION:
             setExtOrientation(value);
             break;
-        case IQService::BUFFER_MIRRORMODE:
-            setBufferMirrorMode(value);
-            break;
         default:
             return NO_ERROR;
     }
@@ -74,7 +71,7 @@ status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
 }
 
 void QClient::securing(uint32_t startEnd) {
-    Locker::Autolock _sl(mHwcContext->mSecureLock);
+    Locker::Autolock _sl(mHwcContext->mDrawLock);
     //The only way to make this class in this process subscribe to media
     //player's death.
     IMediaDeathNotifier::getMediaPlayerService();
@@ -88,7 +85,7 @@ void QClient::securing(uint32_t startEnd) {
 }
 
 void QClient::unsecuring(uint32_t startEnd) {
-    Locker::Autolock _sl(mHwcContext->mSecureLock);
+    Locker::Autolock _sl(mHwcContext->mDrawLock);
     mHwcContext->mSecuring = startEnd;
     //We're done unsecuring
     if(startEnd == IQService::END)
@@ -98,7 +95,7 @@ void QClient::unsecuring(uint32_t startEnd) {
 }
 
 void QClient::MPDeathNotifier::died() {
-    Locker::Autolock _sl(mHwcContext->mSecureLock);
+    Locker::Autolock _sl(mHwcContext->mDrawLock);
     ALOGD_IF(QCLIENT_DEBUG, "Media Player died");
     mHwcContext->mSecuring = false;
     mHwcContext->mSecureMode = false;
@@ -119,10 +116,6 @@ android::status_t QClient::screenRefresh() {
 
 void QClient::setExtOrientation(uint32_t orientation) {
     mHwcContext->mExtOrientation = orientation;
-}
-
-void QClient::setBufferMirrorMode(uint32_t enable) {
-    mHwcContext->mBufferMirrorMode = enable;
 }
 
 }
