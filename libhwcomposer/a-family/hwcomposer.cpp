@@ -1440,6 +1440,45 @@ private:
     mutable range r;
 };
 
+static int fillColorUsingCopybit(copybit_device_t *copybit, hwc_layer_t *layer,
+                                 EGLDisplay dpy, EGLSurface surface)
+{
+    android_native_buffer_t *renderBuffer =
+        (android_native_buffer_t *)eglGetRenderBufferANDROID(dpy, surface);
+    if (!renderBuffer) {
+        LOGE("%s: eglGetRenderBufferANDROID returned NULL buffer", __FUNCTION__);
+        return -1;
+    }
+
+    private_handle_t *fbHandle = (private_handle_t *)renderBuffer->handle;
+    if(!fbHandle) {
+        LOGE("%s: Framebuffer handle is NULL", __FUNCTION__);
+        return -1;
+    }
+
+    uint32_t color = layer->transform;
+    hwc_rect_t displayFrame = layer->displayFrame;
+    copybit_rect_t dstRect = {displayFrame.left, displayFrame.top,
+                              displayFrame.right, displayFrame.bottom};
+
+    copybit_image_t dst;
+    dst.w = ALIGN(fbHandle->width,32);
+    dst.h = fbHandle->height;
+    dst.format = fbHandle->format;
+    dst.base = (void *)fbHandle->base;
+    dst.handle = (native_handle_t *)renderBuffer->handle;
+
+    if ((dstRect.l < 0) || (dstRect.t < 0) ||
+        (dstRect.r - dstRect.l > dst.w) ||
+        (dstRect.b - dstRect.t > dst.h)) {
+        LOGE("%s: Invalid destination rect.", __FUNCTION__);
+        return -1;
+    }
+
+    int res = copybit->fill(copybit, &dst, &dstRect, color);
+    return res;
+}
+
 static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer, EGLDisplay dpy,
                                  EGLSurface surface)
 {
@@ -1457,6 +1496,11 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
 
     private_handle_t *hnd = (private_handle_t *)layer->handle;
     if(!hnd) {
+        if (layer->flags & HWC_COLOR_FILL) {
+            copybit_device_t *copybit = hwcModule->copybitEngine;
+            int res = fillColorUsingCopybit(copybit, layer, dpy, surface);
+            return res;
+        }
         LOGE("%s: invalid handle", __FUNCTION__);
         return -1;
     }

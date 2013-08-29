@@ -95,6 +95,7 @@ enum {
 enum {
     HWC_LAYER_NOT_UPDATING      = 0x00000002,
     HWC_LAYER_ASYNCHRONOUS      = 0x00000004,
+    HWC_COLOR_FILL              = 0x00000008, //RGBA color-fill using copybit
     HWC_USE_ORIGINAL_RESOLUTION = 0x10000000,
     HWC_DO_NOT_USE_OVERLAY      = 0x20000000,
     HWC_COMP_BYPASS             = 0x40000000,
