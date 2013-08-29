@@ -1672,8 +1672,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
             hwc_region_t tmp_hwc_reg = {1,(hwc_rect_t const*)&tmp_hwc_rect};
             region_iterator tmp_it(tmp_hwc_reg);
             copybit->set_parameter(copybit,COPYBIT_TRANSFORM,0);
-            copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA,
-                        (layer->blending == HWC_BLENDING_NONE) ? -1 : layer->alpha);
+            copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, 255);
             err = copybit->stretch(copybit,&tmp_dst, &src, &tmp_rect, &srcRect, &tmp_it);
             if(err < 0){
                 LOGE("%s:%d::tmp copybit stretch failed",__FUNCTION__,__LINE__);
@@ -1707,8 +1706,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_WIDTH, renderBuffer->width);
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT, renderBuffer->height);
     copybit->set_parameter(copybit, COPYBIT_TRANSFORM, layerTransform);
-    copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA,
-                           (layer->blending == HWC_BLENDING_NONE) ? -1 : layer->alpha);
+    copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, 255);
     copybit->set_parameter(copybit, COPYBIT_PREMULTIPLIED_ALPHA,
                            (layer->blending == HWC_BLENDING_PREMULT)? COPYBIT_ENABLE : COPYBIT_DISABLE);
     copybit->set_parameter(copybit, COPYBIT_DITHER,
