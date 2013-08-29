@@ -39,5 +39,8 @@ ifeq ($(TARGET_USES_POST_PROCESSING),true)
 LOCAL_CFLAGS += -DUSES_POST_PROCESSING
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/pp/inc
 endif
+ifeq ($(call is-board-platform,msm7627a),true)
+LOCAL_CFLAGS += -DTARGET_7627A
+endif
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_SHARED_LIBRARY)

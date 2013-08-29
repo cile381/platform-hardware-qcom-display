@@ -1502,6 +1502,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     // For 270 degrees, we get 90 + (H+V) which is same as doing
     // flip first and then rotation (H+V) + 90
 #ifdef USE_MDP3
+#ifdef TARGET_7627A
     if (((layer->transform& HAL_TRANSFORM_FLIP_H) ||
        (layer->transform & HAL_TRANSFORM_FLIP_V)) &&
        (layer->transform &  HAL_TRANSFORM_ROT_90) &&
@@ -1515,6 +1516,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
             layerTransform |= HAL_TRANSFORM_FLIP_H;
         }
     }
+#endif
 #endif
 
     // Remove the srcBufferTransform if any
