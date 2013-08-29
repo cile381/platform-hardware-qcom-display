@@ -55,6 +55,9 @@ MDPComp::MDPComp(int dpy):mDpy(dpy){};
 
 void MDPComp::dump(android::String8& buf)
 {
+    if(mCurrentFrame.layerCount > MAX_NUM_APP_LAYERS)
+        return;
+
     dumpsys_log(buf,"HWC Map for Dpy: %s \n",
                 (mDpy == 0) ? "\"PRIMARY\"" :
                 (mDpy == 1) ? "\"EXTERNAL\"" : "\"VIRTUAL\"");
@@ -439,11 +442,15 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        if((layer->transform & HWC_TRANSFORM_ROT_90) && !isYuvBuffer(hnd)) {
-            ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
-            return false;
+        if(layer->transform & HWC_TRANSFORM_ROT_90) {
+            if(!isYuvBuffer(hnd) ) {
+                ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
+                return false;
+            }else if(!canUseRotator(ctx, mDpy)) {
+                ALOGD_IF(isDebug(), "%s: no free DMA pipe",__FUNCTION__);
+                return false;
+            }
         }
-
         if(!isValidDimension(ctx,layer)) {
             ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",
                 __FUNCTION__);
@@ -554,6 +561,11 @@ bool MDPComp::isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer) {
 
     if(isSkipLayer(layer) && !extAnimBlockFeature) {
         ALOGD_IF(isDebug(), "%s: Video marked SKIP dpy %d", __FUNCTION__, mDpy);
+        return false;
+    }
+
+    if(layer->transform & HWC_TRANSFORM_ROT_90 && !canUseRotator(ctx,mDpy)) {
+        ALOGD_IF(isDebug(), "%s: no free DMA pipe",__FUNCTION__);
         return false;
     }
 
