@@ -108,6 +108,8 @@ static void reset(hwc_context_t *ctx, int numDisplays,
         if(ctx->mCopyBit[i])
             ctx->mCopyBit[i]->reset();
     }
+
+    MDPComp::reset();
 }
 
 //clear prev layer prop flags and realloc for current frame
