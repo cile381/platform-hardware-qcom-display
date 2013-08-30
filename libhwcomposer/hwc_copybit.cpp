@@ -127,6 +127,20 @@ unsigned int CopyBit::getRGBRenderingArea
     return renderArea;
 }
 
+bool checkNonWormholeRegion(private_handle_t* hnd, hwc_rect_t& rect)
+{
+    unsigned int height = rect.bottom - rect.top;
+    unsigned int width = rect.right - rect.left;
+    copybit_image_t buf;
+    buf.w = ALIGN(hnd->width, 32);
+    buf.h = hnd->height;
+
+    if (buf.h != height || buf.w != width)
+        return false;
+
+    return true;
+}
+
 bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
                                                             int dpy) {
 
@@ -166,6 +180,31 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     private_handle_t *fbHnd = (private_handle_t *)fbLayer->handle;
 
 
+    // Following are MDP3 limitations for which we
+    // need to fallback to GPU composition:
+    // 1. HW issues with mdp3 and rotation.
+    // 2. Plane alpha is not supported by MDP3.
+    if (qdutils::MDPVersion::getInstance().getMDPVersion() < 400) {
+        for (int i = ctx->listStats[dpy].numAppLayers-1; i >= 0 ; i--) {
+            hwc_layer_1_t *layer = (hwc_layer_1_t *) &list->hwLayers[i];
+            if ((layer->transform & (HAL_TRANSFORM_FLIP_H |
+                   HAL_TRANSFORM_FLIP_V | HAL_TRANSFORM_ROT_90)) &&
+                   ((layer->displayFrame.bottom - layer->displayFrame.top) % 16 ||
+                   (layer->displayFrame.right - layer->displayFrame.left) % 16))
+                return true;
+            if (layer->planeAlpha != 0xFF)
+                return true;
+        }
+        /*
+         * Fallback to GPU in MDP3 when NonWormholeRegion is not of frame buffer
+         * size as artifact is seen in WormholeRegion of previous frame.
+         */
+        hwc_rect_t nonWormHoleRegion;
+        getNonWormholeRegion(list, nonWormHoleRegion);
+        if(!checkNonWormholeRegion(fbHnd, nonWormHoleRegion))
+           return true;
+
+    }
 
     //Allocate render buffers if they're not allocated
     if (useCopybitForYUV || useCopybitForRGB) {
@@ -275,7 +314,7 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
             list->hwLayers[i].acquireFenceFd = -1;
         }
         retVal = drawLayerUsingCopybit(ctx, &(list->hwLayers[i]),
-                                                    renderBuffer, dpy);
+                                                    renderBuffer, dpy, !i);
         copybitLayerCount++;
         if(retVal < 0) {
             ALOGE("%s : drawLayerUsingCopybit failed", __FUNCTION__);
@@ -291,7 +330,7 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
 }
 
 int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
-                                     private_handle_t *renderBuffer, int dpy)
+                          private_handle_t *renderBuffer, int dpy, bool isFG)
 {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     int err = 0, acquireFd;
@@ -395,7 +434,7 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
         dtdy < 1/copybitsMinScale){
         // The requested scale is out of the range the hardware
         // can support.
-       ALOGE("%s:%d::Need to scale twice dsdx=%f, dtdy=%f,copybitsMaxScale=%f,\
+       ALOGD("%s:%d::Need to scale twice dsdx=%f, dtdy=%f,copybitsMaxScale=%f,\
                                  copybitsMinScale=%f,screen_w=%d,screen_h=%d \
                   src_crop_width=%d src_crop_height=%d",__FUNCTION__,__LINE__,
               dsdx,dtdy,copybitsMaxScale,1/copybitsMinScale,screen_w,screen_h,
@@ -420,11 +459,17 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
          tmp_w  = (tmp_w/2)*2;
          tmp_h = (tmp_h/2)*2;
        }
-       ALOGE("%s:%d::tmp_w = %d,tmp_h = %d",__FUNCTION__,__LINE__,tmp_w,tmp_h);
+       ALOGD("%s:%d::tmp_w = %d,tmp_h = %d",__FUNCTION__,__LINE__,tmp_w,tmp_h);
 
        int usage = GRALLOC_USAGE_PRIVATE_IOMMU_HEAP;
+       int format = fbHandle->format;
 
-       if (0 == alloc_buffer(&tmpHnd, tmp_w, tmp_h, fbHandle->format, usage)){
+       // We do not want copybit to generate alpha values from nothing
+       if (format == HAL_PIXEL_FORMAT_RGBA_8888 &&
+               src.format != HAL_PIXEL_FORMAT_RGBA_8888) {
+           format = HAL_PIXEL_FORMAT_RGBX_8888;
+       }
+       if (0 == alloc_buffer(&tmpHnd, tmp_w, tmp_h, format, usage)){
             copybit_image_t tmp_dst;
             copybit_rect_t tmp_rect;
             tmp_dst.w = tmp_w;
@@ -455,8 +500,11 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
                 return err;
             }
             // use release fence as aquire fd for next stretch
-            if (ctx->mMDP.version < qdutils::MDP_V4_0)
+            if (ctx->mMDP.version < qdutils::MDP_V4_0) {
                 copybit->flush_get_fence(copybit, &acquireFd);
+                close(acquireFd);
+                acquireFd = -1;
+            }
             // copy new src and src rect crop
             src = tmp_dst;
             srcRect = tmp_rect;
@@ -479,6 +527,9 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
     copybit->set_parameter(copybit, COPYBIT_DITHER,
                              (dst.format == HAL_PIXEL_FORMAT_RGB_565)?
                                              COPYBIT_ENABLE : COPYBIT_DISABLE);
+    copybit->set_parameter(copybit, COPYBIT_FG_LAYER, isFG ?
+                                             COPYBIT_ENABLE : COPYBIT_DISABLE);
+
     copybit->set_parameter(copybit, COPYBIT_BLIT_TO_FRAMEBUFFER,
                                                 COPYBIT_ENABLE);
     copybit->set_sync(copybit, acquireFd);

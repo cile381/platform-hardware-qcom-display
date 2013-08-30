@@ -6,6 +6,7 @@ common_includes += hardware/qcom/display/libqdutils
 common_includes += hardware/qcom/display/libhwcomposer
 common_includes += hardware/qcom/display/libexternal
 common_includes += hardware/qcom/display/libqservice
+common_includes += hardware/qcom/display/libvirtual
 
 ifeq ($(TARGET_USES_POST_PROCESSING),true)
     common_flags     += -DUSES_POST_PROCESSING
@@ -29,7 +30,8 @@ ifeq ($(ARCH_ARM_HAVE_NEON),true)
     common_flags += -D__ARM_HAVE_NEON
 endif
 
-ifeq ($(call is-board-platform-in-list, msm8974 msm8226 msm8610 apq8084), true)
+ifeq ($(call is-board-platform-in-list, msm8974 msm8226 msm8610 apq8084 \
+        mpq8092), true)
     common_flags += -DVENUS_COLOR_FORMAT
     common_flags += -DMDSS_TARGET
 endif

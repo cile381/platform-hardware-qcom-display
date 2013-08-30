@@ -41,6 +41,14 @@ class GenericPipe;
 class Overlay : utils::NoCopy {
 public:
     enum { DMA_BLOCK_MODE, DMA_LINE_MODE };
+    //Abstract Display types. Each backed by a LayerMixer,
+    //represented by a fb node.
+    //High res panels can be backed by 2 layer mixers and a single fb node.
+    enum { DPY_PRIMARY, DPY_EXTERNAL, DPY_WRITEBACK, DPY_UNUSED };
+    enum { DPY_MAX = DPY_UNUSED };
+    enum { MIXER_LEFT, MIXER_RIGHT, MIXER_UNUSED };
+    enum { MIXER_DEFAULT = MIXER_LEFT, MIXER_MAX = MIXER_UNUSED };
+    enum { MAX_FB_DEVICES = DPY_MAX };
 
     /* dtor close */
     ~Overlay();
@@ -61,8 +69,10 @@ public:
      * is requested, the first available VG or RGB is returned. If no pipe is
      * available for the display "dpy" then INV is returned. Note: If a pipe is
      * assigned to a certain display, then it cannot be assigned to another
-     * display without being garbage-collected once */
-    utils::eDest nextPipe(utils::eMdpPipeType, int dpy);
+     * display without being garbage-collected once. To add if a pipe is
+     * asisgned to a mixer within a display it cannot be reused for another
+     * mixer without being UNSET once*/
+    utils::eDest nextPipe(utils::eMdpPipeType, int dpy, int mixer);
 
     void setSource(const utils::PipeArgs args, utils::eDest dest);
     void setCrop(const utils::Dim& d, utils::eDest dest);
@@ -72,28 +82,30 @@ public:
     bool commit(utils::eDest dest);
     bool queueBuffer(int fd, uint32_t offset, utils::eDest dest);
 
-    /* Closes open pipes, called during startup */
-    static int initOverlay();
-    /* Returns the singleton instance of overlay */
-    static Overlay* getInstance();
-    /* Returns available ("unallocated") pipes for a display */
-    int availablePipes(int dpy);
+    /* Returns available ("unallocated") pipes for a display's mixer */
+    int availablePipes(int dpy, int mixer);
     /* Returns if any of the requested pipe type is attached to any of the
      * displays
      */
     bool isPipeTypeAttached(utils::eMdpPipeType type);
-    /* set the framebuffer index for external display */
-    void setExtFbNum(int fbNum);
-    /* Returns framebuffer index of the current external display */
-    int getExtFbNum();
     /* Returns pipe dump. Expects a NULL terminated buffer of big enough size
      * to populate.
      */
     void getDump(char *buf, size_t len);
     /* Reset usage and allocation bits on all pipes for given display */
     void clear(int dpy);
+    /* Marks the display, whose pipes need to be forcibaly configured */
+    void forceSet(const int& dpy);
+
+    /* Closes open pipes, called during startup */
+    static int initOverlay();
+    /* Returns the singleton instance of overlay */
+    static Overlay* getInstance();
     static void setDMAMode(const int& mode);
     static int getDMAMode();
+    /* Returns the framebuffer node backing up the display */
+    static int getFbForDpy(const int& dpy);
+    static bool displayCommit(const int& fd);
 
 private:
     /* Ctor setup */
@@ -104,8 +116,6 @@ private:
 
     /* Just like a Facebook for pipes, but much less profile info */
     struct PipeBook {
-        enum { DPY_PRIMARY, DPY_EXTERNAL, DPY_UNUSED };
-
         void init();
         void destroy();
         /* Check if pipe exists and return true, false otherwise */
@@ -115,6 +125,8 @@ private:
         GenericPipe *mPipe;
         /* Display using this pipe. Refer to enums above */
         int mDisplay;
+        /* Mixer within a split display this pipe is attached to */
+        int mMixer;
 
         /* operations on bitmap */
         static bool pipeUsageUnchanged();
@@ -153,12 +165,13 @@ private:
     PipeBook mPipeBook[utils::OV_INVALID]; //Used as max
 
     /* Dump string */
-    char mDumpStr[256];
+    char mDumpStr[1024];
 
     /* Singleton Instance*/
     static Overlay *sInstance;
-    static int sExtFbIndex;
+    static int sDpyFbMap[DPY_MAX];
     static int sDMAMode;
+    static int sForceSetBitmap;
 };
 
 inline void Overlay::validate(int index) {
@@ -168,23 +181,21 @@ inline void Overlay::validate(int index) {
             PipeBook::getDestStr((utils::eDest)index));
 }
 
-inline int Overlay::availablePipes(int dpy) {
-     int avail = 0;
-     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
-       if((mPipeBook[i].mDisplay == PipeBook::DPY_UNUSED ||
-           mPipeBook[i].mDisplay == dpy) && PipeBook::isNotAllocated(i)) {
-                avail++;
+inline int Overlay::availablePipes(int dpy, int mixer) {
+    int avail = 0;
+    for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
+        if( (mPipeBook[i].mDisplay == DPY_UNUSED ||
+             mPipeBook[i].mDisplay == dpy) &&
+            (mPipeBook[i].mMixer == MIXER_UNUSED ||
+             mPipeBook[i].mMixer == mixer) &&
+            PipeBook::isNotAllocated(i) &&
+            !(Overlay::getDMAMode() == Overlay::DMA_BLOCK_MODE &&
+              PipeBook::getPipeType((utils::eDest)i) ==
+              utils::OV_MDP_PIPE_DMA)) {
+            avail++;
         }
     }
     return avail;
-}
-
-inline void Overlay::setExtFbNum(int fbNum) {
-    sExtFbIndex = fbNum;
-}
-
-inline int Overlay::getExtFbNum() {
-    return sExtFbIndex;
 }
 
 inline void Overlay::setDMAMode(const int& mode) {
@@ -194,6 +205,15 @@ inline void Overlay::setDMAMode(const int& mode) {
 
 inline int Overlay::getDMAMode() {
     return sDMAMode;
+}
+
+inline int Overlay::getFbForDpy(const int& dpy) {
+    OVASSERT(dpy >= 0 && dpy < DPY_MAX, "Invalid dpy %d", dpy);
+    return sDpyFbMap[dpy];
+}
+
+inline void Overlay::forceSet(const int& dpy) {
+    sForceSetBitmap |= (1 << dpy);
 }
 
 inline bool Overlay::PipeBook::valid() {
