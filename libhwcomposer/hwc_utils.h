@@ -83,6 +83,8 @@ struct DisplayAttributes {
     // To trigger padding round to clean up mdp
     // pipes
     bool isConfiguring;
+    // External Display is in MDP Downscale mode indicator
+    bool mDownScaleMode;
 };
 
 struct ListStats {
@@ -186,8 +188,15 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
 
 bool isPrimaryPortrait(hwc_context_t *ctx);
 
+bool isOrientationPortrait(hwc_context_t *ctx);
+
 void calcExtDisplayPosition(hwc_context_t *ctx,
-                               int dpy, hwc_rect_t& displayFrame);
+                               int dpy,
+                               hwc_rect_t& sourceCrop,
+                               hwc_rect_t& displayFrame);
+// Returns the orientation that needs to be set on external for
+// BufferMirrirMode(Sidesync)
+int getMirrorModeOrientation(hwc_context_t *ctx);
 
 //Close acquireFenceFds of all layers of incoming list
 void closeAcquireFds(hwc_display_contents_1_t* list);
@@ -205,7 +214,7 @@ void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
         int rotDownscale, int transform);
 
-int configRotator(overlay::Rotator *rot, const ovutils::Whf& whf,
+int configRotator(overlay::Rotator *rot, ovutils::Whf& whf,
         hwc_rect_t& crop, const ovutils::eMdpFlags& mdpFlags,
         const ovutils::eTransform& orient, const int& downscale);
 
@@ -356,6 +365,11 @@ struct hwc_context_t {
     int mExtOrientation;
     //Flags the transition of a video session
     bool mVideoTransFlag;
+
+    //Used for SideSync feature
+    //which overrides the mExtOrientation
+    bool mBufferMirrorMode;
+
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
 };
 
