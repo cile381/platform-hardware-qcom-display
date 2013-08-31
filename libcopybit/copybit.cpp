@@ -134,7 +134,7 @@ static int get_format(int format) {
         case HAL_PIXEL_FORMAT_YCbCr_422_SP:  return MDP_Y_CBCR_H2V1;
         case HAL_PIXEL_FORMAT_YCbCr_420_SP:  return MDP_Y_CBCR_H2V2;
         case HAL_PIXEL_FORMAT_YCrCb_420_SP_ADRENO: return MDP_Y_CBCR_H2V2_ADRENO;
-        case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS: return MDP_Y_CBCR_H2V2_ADRENO;
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS: return MDP_Y_CBCR_H2V2_VENUS;
         case HAL_PIXEL_FORMAT_NV12_ENCODEABLE: return MDP_Y_CBCR_H2V2;
     }
     return -1;
@@ -341,6 +341,13 @@ static int set_parameter_copybit(
                             __FUNCTION__, value);
                 }
                 break;
+            case COPYBIT_FG_LAYER:
+                if(value == COPYBIT_ENABLE) {
+                     ctx->mFlags |= MDP_IS_FG;
+                } else if (value == COPYBIT_DISABLE) {
+                    ctx->mFlags &= ~MDP_IS_FG;
+                }
+                break ;
             default:
                 status = -EINVAL;
                 break;
@@ -384,8 +391,8 @@ static int set_sync_copybit(struct copybit_device_t *dev,
 {
     struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
     if (acquireFenceFd != -1) {
-        if (ctx->sync.acq_fen_fd_cnt < (MDP_MAX_FENCE_FD - 1)) {
-            ctx->acqFence[ctx->sync.acq_fen_fd_cnt++] = acquireFenceFd;
+        if (ctx->list.sync.acq_fen_fd_cnt < (MDP_MAX_FENCE_FD - 1)) {
+            ctx->acqFence[ctx->list.sync.acq_fen_fd_cnt++] = acquireFenceFd;
         } else {
             int ret = -EINVAL;
             struct blitReq *list = &ctx->list;
@@ -397,9 +404,8 @@ static int set_sync_copybit(struct copybit_device_t *dev,
                 return -EINVAL;
             }
             list->count = 0;
-            ctx->sync.acq_fen_fd_cnt = 0;
-            ctx->acqFence[ctx->sync.acq_fen_fd_cnt++] = ctx->relFence;
-            ctx->acqFence[ctx->sync.acq_fen_fd_cnt++] = acquireFenceFd;
+            list->sync.acq_fen_fd_cnt = 0;
+            ctx->acqFence[list->sync.acq_fen_fd_cnt++] = acquireFenceFd;
             ctx->relFence = -1;
         }
     }
@@ -508,10 +514,7 @@ static int stretch_copybit(
             if (++list->count == maxCount) {
                 status = msm_copybit(ctx, list);
                 if (ctx->relFence != -1) {
-                    ctx->sync.acq_fen_fd_cnt = 1;
-                    ctx->sync.acq_fen_fd[0] = ctx->relFence;
-                } else {
-                    ctx->sync.acq_fen_fd_cnt = 0;
+                    list->sync.acq_fen_fd_cnt = 0;
                 }
                 list->count = 0;
             }
@@ -521,10 +524,7 @@ static int stretch_copybit(
             if (list->count != 0) {
                 status = msm_copybit(ctx, list);
                 if (ctx->relFence != -1) {
-                    ctx->sync.acq_fen_fd_cnt = 1;
-                    ctx->sync.acq_fen_fd[0] = ctx->relFence;
-                } else {
-                    ctx->sync.acq_fen_fd_cnt = 0;
+                    list->sync.acq_fen_fd_cnt = 0;
                 }
                 list->count = 0;
             }
@@ -581,7 +581,7 @@ static int flush_get_fence(struct copybit_device_t *dev, int* fd)
         list->count = 0;
     }
     *fd = ctx->relFence;
-    ctx->sync.acq_fen_fd_cnt = 0;
+    list->sync.acq_fen_fd_cnt = 0;
     ctx->relFence = -1;
     return ret;
 }
@@ -609,10 +609,10 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->mAlpha = MDP_ALPHA_NOP;
     ctx->mFlags = 0;
     ctx->sync.flags = 0;
-    ctx->sync.acq_fen_fd_cnt = 0;
     ctx->sync.acq_fen_fd = ctx->acqFence;
     ctx->sync.rel_fen_fd = &ctx->relFence;
     ctx->list.count = 0;
+    ctx->list.sync.acq_fen_fd_cnt = 0;
     ctx->list.sync.rel_fen_fd = ctx->sync.rel_fen_fd;
     ctx->list.sync.acq_fen_fd = ctx->sync.acq_fen_fd;
     ctx->mFD = open("/dev/graphics/fb0", O_RDWR, 0);
