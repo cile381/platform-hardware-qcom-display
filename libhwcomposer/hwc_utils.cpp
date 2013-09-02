@@ -405,6 +405,34 @@ int commitOnPrimary(hwc_context_t* ctx) {
 }
 
 #ifdef USES_PLL_CALCULATION
+
+struct min_display_resolution_info {
+    int video_format;
+    uint32_t xres;
+    uint32_t yres;
+    int framerate;
+};
+
+static struct min_display_resolution_info supported_video_mode_lut[] = {
+    {m640x480p60_4_3,     640,  480,  60},
+    {m720x480p60_4_3,     720,  480,  60},
+    {m720x480p60_16_9,    720,  480,  60},
+    {m1280x720p60_16_9,  1280,  720,  60},
+    {m1920x1080i60_16_9, 1920,  540,  60},
+    {m1440x480i60_4_3,   1440,  240,  60},
+    {m1440x480i60_16_9,  1440,  240,  60},
+    {m1920x1080p60_16_9, 1920, 1080,  60},
+    {m720x576p50_4_3,     720,  576,  50},
+    {m720x576p50_16_9,    720,  576,  50},
+    {m1280x720p50_16_9,  1280,  720,  50},
+    {m1440x576i50_4_3,   1440,  288,  50},
+    {m1440x576i50_16_9,  1440,  288,  50},
+    {m1920x1080p50_16_9, 1920, 1080,  50},
+    {m1920x1080p24_16_9, 1920, 1080,  24},
+    {m1920x1080p25_16_9, 1920, 1080,  25},
+    {m1920x1080p30_16_9, 1920, 1080,  30},
+};
+
 typedef struct {
     int req_ppm;
     int pll_ppm;
@@ -611,17 +639,10 @@ int validatePPM(int fps, int ppm, CHANGE_DATA **set_cd)
 bool changePLLSettings(hwc_context_t* ctx) {
     bool ret = true;
 #ifdef USES_PLL_CALCULATION
-    int pll_file = open(LVDS_PLL_UPDATE,O_WRONLY,0);
 
     ALOGE("<<<<<< %s >>>>>>", __FUNCTION__);
 
-    if(pll_file < 0) {
-        ALOGE("%s: LVDS PLL file %s not found: ret:%d err str: %s",
-                __FUNCTION__,LVDS_PLL_UPDATE,pll_file,strerror(errno));
-        ret = false;
-        return ret;
-    }
-
+    int pll_file = -1;
     int err = -1;
     int ctrl_reg[8];
     int numchannels = 1;
@@ -635,19 +656,40 @@ bool changePLLSettings(hwc_context_t* ctx) {
     float change_pt_ppm;
     CHANGE_DATA *set_cd, *set_cd1, *set_cd2;
 
-    if (validatePPM(framerate ? (int)floor(framerate) : 60000,
-            (int)floor(ppm), &set_cd))
-        return err;
-
-    change_pt_ppm = set_cd->pll_ppm * 1.0;
-
+    qhwc::ExternalDisplay *externalDisplay = ctx->mExtDisplay;
     framebuffer_device_t *fbDev = ctx->mFbDev;
     private_module_t* m = reinterpret_cast<private_module_t*>(
                             fbDev->common.module);
 
-    if(isPanelLVDS(0)){
-        numchannels = 2;
+    if(isPanelHDMI(0)) {
+        /* Panel is HDMI. Update pixclock and return */
+
+        const struct min_display_resolution_info *mode =
+            &supported_video_mode_lut[0];
+        unsigned count =  sizeof(supported_video_mode_lut)/sizeof
+            (*supported_video_mode_lut);
+
+        for (unsigned int i = 0; i < count; ++i) {
+
+            const struct min_display_resolution_info *cur =
+                                &supported_video_mode_lut[i];
+
+            if( (cur->xres == m->info.xres) &&
+                    (cur->yres == m->info.yres) &&
+                    (cur->framerate*1000 == framerate) ) {
+
+                if(externalDisplay) {
+                    externalDisplay->changeHDMIPrimaryResolution(
+                                            cur->video_format);
+                    break;
+                }
+            }
+        }
+        return ret;
     }
+
+    /* Panel is LVDS. numchannels is 2 */
+    numchannels = 2;
 
     /* Check if framerate also has to be changed */
     if(framerate)
@@ -656,6 +698,23 @@ bool changePLLSettings(hwc_context_t* ctx) {
                                 (framerate / (float)numchannels));
     else
         base_pixelclock = m->default_pixclock;
+
+    /* The panel is LVDS. Proceed accordingly */
+
+    pll_file = open(LVDS_PLL_UPDATE,O_WRONLY,0);
+
+    if(pll_file < 0) {
+        ALOGE("%s: LVDS PLL file %s not found: ret:%d err str: %s",
+                __FUNCTION__,LVDS_PLL_UPDATE,pll_file,strerror(errno));
+        ret = false;
+        return ret;
+    }
+
+    if (validatePPM(framerate ? (int)floor(framerate) : 60000,
+                (int)floor(ppm), &set_cd))
+        return err;
+
+    change_pt_ppm = set_cd->pll_ppm * 1.0;
 
     req_bitclk  = base_pixelclock * 7;
     req_bitclk += (int)floor((float)req_bitclk * (ppm / 1000000.0));
@@ -810,7 +869,6 @@ bool canChangePLLSettings(hwc_context_t* ctx) {
                 fbDev->common.module);
         int framerate = (ctx->mConfigChangeParams).param1;
         int ppm = (ctx->mConfigChangeParams).param2;
-        /*For now check if the ppm is within limits */
         if(framerate < 0) {
             ALOGE("%s: Framerate %d is -ve",__FUNCTION__,framerate);
             return false;
