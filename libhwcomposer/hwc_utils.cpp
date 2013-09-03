@@ -642,16 +642,25 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     if(ret < 0) {
         ALOGE("ioctl MSMFB_BUFFER_SYNC failed, err=%s",
                 strerror(errno));
+        //reset releaseFd
+        releaseFd = -1;
     }
 
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
-        if(list->hwLayers[i].compositionType == HWC_OVERLAY ||
-           list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
+        if(list->hwLayers[i].compositionType == HWC_OVERLAY) {
             //Populate releaseFenceFds.
             if(UNLIKELY(swapzero))
                 list->hwLayers[i].releaseFenceFd = -1;
             else
                 list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+        } else if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
+            if(!(list->hwLayers[i].flags & HWC_SKIP_LAYER)) {
+                //Populate releaseFenceFds.
+                if(UNLIKELY(swapzero))
+                    list->hwLayers[i].releaseFenceFd = -1;
+                else
+                    list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+            }
         }
     }
 
