@@ -29,23 +29,20 @@ struct hwc_context_t;
 namespace qhwc {
 
 #define DEVICE_ROOT "/sys/devices/virtual/graphics"
-#define DEVICE_NODE_FB0                 "fb0"
 #define DEVICE_NODE_FB1                 "fb1"
 #define DEVICE_NODE_FB2                 "fb2"
 #define HDMI_PANEL                      "dtv panel"
 #define WFD_PANEL                       "writeback panel"
 #define DEVICE_ONLINE                   true
 #define DEVICE_OFFLINE                  false
-#define SYSFS_EDID_MODES_P      DEVICE_ROOT "/" DEVICE_NODE_FB0 "/edid_modes"
-#define SYSFS_HPD_P             DEVICE_ROOT "/" DEVICE_NODE_FB0 "/hpd"
+
 #define SYSFS_EDID_MODES        DEVICE_ROOT "/" DEVICE_NODE_FB1 "/edid_modes"
 #define SYSFS_HPD               DEVICE_ROOT "/" DEVICE_NODE_FB1 "/hpd"
 
 enum {
     EXTERN_DISPLAY_NONE = 0,
     EXTERN_DISPLAY_FB1  = 1,
-    EXTERN_DISPLAY_FB2  = 2,
-    EXTERN_DISPLAY_FB0  = 3
+    EXTERN_DISPLAY_FB2  = 2
 };
 enum {
     MAX_DISPLAY_EXTERNAL_DEVICES = 2
@@ -84,17 +81,14 @@ class ExternalDisplay
     void processUEventOnline(const char *str);
     void processUEventOffline(const char *str);
     bool isHDMIConfigured();
-    bool changeHDMIPrimaryResolution(int mode);
-    bool isHDMIPrimary();
 
     private:
     bool readResolution();
     int parseResolution(char* edidStr, int* edidModes);
     void setResolution(int ID);
-    void setFrameBuffer(int fbNum);
     bool openFrameBuffer(int fbNum);
     bool closeFrameBuffer();
-    bool writeHPDOption(int userOption);
+    bool writeHPDOption(int userOption) const;
     bool isValidMode(int ID);
     void handleUEvent(char* str, int len);
     int getModeOrder(int mode);
