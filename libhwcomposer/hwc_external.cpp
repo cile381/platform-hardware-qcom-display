@@ -28,8 +28,7 @@
 #include <utils/Log.h>
 
 #include <linux/msm_mdp.h>
-#include <gralloc_priv.h>
-#include <fb_priv.h>
+#include <linux/fb.h>
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <sys/resource.h>
@@ -54,7 +53,7 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     memset(&mVInfo, 0, sizeof(mVInfo));
 
     //Enable HPD for HDMI
-    if(isHDMIPrimary() || isHDMIConfigured()) {
+    if(isHDMIConfigured()) {
         // Disable HPD at boot up on MDSS, due to Audio HW Codec bug
         // if 5V boost is enabled before audio codec is probed then it draw high
         // current which damages MSM and the board as well
@@ -171,6 +170,26 @@ void disp_mode_timing_type::set_info(struct fb_var_screeninfo &info) const
     info.upper_margin = back_porch_v;
 }
 
+/* Video formates supported by the HDMI Standard */
+/* Indicates the resolution, pix clock and the aspect ratio */
+#define m640x480p60_4_3         1
+#define m720x480p60_4_3         2
+#define m720x480p60_16_9        3
+#define m1280x720p60_16_9       4
+#define m1920x1080i60_16_9      5
+#define m1440x480i60_4_3        6
+#define m1440x480i60_16_9       7
+#define m1920x1080p60_16_9      16
+#define m720x576p50_4_3         17
+#define m720x576p50_16_9        18
+#define m1280x720p50_16_9       19
+#define m1440x576i50_4_3        21
+#define m1440x576i50_16_9       22
+#define m1920x1080p50_16_9      31
+#define m1920x1080p24_16_9      32
+#define m1920x1080p25_16_9      33
+#define m1920x1080p30_16_9      34
+
 static struct disp_mode_timing_type supported_video_mode_lut[] = {
     {m640x480p60_4_3,     640,  480,  16,  96,  48, 10, 2, 33,  25200, false},
     {m720x480p60_4_3,     720,  480,  16,  62,  60,  9, 6, 30,  27030, false},
@@ -214,20 +233,12 @@ int ExternalDisplay::parseResolution(char* edidStr, int* edidModes)
 
 bool ExternalDisplay::readResolution()
 {
-    bool hdmiprimaryconfigured = isHDMIPrimary();
-    int hdmiEDIDFile;
+    int hdmiEDIDFile = open(SYSFS_EDID_MODES, O_RDONLY, 0);
     int len = -1;
-
-    if(hdmiprimaryconfigured) {
-        hdmiEDIDFile= open(SYSFS_EDID_MODES_P, O_RDONLY, 0);
-    } else {
-        hdmiEDIDFile= open(SYSFS_EDID_MODES, O_RDONLY, 0);
-    }
 
     if (hdmiEDIDFile < 0) {
         ALOGE("%s: edid_modes file '%s' not found",
-                 __FUNCTION__,
-                 hdmiprimaryconfigured ? SYSFS_EDID_MODES_P : SYSFS_EDID_MODES);
+                 __FUNCTION__, SYSFS_EDID_MODES);
         return false;
     } else {
         len = read(hdmiEDIDFile, mEDIDs, sizeof(mEDIDs)-1);
@@ -235,8 +246,7 @@ bool ExternalDisplay::readResolution()
                  __FUNCTION__, mEDIDs, len);
         if ( len <= 0) {
             ALOGE("%s: edid_modes file empty '%s'",
-                     __FUNCTION__,
-                 hdmiprimaryconfigured ? SYSFS_EDID_MODES_P : SYSFS_EDID_MODES);
+                     __FUNCTION__, SYSFS_EDID_MODES);
         }
         else {
             while (len > 1 && isspace(mEDIDs[len-1]))
@@ -255,8 +265,7 @@ bool ExternalDisplay::readResolution()
     return (strlen(mEDIDs) > 0);
 }
 
-const char* msmFbDevicePath[3] = {  "/dev/graphics/fb0",
-                                    "/dev/graphics/fb1",
+const char* msmFbDevicePath[2] = {  "/dev/graphics/fb1",
                                     "/dev/graphics/fb2"};
 
 
@@ -265,17 +274,12 @@ bool ExternalDisplay::openFrameBuffer(int fbNum)
     if (mFd == -1) {
         ALOGD_IF(DEBUG, "In %s: opening the framebuffer device = %d",
                                                   __FUNCTION__, fbNum);
-        mFd = open(msmFbDevicePath[fbNum], O_RDWR);
+        mFd = open(msmFbDevicePath[fbNum-1], O_RDWR);
         if (mFd < 0)
             ALOGE("%s: %s not available", __FUNCTION__,
-                                                    msmFbDevicePath[fbNum]);
+                                                    msmFbDevicePath[fbNum-1]);
     }
     return (mFd > 0);
-}
-
-void ExternalDisplay::setFrameBuffer(int fbNum)
-{
-    mFd = fbNum;
 }
 
 bool ExternalDisplay::closeFrameBuffer()
@@ -364,14 +368,9 @@ inline bool ExternalDisplay::isValidMode(int ID)
 void ExternalDisplay::setResolution(int ID)
 {
     struct fb_var_screeninfo info;
-    bool hdmiprimaryconfigured = isHDMIPrimary();
     int ret = 0;
-    int len = -1;
-
-    if(not hdmiprimaryconfigured){
-        if (!openFrameBuffer(EXTERN_DISPLAY_FB1))
-            return;
-    }
+    if (!openFrameBuffer(EXTERN_DISPLAY_FB1))
+        return;
     ret = ioctl(mFd, FBIOGET_VSCREENINFO, &mVInfo);
     if(ret < 0) {
         ALOGD("In %s: FBIOGET_VSCREENINFO failed Err Str = %s", __FUNCTION__,
@@ -403,65 +402,19 @@ void ExternalDisplay::setResolution(int ID)
                  mVInfo.right_margin, mVInfo.hsync_len, mVInfo.left_margin,
                  mVInfo.lower_margin, mVInfo.vsync_len, mVInfo.upper_margin,
                  mVInfo.pixclock/1000/1000);
-                mVInfo.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_ALL | FB_ACTIVATE_FORCE;
+        mVInfo.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_ALL | FB_ACTIVATE_FORCE;
         ret = ioctl(mFd, FBIOPUT_VSCREENINFO, &mVInfo);
         if(ret < 0) {
-            ALOGE("In %s: FBIOPUT_VSCREENINFO failed Err Str = %s",
+            ALOGD("In %s: FBIOPUT_VSCREENINFO failed Err Str = %s",
                                                  __FUNCTION__, strerror(errno));
         }
         mCurrentMode = ID;
     }
-    if(hdmiprimaryconfigured) {
-        framebuffer_device_t *fbDev = mHwcContext->mFbDev;
-        if(fbDev){
-            private_module_t* m = reinterpret_cast<private_module_t*>(
-                    fbDev->common.module);
-            m->info = mVInfo;
-        }
-    }
-}
-
-bool ExternalDisplay::changeHDMIPrimaryResolution(int mode) {
-
-    framebuffer_device_t *fbDev = mHwcContext->mFbDev;
-    if(fbDev){
-        private_module_t* m = reinterpret_cast<private_module_t*>(
-                fbDev->common.module);
-        setFrameBuffer(m->framebuffer->fd);
-        readResolution();
-        setResolution(mode);
-        setFrameBuffer(-1);
-        resetInfo();
-        return true;
-    }
-    return false;
 }
 
 /*
- * This function queries the msm_fb_type for fb0 and checks if the device is hdmi
- * primary
- */
-bool ExternalDisplay::isHDMIPrimary() {
-    bool configured = false;
-    FILE *displayDeviceFP = NULL;
-    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
-    displayDeviceFP = fopen("/sys/class/graphics/fb0/msm_fb_type", "r");
-
-    if(displayDeviceFP) {
-        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE, displayDeviceFP);
-
-        if(!strncmp(fbType, extPanelName[0], sizeof(extPanelName[0]))) {
-            configured  = true;
-        }
-        fclose(displayDeviceFP);
-    }
-    return configured;
-}
-
-/*
- * This function queries
- * msm_fb_type for fb1 and checks whether it is HDMI or not.
- *
+ * This function queries the msm_fb_type for fb1 and checks whether it is
+ * HDMI or not
  *
  * Returns:
  *          0 -> WFD device
@@ -562,22 +515,13 @@ void ExternalDisplay::setExternalDisplay(int connected)
     return;
 }
 
-bool ExternalDisplay::writeHPDOption(int userOption)
+bool ExternalDisplay::writeHPDOption(int userOption) const
 {
     bool ret = true;
-    bool hdmiprimaryconfigured = isHDMIPrimary();
-    int hdmiHPDFile;
-    if(hdmiprimaryconfigured) {
-        hdmiHPDFile= open(SYSFS_HPD_P,O_RDWR, 0);
-    } else {
-        hdmiHPDFile= open(SYSFS_HPD,O_RDWR, 0);
-    }
-
+    int hdmiHPDFile = open(SYSFS_HPD,O_RDWR, 0);
     if (hdmiHPDFile < 0) {
         ALOGE("%s: state file '%s' not found : ret%d"
-                           "err str: %s",  __FUNCTION__,
-                           hdmiprimaryconfigured ? SYSFS_HPD_P : SYSFS_HPD,
-                           hdmiHPDFile,
+                           "err str: %s",  __FUNCTION__, SYSFS_HPD, hdmiHPDFile,
                            strerror(errno));
         ret = false;
     } else {
@@ -590,8 +534,7 @@ bool ExternalDisplay::writeHPDOption(int userOption)
             err = write(hdmiHPDFile, "0" , 2);
         if (err <= 0) {
             ALOGE("%s: file write failed '%s'",
-                    __FUNCTION__,
-                    hdmiprimaryconfigured ? SYSFS_HPD_P : SYSFS_HPD);
+                     __FUNCTION__, SYSFS_HPD);
             ret = false;
         }
         close(hdmiHPDFile);
@@ -633,7 +576,6 @@ int ExternalDisplay::enableHDMIVsync(int enable)
     }
     return ret;
 }
-
 
 };
 

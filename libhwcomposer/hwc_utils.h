@@ -97,26 +97,6 @@ enum PQCStatus {
     PQC_INPROGRESS = 3
 };
 
-/* Video formates supported by the HDMI Standard */
-/* Indicates the resolution, pix clock and the aspect ratio */
-#define m640x480p60_4_3         1
-#define m720x480p60_4_3         2
-#define m720x480p60_16_9        3
-#define m1280x720p60_16_9       4
-#define m1920x1080i60_16_9      5
-#define m1440x480i60_4_3        6
-#define m1440x480i60_16_9       7
-#define m1920x1080p60_16_9      16
-#define m720x576p50_4_3         17
-#define m720x576p50_16_9        18
-#define m1280x720p50_16_9       19
-#define m1440x576i50_4_3        21
-#define m1440x576i50_16_9       22
-#define m1920x1080p50_16_9      31
-#define m1920x1080p24_16_9      32
-#define m1920x1080p25_16_9      33
-#define m1920x1080p30_16_9      34
-
 // Utility functions - implemented in hwc_utils.cpp
 void dumpLayer(hwc_layer_t const* l);
 void getLayerStats(hwc_context_t *ctx, const hwc_layer_list_t *list);
@@ -146,7 +126,7 @@ void wait4ExtCommitDone(hwc_context_t* ctx);
 //commit on primary
 int commitOnPrimary(hwc_context_t* ctx);
 
-//Is panel pointed by fb LVDS
+//Is target HDMIPrimary
 static bool isPanelLVDS(int fb){
     bool configured = false;
     FILE *displayDeviceFP = NULL;
@@ -169,30 +149,7 @@ static bool isPanelLVDS(int fb){
     return configured;
 }
 
-//Is panel pointed by fb DTV
-static bool isPanelHDMI(int fb){
-    bool configured = false;
-    FILE *displayDeviceFP = NULL;
-    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
-    char name[64];
-    char const device_node[64] = "/sys/class/graphics/fb%u/msm_fb_type";
-    snprintf(name, 64, device_node,fb);
-    displayDeviceFP = fopen(name, "r");
-
-    if(displayDeviceFP) {
-        fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
-                displayDeviceFP);
-
-        if(!strncmp(fbType, HDMIPrimaryPanelName[0],
-                        sizeof(HDMIPrimaryPanelName[0]))) {
-            configured  = true;
-        }
-    }
-    fclose(displayDeviceFP);
-    return configured;
-}
-
-//Is target HDMIPrimary
+//Is panel pointed by fb LVDS
 static bool isHDMIPrimary(){
     bool configured = false;
     FILE *displayDeviceFP = NULL;
