@@ -54,11 +54,8 @@ static bool isHDMI(const char* str)
 
 static void setup(hwc_context_t* ctx, int dpy, bool usecopybit)
 {
-    const int rSplit = 0; //Even split for external if at all
-    ctx->mFBUpdate[dpy] = IFBUpdate::getObject(ctx->dpyAttr[dpy].xres,
-            rSplit, dpy);
-    ctx->mMDPComp[dpy] =  MDPComp::getObject(ctx->dpyAttr[dpy].xres,
-            rSplit, dpy);
+    ctx->mFBUpdate[dpy] = IFBUpdate::getObject(ctx, dpy);
+    ctx->mMDPComp[dpy] =  MDPComp::getObject(ctx, dpy);
     if(usecopybit)
         ctx->mCopyBit[dpy] = new CopyBit();
 }

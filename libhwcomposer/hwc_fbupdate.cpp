@@ -36,12 +36,11 @@ namespace qhwc {
 
 namespace ovutils = overlay::utils;
 
-IFBUpdate* IFBUpdate::getObject(const int& width, const int& rightSplit,
-        const int& dpy) {
-    if(width > MAX_DISPLAY_DIM || rightSplit) {
-        return new FBUpdateHighRes(dpy);
+IFBUpdate* IFBUpdate::getObject(hwc_context_t *ctx, const int& dpy) {
+    if(isDisplaySplit(ctx, dpy)) {
+        return new FBUpdateSplit(dpy);
     }
-    return new FBUpdateLowRes(dpy);
+    return new FBUpdateNonSplit(dpy);
 }
 
 inline void IFBUpdate::reset() {
@@ -50,15 +49,15 @@ inline void IFBUpdate::reset() {
 }
 
 //================= Low res====================================
-FBUpdateLowRes::FBUpdateLowRes(const int& dpy): IFBUpdate(dpy) {}
+FBUpdateNonSplit::FBUpdateNonSplit(const int& dpy): IFBUpdate(dpy) {}
 
-inline void FBUpdateLowRes::reset() {
+inline void FBUpdateNonSplit::reset() {
     IFBUpdate::reset();
     mDest = ovutils::OV_INVALID;
 }
 
-bool FBUpdateLowRes::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
-                             int fbZorder) {
+bool FBUpdateNonSplit::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
+        int fbZorder) {
     if(!ctx->mMDP.hasOverlay) {
         ALOGD_IF(DEBUG_FBUPDATE, "%s, this hw doesnt support overlays",
                  __FUNCTION__);
@@ -69,7 +68,7 @@ bool FBUpdateLowRes::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
 }
 
 // Configure
-bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
+bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
                                int fbZorder) {
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
@@ -175,7 +174,7 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
     return ret;
 }
 
-bool FBUpdateLowRes::draw(hwc_context_t *ctx, private_handle_t *hnd)
+bool FBUpdateNonSplit::draw(hwc_context_t *ctx, private_handle_t *hnd)
 {
     if(!mModeOn) {
         return true;
@@ -199,16 +198,16 @@ bool FBUpdateLowRes::draw(hwc_context_t *ctx, private_handle_t *hnd)
 }
 
 //================= High res====================================
-FBUpdateHighRes::FBUpdateHighRes(const int& dpy): IFBUpdate(dpy) {}
+FBUpdateSplit::FBUpdateSplit(const int& dpy): IFBUpdate(dpy) {}
 
-inline void FBUpdateHighRes::reset() {
+inline void FBUpdateSplit::reset() {
     IFBUpdate::reset();
     mDestLeft = ovutils::OV_INVALID;
     mDestRight = ovutils::OV_INVALID;
     mRot = NULL;
 }
 
-bool FBUpdateHighRes::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
+bool FBUpdateSplit::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
                               int fbZorder) {
     if(!ctx->mMDP.hasOverlay) {
         ALOGD_IF(DEBUG_FBUPDATE, "%s, this hw doesnt support overlays",
@@ -221,7 +220,7 @@ bool FBUpdateHighRes::prepare(hwc_context_t *ctx, hwc_display_contents_1 *list,
 }
 
 // Configure
-bool FBUpdateHighRes::configure(hwc_context_t *ctx,
+bool FBUpdateSplit::configure(hwc_context_t *ctx,
         hwc_display_contents_1 *list, int fbZorder) {
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
@@ -336,7 +335,7 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
     return ret;
 }
 
-bool FBUpdateHighRes::draw(hwc_context_t *ctx, private_handle_t *hnd)
+bool FBUpdateSplit::draw(hwc_context_t *ctx, private_handle_t *hnd)
 {
     if(!mModeOn) {
         return true;
