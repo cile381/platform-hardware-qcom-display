@@ -53,6 +53,10 @@ MDPComp::MDPComp(int dpy):mDpy(dpy){};
 void MDPComp::dump(android::String8& buf)
 {
     Locker::Autolock _l(mMdpCompLock);
+
+    if(mCurrentFrame.layerCount > MAX_NUM_APP_LAYERS)
+        return;
+
     dumpsys_log(buf,"HWC Map for Dpy: %s \n",
                 mDpy ? "\"EXTERNAL\"" : "\"PRIMARY\"");
     dumpsys_log(buf,"PREV_FRAME: layerCount:%2d    mdpCount:%2d \
