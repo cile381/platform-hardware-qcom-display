@@ -251,6 +251,14 @@ int mapFrameBufferLocked(struct private_module_t* module)
         return -errno;
     }
     float fps  = metadata.data.panel_frame_rate;
+
+    memset(&metadata, 0 , sizeof(metadata));
+    metadata.op = metadata_op_resolution_info;
+    if (ioctl(fd, MSMFB_METADATA_GET, &metadata) == -1) {
+        ALOGE("Error retrieving panel frame rate");
+        return -errno;
+    }
+    module->goDefaultRes = metadata.data.res_cfg.set_default_res;
 #else
     //XXX: Remove reserved field usage on all baselines
     //The reserved[3] field is used to store FPS by the driver.
@@ -376,11 +384,19 @@ int fb_device_open(hw_module_t const* module, const char* name,
         private_module_t* m = (private_module_t*)module;
         status = mapFrameBuffer(m);
         if (status >= 0) {
+
             int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
             const_cast<uint32_t&>(dev->device.flags) = 0;
-            const_cast<uint32_t&>(dev->device.width) = m->info.xres;
-            const_cast<uint32_t&>(dev->device.height) = m->info.yres;
-            const_cast<int&>(dev->device.stride) = stride;
+
+            if (m->goDefaultRes) {
+                const_cast<uint32_t&>(dev->device.width) = 1920;
+                const_cast<uint32_t&>(dev->device.height) = 1080;
+                const_cast<int&>(dev->device.stride) = 1920 * 4;
+            } else {
+                const_cast<uint32_t&>(dev->device.width) = m->info.xres;
+                const_cast<uint32_t&>(dev->device.height) = m->info.yres;
+                const_cast<int&>(dev->device.stride) = stride;
+            }
             const_cast<int&>(dev->device.format) = m->fbFormat;
             const_cast<float&>(dev->device.xdpi) = m->xdpi;
             const_cast<float&>(dev->device.ydpi) = m->ydpi;

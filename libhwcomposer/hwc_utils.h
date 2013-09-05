@@ -83,6 +83,8 @@ struct DisplayAttributes {
     // In pause state, composition is bypassed
     // used for WFD displays only
     bool isPause;
+    uint32_t goDefaultRes;
+    uint32_t vFmt_K;
 };
 
 struct ListStats {

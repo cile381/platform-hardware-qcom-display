@@ -52,6 +52,7 @@ struct private_module_t {
     float fps;
     uint32_t swapInterval;
     uint32_t currentOffset;
+    uint32_t goDefaultRes;
 };
 
 
