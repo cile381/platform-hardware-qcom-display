@@ -129,7 +129,6 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
-    const int rightSplit = qdutils::MDPVersion::getInstance().getRightSplit();
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = new RotMgr();
@@ -138,8 +137,7 @@ void initContext(hwc_context_t *ctx)
     //For external it could get created and destroyed multiple times depending
     //on what external we connect to.
     ctx->mFBUpdate[HWC_DISPLAY_PRIMARY] =
-        IFBUpdate::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
-                rightSplit, HWC_DISPLAY_PRIMARY);
+        IFBUpdate::getObject(ctx, HWC_DISPLAY_PRIMARY);
 
     // Check if the target supports copybit compostion (dyn/mdp/c2d) to
     // decide if we need to open the copybit module.
@@ -164,8 +162,7 @@ void initContext(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].mDownScaleMode = false;
 
     ctx->mMDPComp[HWC_DISPLAY_PRIMARY] =
-         MDPComp::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
-                rightSplit, HWC_DISPLAY_PRIMARY);
+         MDPComp::getObject(ctx, HWC_DISPLAY_PRIMARY);
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
@@ -174,7 +171,7 @@ void initContext(hwc_context_t *ctx)
     }
 
     MDPComp::init(ctx);
-    ctx->mAD = new AssertiveDisplay();
+    ctx->mAD = new AssertiveDisplay(ctx);
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
@@ -1193,7 +1190,7 @@ void updateSource(eTransform& orient, Whf& whf,
     }
 }
 
-int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
+int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         const int& dpy, eMdpFlags& mdpFlags, eZorder& z,
         eIsFg& isFg, const eDest& dest, Rotator **rot) {
 
@@ -1253,13 +1250,6 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     setMdpFlags(layer, mdpFlags, downscale, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
-    //Will do something only if feature enabled and conditions suitable
-    //hollow call otherwise
-    if(ctx->mAD->prepare(ctx, crop, whf, hnd)) {
-        overlay::Writeback *wb = overlay::Writeback::getInstance();
-        whf.format = wb->getOutputFormat();
-    }
-
     if(isYuvBuffer(hnd) && //if 90 component or downscale, use rot
             ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
         *rot = ctx->mRotMgr->getNext();
@@ -1291,7 +1281,36 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     return 0;
 }
 
-int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
+//Helper to 1) Ensure crops dont have gaps 2) Ensure L and W are even
+static void sanitizeSourceCrop(hwc_rect_t& cropL, hwc_rect_t& cropR,
+        private_handle_t *hnd) {
+    if(cropL.right - cropL.left) {
+        if(isYuvBuffer(hnd)) {
+            //Always safe to even down left
+            ovutils::even_floor(cropL.left);
+            //If right is even, automatically width is even, since left is
+            //already even
+            ovutils::even_floor(cropL.right);
+        }
+        //Make sure there are no gaps between left and right splits if the layer
+        //is spread across BOTH halves
+        if(cropR.right - cropR.left) {
+            cropR.left = cropL.right;
+        }
+    }
+
+    if(cropR.right - cropR.left) {
+        if(isYuvBuffer(hnd)) {
+            //Always safe to even down left
+            ovutils::even_floor(cropR.left);
+            //If right is even, automatically width is even, since left is
+            //already even
+            ovutils::even_floor(cropR.right);
+        }
+    }
+}
+
+int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         const int& dpy, eMdpFlags& mdpFlagsL, eZorder& z,
         eIsFg& isFg, const eDest& lDest, const eDest& rDest,
         Rotator **rot) {
@@ -1339,6 +1358,12 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
+
+    if(lDest != OV_INVALID && rDest != OV_INVALID) {
+        //Enable overfetch
+        setMdpFlags(mdpFlagsL, OV_MDSS_MDP_DUAL_PIPE);
+    }
+
     trimLayer(ctx, dpy, transform, crop, dst);
 
     //Will do something only if feature enabled and conditions suitable
@@ -1366,8 +1391,8 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     eMdpFlags mdpFlagsR = mdpFlagsL;
     setMdpFlags(mdpFlagsR, OV_MDSS_MDP_RIGHT_MIXER);
 
-    hwc_rect_t tmp_cropL, tmp_dstL;
-    hwc_rect_t tmp_cropR, tmp_dstR;
+    hwc_rect_t tmp_cropL = {0}, tmp_dstL = {0};
+    hwc_rect_t tmp_cropR = {0}, tmp_dstR = {0};
 
     const int lSplit = getLeftSplit(ctx, dpy);
 
@@ -1383,6 +1408,8 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         hwc_rect_t scissor = {lSplit, 0, hw_w, hw_h };
         qhwc::calculate_crop_rects(tmp_cropR, tmp_dstR, scissor, 0);
     }
+
+    sanitizeSourceCrop(tmp_cropL, tmp_cropR, hnd);
 
     //When buffer is H-flipped, contents of mixer config also needs to swapped
     //Not needed if the layer is confined to one half of the screen.
@@ -1464,6 +1491,18 @@ int getLeftSplit(hwc_context_t *ctx, const int& dpy) {
         lSplit = qdutils::MDPVersion::getInstance().getLeftSplit();
     }
     return lSplit;
+}
+
+bool isDisplaySplit(hwc_context_t* ctx, int dpy) {
+    if(ctx->dpyAttr[dpy].xres > qdutils::MAX_DISPLAY_DIM) {
+        return true;
+    }
+    //For testing we could split primary via device tree values
+    if(dpy == HWC_DISPLAY_PRIMARY &&
+        qdutils::MDPVersion::getInstance().getRightSplit()) {
+        return true;
+    }
+    return false;
 }
 
 void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
