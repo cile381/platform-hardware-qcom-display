@@ -1832,7 +1832,11 @@ static int hwc_set(hwc_composer_device_t *dev,
             } else if (list->flags & HWC_SKIP_COMPOSITION) {
                 continue;
             } else if (list->hwLayers[i].compositionType == HWC_USE_COPYBIT) {
-                drawLayerUsingCopybit(dev, &(list->hwLayers[i]), (EGLDisplay)dpy, (EGLSurface)sur);
+                ret = drawLayerUsingCopybit(dev, &(list->hwLayers[i]), (EGLDisplay)dpy, (EGLSurface)sur);
+                if (ret < 0) {
+                    LOGE("%s: Copybit layer draw failed!", __FUNCTION__);
+                    return ret;
+                }
             }
         }
     } else {
