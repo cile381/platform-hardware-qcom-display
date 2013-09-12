@@ -1676,8 +1676,7 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
         LOGE("%s: copybit stretch failed",__FUNCTION__);
 
     // Unlock this buffer since copybit is done with it.
-    err = genlock_unlock_buffer(hnd);
-    if (GENLOCK_FAILURE == err) {
+    if (GENLOCK_FAILURE == genlock_unlock_buffer(hnd)) {
         LOGE("%s: genlock_unlock_buffer failed", __FUNCTION__);
     }
 
