@@ -139,7 +139,8 @@ protected:
     /* check if we can use layer cache to do at least partial MDP comp */
     bool partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     /* checks for conditions where only video can be bypassed */
-    bool isOnlyVideoDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list);
+    bool isOnlyVideoDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list,
+            bool secureOnly);
     /* checks for conditions where YUV layers cannot be bypassed */
     bool isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer);
     /* calcs bytes read by MDP for a given frame */
@@ -161,7 +162,8 @@ protected:
     /* optimize layers for mdp comp*/
     void batchLayers();
     /* updates cache map with YUV info */
-    void updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list);
+    void updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
+            bool secureOnly);
     bool programMDP(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     bool programYUV(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     void reset(const int& numAppLayers, hwc_display_contents_1_t* list);
@@ -204,6 +206,10 @@ private:
     /* Checks for pipes needed versus pipes available */
     virtual bool arePipesAvailable(hwc_context_t *ctx,
             hwc_display_contents_1_t* list);
+
+    /* Checks for video pipes needed versus pipes available */
+    virtual bool areVGPipesAvailable(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list);
 };
 
 class MDPCompSplit : public MDPComp {
@@ -231,6 +237,10 @@ private:
 
     /* Checks for pipes needed versus pipes available */
     virtual bool arePipesAvailable(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list);
+
+    /* Checks for video pipes needed versus pipes available */
+    virtual bool areVGPipesAvailable(hwc_context_t *ctx,
             hwc_display_contents_1_t* list);
 
     int pipesNeeded(hwc_context_t *ctx, hwc_display_contents_1_t* list,
