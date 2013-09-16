@@ -40,6 +40,7 @@ public:
         SECURING = android::IBinder::FIRST_CALL_TRANSACTION,
         UNSECURING, // Hardware unsecuring start/end notification
         CONNECT,
+        EXTERNAL_ORIENTATION,
     };
     enum {
         END = 0,
@@ -48,6 +49,7 @@ public:
     virtual void securing(uint32_t startEnd) = 0;
     virtual void unsecuring(uint32_t startEnd) = 0;
     virtual void connect(const android::sp<qClient::IQClient>& client) = 0;
+    virtual void setExtOrientation(uint32_t orientation) = 0;
 };
 
 // ----------------------------------------------------------------------------
