@@ -42,12 +42,11 @@ int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
 float MDPComp::sMaxBw = 2.3f;
 uint32_t MDPComp::sCompBytesClaimed = 0;
 
-MDPComp* MDPComp::getObject(const int& width, const int& rightSplit,
-        const int& dpy) {
-    if(width > MAX_DISPLAY_DIM || rightSplit) {
-        return new MDPCompHighRes(dpy);
+MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
+    if(isDisplaySplit(ctx, dpy)) {
+        return new MDPCompSplit(dpy);
     }
-    return new MDPCompLowRes(dpy);
+    return new MDPCompNonSplit(dpy);
 }
 
 MDPComp::MDPComp(int dpy):mDpy(dpy){};
@@ -871,15 +870,15 @@ exit:
     return ret;
 }
 
-//=============MDPCompLowRes===================================================
+//=============MDPCompNonSplit===================================================
 
 /*
  * Configures pipe(s) for MDP composition
  */
-int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                              PipeLayerPair& PipeLayerPair) {
-    MdpPipeInfoLowRes& mdp_info =
-        *(static_cast<MdpPipeInfoLowRes*>(PipeLayerPair.pipeInfo));
+    MdpPipeInfoNonSplit& mdp_info =
+        *(static_cast<MdpPipeInfoNonSplit*>(PipeLayerPair.pipeInfo));
     eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
@@ -888,11 +887,11 @@ int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipe: %d",
              __FUNCTION__, layer, zOrder, dest);
 
-    return configureLowRes(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
+    return configureNonSplit(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
                            &PipeLayerPair.rot);
 }
 
-bool MDPCompLowRes::arePipesAvailable(hwc_context_t *ctx,
+bool MDPCompNonSplit::arePipesAvailable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     overlay::Overlay& ov = *ctx->mOverlay;
     int numPipesNeeded = mCurrentFrame.mdpCount;
@@ -911,7 +910,7 @@ bool MDPCompLowRes::arePipesAvailable(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
+bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     for(int index = 0; index < mCurrentFrame.layerCount; index++) {
 
@@ -921,9 +920,9 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoLowRes;
+        info.pipeInfo = new MdpPipeInfoNonSplit;
         info.rot = NULL;
-        MdpPipeInfoLowRes& pipe_info = *(MdpPipeInfoLowRes*)info.pipeInfo;
+        MdpPipeInfoNonSplit& pipe_info = *(MdpPipeInfoNonSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
 
         if(isYuvBuffer(hnd)) {
@@ -944,7 +943,7 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
@@ -982,8 +981,8 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         int mdpIndex = mCurrentFrame.layerToMDP[i];
 
-        MdpPipeInfoLowRes& pipe_info =
-            *(MdpPipeInfoLowRes*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
+        MdpPipeInfoNonSplit& pipe_info =
+            *(MdpPipeInfoNonSplit*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
         ovutils::eDest dest = pipe_info.index;
         if(dest == ovutils::OV_INVALID) {
             ALOGE("%s: Invalid pipe index (%d)", __FUNCTION__, dest);
@@ -1018,9 +1017,9 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     return true;
 }
 
-//=============MDPCompHighRes===================================================
+//=============MDPCompSplit===================================================
 
-int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
+int MDPCompSplit::pipesNeeded(hwc_context_t *ctx,
         hwc_display_contents_1_t* list,
         int mixer) {
     int pipesNeeded = 0;
@@ -1042,7 +1041,7 @@ int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
     return pipesNeeded;
 }
 
-bool MDPCompHighRes::arePipesAvailable(hwc_context_t *ctx,
+bool MDPCompSplit::arePipesAvailable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     overlay::Overlay& ov = *ctx->mOverlay;
 
@@ -1064,8 +1063,8 @@ bool MDPCompHighRes::arePipesAvailable(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-        MdpPipeInfoHighRes& pipe_info,
+bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
+        MdpPipeInfoSplit& pipe_info,
         ePipeType type) {
     const int xres = ctx->dpyAttr[mDpy].xres;
     const int lSplit = getLeftSplit(ctx, mDpy);
@@ -1089,7 +1088,7 @@ bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
     return true;
 }
 
-bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
+bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     for(int index = 0 ; index < mCurrentFrame.layerCount; index++) {
 
@@ -1099,9 +1098,9 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoHighRes;
+        info.pipeInfo = new MdpPipeInfoSplit;
         info.rot = NULL;
-        MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
+        MdpPipeInfoSplit& pipe_info = *(MdpPipeInfoSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
 
         if(isYuvBuffer(hnd)) {
@@ -1124,10 +1123,10 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
 /*
  * Configures pipe(s) for MDP composition
  */
-int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
         PipeLayerPair& PipeLayerPair) {
-    MdpPipeInfoHighRes& mdp_info =
-        *(static_cast<MdpPipeInfoHighRes*>(PipeLayerPair.pipeInfo));
+    MdpPipeInfoSplit& mdp_info =
+        *(static_cast<MdpPipeInfoSplit*>(PipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
     eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
@@ -1137,11 +1136,11 @@ int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipeL: %d"
              "dest_pipeR: %d",__FUNCTION__, layer, zOrder, lDest, rDest);
 
-    return configureHighRes(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
+    return configureSplit(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
                             rDest, &PipeLayerPair.rot);
 }
 
-bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
@@ -1183,8 +1182,8 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         int mdpIndex = mCurrentFrame.layerToMDP[i];
 
-        MdpPipeInfoHighRes& pipe_info =
-            *(MdpPipeInfoHighRes*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
+        MdpPipeInfoSplit& pipe_info =
+            *(MdpPipeInfoSplit*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
         Rotator *rot = mCurrentFrame.mdpToLayer[mdpIndex].rot;
 
         ovutils::eDest indexL = pipe_info.lIndex;
