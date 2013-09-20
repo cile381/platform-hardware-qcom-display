@@ -481,6 +481,49 @@ static int blit_copybit(
     return stretch_copybit(dev, dst, src, &dr, &sr, region);
 }
 
+/** Fill the rect on dst with rgba color **/
+static int fill_color(struct copybit_device_t *dev,
+                      struct copybit_image_t const *dst,
+                      struct copybit_rect_t const *rect,
+                      uint32_t color)
+{
+    struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
+    if (!ctx) {
+        LOGE ("%s: Invalid copybit context", __FUNCTION__);
+        return -EINVAL;
+    }
+
+    if (dst->w > MAX_DIMENSION || dst->h > MAX_DIMENSION) {
+        LOGE ("fill_color: Invalid DST w=%d h=%d", dst->w, dst->h);
+        return -EINVAL;
+    }
+
+    struct {
+        uint32_t count;
+        struct mdp_blit_req req[1];
+    } list;
+
+    list.count = 1;
+    mdp_blit_req* req = &list.req[0];
+    set_image(&req->dst, dst);
+    req->dst_rect.x  = rect->l;
+    req->dst_rect.y  = rect->t;
+    req->dst_rect.w  = rect->r - rect->l;
+    req->dst_rect.h  = rect->b - rect->t;
+    req->const_color.alpha = (uint32_t)((color >> 24) & 0xff);
+    if (req->const_color.alpha == 0)
+        return -EINVAL;
+    req->const_color.b = (uint32_t)((color >> 16) & 0xff);
+    req->const_color.g = (uint32_t)((color >> 8) & 0xff);
+    req->const_color.r = (uint32_t)((color >> 0) & 0xff);
+    req->alpha = MDP_ALPHA_NOP;
+    req->transp_mask = MDP_TRANSP_NOP;
+    req->flags = CONST_COLOR;
+
+    int status = msm_copybit(ctx, &list);
+    return status;
+}
+
 /*****************************************************************************/
 
 /** Close the copybit device */
@@ -511,6 +554,7 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->device.get = get;
     ctx->device.blit = blit_copybit;
     ctx->device.stretch = stretch_copybit;
+    ctx->device.fill = fill_color;
     ctx->mAlpha = MDP_ALPHA_NOP;
     ctx->mFlags = 0;
     ctx->mFD = open("/dev/graphics/fb0", O_RDWR, 0);

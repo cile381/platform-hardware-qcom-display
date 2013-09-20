@@ -209,6 +209,21 @@ struct copybit_device_t {
                    struct copybit_rect_t const *dst_rect,
                    struct copybit_rect_t const *src_rect,
                    struct copybit_region_t const *region);
+
+    /**
+     * Fill the rect on dst with rgba color
+     *
+     * @param dev from open
+     * @param dst is destination image
+     * @param rect is destination rectangle
+     * @param color is the color to fill
+     *
+     * @return 0 if successful
+     */
+    int (*fill)(struct copybit_device_t *dev,
+                struct copybit_image_t const *dst,
+                struct copybit_rect_t const *rect,
+                uint32_t color);
 };
 
 
