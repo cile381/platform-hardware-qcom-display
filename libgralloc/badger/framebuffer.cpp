@@ -988,7 +988,6 @@ int mapFrameBufferLocked(struct private_module_t* module)
         return -errno;
     }
     module->framebuffer->base = intptr_t(vaddr);
-    memset(vaddr, 0, fbSize);
 
 #if defined(HDMI_DUAL_DISPLAY)
     /* Overlay for HDMI*/
