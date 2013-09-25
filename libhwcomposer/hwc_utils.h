@@ -172,9 +172,12 @@ bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
+int getBlending(int blending);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
+
+int getExtOrientation(hwc_context_t* ctx);
 
 /* Calculates the destination position based on the action safe rectangle */
 void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& dst);
@@ -190,9 +193,13 @@ bool isPrimaryPortrait(hwc_context_t *ctx);
 bool isOrientationPortrait(hwc_context_t *ctx);
 
 void calcExtDisplayPosition(hwc_context_t *ctx,
+                               private_handle_t *hnd,
                                int dpy,
                                hwc_rect_t& sourceCrop,
-                               hwc_rect_t& displayFrame);
+                               hwc_rect_t& displayFrame,
+                               int& transform,
+                               ovutils::eTransform& orient);
+
 // Returns the orientation that needs to be set on external for
 // BufferMirrirMode(Sidesync)
 int getMirrorModeOrientation(hwc_context_t *ctx);
@@ -213,7 +220,7 @@ void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
         int rotDownscale, int transform);
 
-int configRotator(overlay::Rotator *rot, const ovutils::Whf& whf,
+int configRotator(overlay::Rotator *rot, ovutils::Whf& whf,
         hwc_rect_t& crop, const ovutils::eMdpFlags& mdpFlags,
         const ovutils::eTransform& orient, const int& downscale);
 
@@ -226,13 +233,13 @@ void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
         hwc_rect_t& crop);
 
 //Routine to configure low resolution panels (<= 2048 width)
-int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& dest,
         overlay::Rotator **rot);
 
 //Routine to configure high resolution panels (> 2048 width)
-int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
         const ovutils::eDest& rDest, overlay::Rotator **rot);
@@ -243,9 +250,11 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
 //extreme unavailability of pipes. This can also be done via hybrid calculations
 //also involving many more variables like number of write-back interfaces etc,
 //but the variety of scenarios is too high to warrant that.
-bool canUseRotator(hwc_context_t *ctx);
+bool canUseRotator(hwc_context_t *ctx, int dpy);
 
 int getLeftSplit(hwc_context_t *ctx, const int& dpy);
+
+bool isDisplaySplit(hwc_context_t* ctx, int dpy);
 
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
@@ -290,8 +299,7 @@ void init_uevent_thread(hwc_context_t* ctx);
 void init_vsync_thread(hwc_context_t* ctx);
 
 inline void getLayerResolution(const hwc_layer_1_t* layer,
-                               int& width, int& height)
-{
+                               int& width, int& height) {
     hwc_rect_t displayFrame  = layer->displayFrame;
     width = displayFrame.right - displayFrame.left;
     height = displayFrame.bottom - displayFrame.top;
@@ -357,17 +365,8 @@ struct hwc_context_t {
     bool mVirtualonExtActive;
     //Display in secure mode indicator
     bool mSecureMode;
-    //Lock to prevent set from being called while blanking
-    mutable Locker mBlankLock;
-    //Lock to protect prepare & set when detaching external disp
-    mutable Locker mExtLock;
-    /*Lock to set both mSecureMode and mSecuring as part
-      of binder thread without context switch to composition
-      thread. This lock is needed only for A-family targets
-      since the state of mSecureMode and mSecuring variables
-      are not checked in B-family targets.
-    */
-    mutable Locker mSecureLock;
+    //Lock to protect drawing data structures
+    mutable Locker mDrawLock;
     //Drawing round when we use GPU
     bool isPaddingRound;
     // External Orientation

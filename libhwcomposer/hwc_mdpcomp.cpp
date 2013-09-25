@@ -42,20 +42,23 @@ bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
 bool MDPComp::sEnableMixedMode = true;
 int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
+float MDPComp::sMaxBw = 2.3f;
+uint32_t MDPComp::sCompBytesClaimed = 0;
 
-MDPComp* MDPComp::getObject(const int& width, const int& rightSplit,
-        const int& dpy) {
-    if(width > MAX_DISPLAY_DIM || rightSplit) {
-        return new MDPCompHighRes(dpy);
+MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
+    if(isDisplaySplit(ctx, dpy)) {
+        return new MDPCompSplit(dpy);
     }
-    return new MDPCompLowRes(dpy);
+    return new MDPCompNonSplit(dpy);
 }
 
 MDPComp::MDPComp(int dpy):mDpy(dpy){};
 
 void MDPComp::dump(android::String8& buf)
 {
-    Locker::Autolock _l(mMdpCompLock);
+    if(mCurrentFrame.layerCount > MAX_NUM_APP_LAYERS)
+        return;
+
     dumpsys_log(buf,"HWC Map for Dpy: %s \n",
                 (mDpy == 0) ? "\"PRIMARY\"" :
                 (mDpy == 1) ? "\"EXTERNAL\"" : "\"VIRTUAL\"");
@@ -97,10 +100,6 @@ bool MDPComp::init(hwc_context_t *ctx) {
        (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
         (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
         sEnabled = true;
-        if(!setupBasePipe(ctx)) {
-            ALOGE("%s: Failed to setup primary base pipe", __FUNCTION__);
-            return false;
-        }
     }
 
     sEnableMixedMode = true;
@@ -121,6 +120,13 @@ bool MDPComp::init(hwc_context_t *ctx) {
         int val = atoi(property);
         if(val >= 0)
             sMaxPipesPerMixer = min(val, MAX_PIPES_PER_MIXER);
+    }
+
+    if(property_get("debug.mdpcomp.bw", property, "0") > 0) {
+        float val = atof(property);
+        if(val > 0.0f) {
+            sMaxBw = val;
+        }
     }
 
     if(ctx->mMDP.panel != MIPI_CMD_PANEL) {
@@ -178,7 +184,6 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
             layerProp[index].mFlags |= HWC_MDPCOMP;
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
-            mCachedFrame.hnd[index] = NULL;
         } else {
             if(!mCurrentFrame.needsRedraw)
                 layer->compositionType = HWC_OVERLAY;
@@ -186,45 +191,6 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
     }
 }
 
-/*
- * Sets up BORDERFILL as default base pipe and detaches RGB0.
- * Framebuffer is always updated using PLAY ioctl.
- */
-bool MDPComp::setupBasePipe(hwc_context_t *ctx) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
-    int fb_stride = ctx->dpyAttr[dpy].stride;
-    int fb_width = ctx->dpyAttr[dpy].xres;
-    int fb_height = ctx->dpyAttr[dpy].yres;
-    int fb_fd = ctx->dpyAttr[dpy].fd;
-
-    mdp_overlay ovInfo;
-    msmfb_overlay_data ovData;
-    memset(&ovInfo, 0, sizeof(mdp_overlay));
-    memset(&ovData, 0, sizeof(msmfb_overlay_data));
-
-    ovInfo.src.format = MDP_RGB_BORDERFILL;
-    ovInfo.src.width  = fb_width;
-    ovInfo.src.height = fb_height;
-    ovInfo.src_rect.w = fb_width;
-    ovInfo.src_rect.h = fb_height;
-    ovInfo.dst_rect.w = fb_width;
-    ovInfo.dst_rect.h = fb_height;
-    ovInfo.id = MSMFB_NEW_REQUEST;
-
-    if (ioctl(fb_fd, MSMFB_OVERLAY_SET, &ovInfo) < 0) {
-        ALOGE("Failed to call ioctl MSMFB_OVERLAY_SET err=%s",
-              strerror(errno));
-        return false;
-    }
-
-    ovData.id = ovInfo.id;
-    if (ioctl(fb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
-        ALOGE("Failed to call ioctl MSMFB_OVERLAY_PLAY err=%s",
-              strerror(errno));
-        return false;
-    }
-    return true;
-}
 MDPComp::FrameInfo::FrameInfo() {
     reset(0);
 }
@@ -440,11 +406,15 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        if((layer->transform & HWC_TRANSFORM_ROT_90) && !isYuvBuffer(hnd)) {
-            ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
-            return false;
+        if(layer->transform & HWC_TRANSFORM_ROT_90) {
+            if(!isYuvBuffer(hnd) ) {
+                ALOGD_IF(isDebug(), "%s: orientation involved",__FUNCTION__);
+                return false;
+            }else if(!canUseRotator(ctx, mDpy)) {
+                ALOGD_IF(isDebug(), "%s: no free DMA pipe",__FUNCTION__);
+                return false;
+            }
         }
-
         if(!isValidDimension(ctx,layer)) {
             ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",
                 __FUNCTION__);
@@ -491,6 +461,12 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return false;
     }
 
+    uint32_t size = calcMDPBytesRead(ctx, list);
+    if(!bandwidthCheck(ctx, size)) {
+        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
+        return false;
+    }
+
     return true;
 }
 
@@ -516,6 +492,12 @@ bool MDPComp::partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list)
     }
 
     if(!arePipesAvailable(ctx, list)) {
+        return false;
+    }
+
+    uint32_t size = calcMDPBytesRead(ctx, list);
+    if(!bandwidthCheck(ctx, size)) {
+        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
         return false;
     }
 
@@ -546,6 +528,12 @@ bool MDPComp::isOnlyVideoDoable(hwc_context_t *ctx,
         return false;
     }
 
+    uint32_t size = calcMDPBytesRead(ctx, list);
+    if(!bandwidthCheck(ctx, size)) {
+        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
+        return false;
+    }
+
     return true;
 }
 
@@ -558,6 +546,11 @@ bool MDPComp::isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer) {
         return false;
     }
 
+    if(layer->transform & HWC_TRANSFORM_ROT_90 && !canUseRotator(ctx,mDpy)) {
+        ALOGD_IF(isDebug(), "%s: no free DMA pipe",__FUNCTION__);
+        return false;
+    }
+
     if(isSecuring(ctx, layer)) {
         ALOGD_IF(isDebug(), "%s: MDP securing is active", __FUNCTION__);
         return false;
@@ -566,6 +559,13 @@ bool MDPComp::isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer) {
     if(!isValidDimension(ctx, layer)) {
         ALOGD_IF(isDebug(), "%s: Buffer is of invalid width",
             __FUNCTION__);
+        return false;
+    }
+
+    if(layer->planeAlpha < 0xFF) {
+        ALOGD_IF(isDebug(), "%s: Cannot handle YUV layer with plane alpha\
+                 in video only mode",
+                 __FUNCTION__);
         return false;
     }
 
@@ -735,95 +735,147 @@ bool MDPComp::programYUV(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     return true;
 }
 
+uint32_t MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list) {
+    uint32_t size = 0;
+
+    if(!qdutils::MDPVersion::getInstance().is8x74v2())
+        return 0;
+
+    for (uint32_t i = 0; i < list->numHwLayers - 1; i++) {
+        if(!mCurrentFrame.isFBComposed[i]) {
+            hwc_layer_1_t* layer = &list->hwLayers[i];
+            private_handle_t *hnd = (private_handle_t *)layer->handle;
+            if (hnd) {
+                hwc_rect_t crop = layer->sourceCrop;
+                float bpp = ((float)hnd->size) / (hnd->width * hnd->height);
+                size += bpp * ((crop.right - crop.left) *
+                    (crop.bottom - crop.top));
+            }
+        }
+    }
+
+    if(mCurrentFrame.fbCount) {
+        hwc_layer_1_t* layer = &list->hwLayers[list->numHwLayers - 1];
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        if (hnd)
+            size += hnd->size;
+    }
+
+    return size;
+}
+
+bool MDPComp::bandwidthCheck(hwc_context_t *ctx, const uint32_t& size) {
+    //Will be added for other targets if we run into bandwidth issues and when
+    //we have profiling data to set an upper limit.
+    if(qdutils::MDPVersion::getInstance().is8x74v2()) {
+        const uint32_t ONE_GIG = 1024 * 1024 * 1024;
+        double panelRefRate =
+                1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
+        if((size + sCompBytesClaimed) > ((sMaxBw / panelRefRate) * ONE_GIG)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+    int ret = 0;
     const int numLayers = ctx->listStats[mDpy].numAppLayers;
 
-    { //LOCK SCOPE BEGIN
-        Locker::Autolock _l(mMdpCompLock);
+    //reset old data
+    mCurrentFrame.reset(numLayers);
 
-        //reset old data
-        mCurrentFrame.reset(numLayers);
-
-        //number of app layers exceeds MAX_NUM_APP_LAYERS fall back to GPU
-        //do not cache the information for next draw cycle.
-        if(numLayers > MAX_NUM_APP_LAYERS) {
-            mCachedFrame.updateCounts(mCurrentFrame);
-            ALOGD_IF(isDebug(), "%s: Number of App layers exceeded the limit ",
-                                    __FUNCTION__);
-            return -1;
-        }
-
-        //Hard conditions, if not met, cannot do MDP comp
-        if(!isFrameDoable(ctx)) {
-            ALOGD_IF( isDebug(),"%s: MDP Comp not possible for this frame",
-                                    __FUNCTION__);
-            reset(numLayers, list);
-            return -1;
-        }
-
-        //Check whether layers marked for MDP Composition is actually doable.
-        if(isFullFrameDoable(ctx, list)){
-            mCurrentFrame.map();
-            //Configure framebuffer first if applicable
-            if(mCurrentFrame.fbZ >= 0) {
-                if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list,
-                        mCurrentFrame.fbZ)) {
-                    ALOGE("%s configure framebuffer failed", __func__);
-                    reset(numLayers, list);
-                    return -1;
-                }
-            }
-            //Acquire and Program MDP pipes
-            if(!programMDP(ctx, list)) {
-                reset(numLayers, list);
-                return -1;
-            } else { //Success
-                //Any change in composition types needs an FB refresh
-                mCurrentFrame.needsRedraw = false;
-                if(mCurrentFrame.fbCount &&
-                        ((mCurrentFrame.mdpCount != mCachedFrame.mdpCount) ||
-                        (mCurrentFrame.fbCount != mCachedFrame.cacheCount) ||
-                        (mCurrentFrame.fbZ != mCachedFrame.fbZ) ||
-                        (!mCurrentFrame.mdpCount) ||
-                        (list->flags & HWC_GEOMETRY_CHANGED) ||
-                        isSkipPresent(ctx, mDpy) ||
-                        (mDpy > HWC_DISPLAY_PRIMARY))) {
-                    mCurrentFrame.needsRedraw = true;
-                }
-            }
-        } else if(isOnlyVideoDoable(ctx, list)) {
-            //All layers marked for MDP comp cannot be bypassed.
-            //Try to compose atleast YUV layers through MDP comp and let
-            //all the RGB layers compose in FB
-            //Destination over
-            mCurrentFrame.fbZ = -1;
-            if(mCurrentFrame.fbCount)
-                mCurrentFrame.fbZ = mCurrentFrame.mdpCount;
-
-            mCurrentFrame.map();
-
-            //Configure framebuffer first if applicable
-            if(mCurrentFrame.fbZ >= 0) {
-                if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list, mCurrentFrame.fbZ)) {
-                    ALOGE("%s configure framebuffer failed", __func__);
-                    reset(numLayers, list);
-                    return -1;
-                }
-            }
-            if(!programYUV(ctx, list)) {
-                reset(numLayers, list);
-                return -1;
-            }
-        } else {
-            reset(numLayers, list);
-            return -1;
-        }
-
-        //UpdateLayerFlags
-        setMDPCompLayerFlags(ctx, list);
+    //number of app layers exceeds MAX_NUM_APP_LAYERS fall back to GPU
+    //do not cache the information for next draw cycle.
+    if(numLayers > MAX_NUM_APP_LAYERS) {
         mCachedFrame.updateCounts(mCurrentFrame);
+        ALOGD_IF(isDebug(), "%s: Number of App layers exceeded the limit ",
+                __FUNCTION__);
+        ret = -1;
+        goto exit;
+    }
 
-    } //LOCK SCOPE END. dump also need this lock.
+    //Hard conditions, if not met, cannot do MDP comp
+    if(!isFrameDoable(ctx)) {
+        ALOGD_IF( isDebug(),"%s: MDP Comp not possible for this frame",
+                __FUNCTION__);
+        reset(numLayers, list);
+        ret = -1;
+        goto exit;
+    }
+
+    //Check whether layers marked for MDP Composition is actually doable.
+    if(isFullFrameDoable(ctx, list)) {
+        mCurrentFrame.map();
+        //Configure framebuffer first if applicable
+        if(mCurrentFrame.fbZ >= 0) {
+            if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list,
+                        mCurrentFrame.fbZ)) {
+                ALOGE("%s configure framebuffer failed", __func__);
+                reset(numLayers, list);
+                ctx->mOverlay->clear(mDpy);
+                ret = -1;
+                goto exit;
+            }
+        }
+        //Acquire and Program MDP pipes
+        if(!programMDP(ctx, list)) {
+            reset(numLayers, list);
+            ctx->mOverlay->clear(mDpy);
+            ret = -1;
+            goto exit;
+        } else { //Success
+            //Any change in composition types needs an FB refresh
+            mCurrentFrame.needsRedraw = false;
+            if(mCurrentFrame.fbCount &&
+                    ((mCurrentFrame.mdpCount != mCachedFrame.mdpCount) ||
+                     (mCurrentFrame.fbCount != mCachedFrame.cacheCount) ||
+                     (mCurrentFrame.fbZ != mCachedFrame.fbZ) ||
+                     (!mCurrentFrame.mdpCount) ||
+                     (list->flags & HWC_GEOMETRY_CHANGED) ||
+                     isSkipPresent(ctx, mDpy) ||
+                     (mDpy > HWC_DISPLAY_PRIMARY))) {
+                mCurrentFrame.needsRedraw = true;
+            }
+        }
+    } else if(isOnlyVideoDoable(ctx, list)) {
+        //All layers marked for MDP comp cannot be bypassed.
+        //Try to compose atleast YUV layers through MDP comp and let
+        //all the RGB layers compose in FB
+        //Destination over
+        mCurrentFrame.fbZ = -1;
+        if(mCurrentFrame.fbCount)
+            mCurrentFrame.fbZ = mCurrentFrame.mdpCount;
+
+        mCurrentFrame.map();
+
+        //Configure framebuffer first if applicable
+        if(mCurrentFrame.fbZ >= 0) {
+            if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list, mCurrentFrame.fbZ)) {
+                ALOGE("%s configure framebuffer failed", __func__);
+                reset(numLayers, list);
+                ctx->mOverlay->clear(mDpy);
+                ret = -1;
+                goto exit;
+            }
+        }
+        if(!programYUV(ctx, list)) {
+            reset(numLayers, list);
+            ctx->mOverlay->clear(mDpy);
+            ret = -1;
+            goto exit;
+        }
+    } else {
+        reset(numLayers, list);
+        ret = -1;
+        goto exit;
+    }
+
+    //UpdateLayerFlags
+    setMDPCompLayerFlags(ctx, list);
+    mCachedFrame.updateCounts(mCurrentFrame);
+
     // unlock it before calling dump function to avoid deadlock
     if(isDebug()) {
         ALOGD("GEOMETRY change: %d", (list->flags & HWC_GEOMETRY_CHANGED));
@@ -832,18 +884,20 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGE("%s",sDump.string());
     }
 
-    return 0;
+exit:
+    sCompBytesClaimed += calcMDPBytesRead(ctx, list);
+    return ret;
 }
 
-//=============MDPCompLowRes===================================================
+//=============MDPCompNonSplit===================================================
 
 /*
  * Configures pipe(s) for MDP composition
  */
-int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                              PipeLayerPair& PipeLayerPair) {
-    MdpPipeInfoLowRes& mdp_info =
-        *(static_cast<MdpPipeInfoLowRes*>(PipeLayerPair.pipeInfo));
+    MdpPipeInfoNonSplit& mdp_info =
+        *(static_cast<MdpPipeInfoNonSplit*>(PipeLayerPair.pipeInfo));
     eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
@@ -852,11 +906,11 @@ int MDPCompLowRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipe: %d",
              __FUNCTION__, layer, zOrder, dest);
 
-    return configureLowRes(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
+    return configureNonSplit(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
                            &PipeLayerPair.rot);
 }
 
-bool MDPCompLowRes::arePipesAvailable(hwc_context_t *ctx,
+bool MDPCompNonSplit::arePipesAvailable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     overlay::Overlay& ov = *ctx->mOverlay;
     int numPipesNeeded = mCurrentFrame.mdpCount;
@@ -875,7 +929,7 @@ bool MDPCompLowRes::arePipesAvailable(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
+bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     for(int index = 0; index < mCurrentFrame.layerCount; index++) {
 
@@ -885,9 +939,9 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoLowRes;
+        info.pipeInfo = new MdpPipeInfoNonSplit;
         info.rot = NULL;
-        MdpPipeInfoLowRes& pipe_info = *(MdpPipeInfoLowRes*)info.pipeInfo;
+        MdpPipeInfoNonSplit& pipe_info = *(MdpPipeInfoNonSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
 
         if(isYuvBuffer(hnd)) {
@@ -908,7 +962,7 @@ bool MDPCompLowRes::allocLayerPipes(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
@@ -924,8 +978,6 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGD_IF(isDebug(),"%s: Exceeding max layer count", __FUNCTION__);
         return true;
     }
-
-    Locker::Autolock _l(mMdpCompLock);
 
     /* reset Invalidator */
     if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount)
@@ -948,8 +1000,8 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         int mdpIndex = mCurrentFrame.layerToMDP[i];
 
-        MdpPipeInfoLowRes& pipe_info =
-            *(MdpPipeInfoLowRes*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
+        MdpPipeInfoNonSplit& pipe_info =
+            *(MdpPipeInfoNonSplit*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
         ovutils::eDest dest = pipe_info.index;
         if(dest == ovutils::OV_INVALID) {
             ALOGE("%s: Invalid pipe index (%d)", __FUNCTION__, dest);
@@ -966,13 +1018,6 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         int fd = hnd->fd;
         uint32_t offset = hnd->offset;
-
-        if(ctx->mAD->isModeOn()) {
-            if(ctx->mAD->draw(ctx, fd, offset)) {
-                fd = ctx->mAD->getDstFd(ctx);
-                offset = ctx->mAD->getDstOffset(ctx);
-            }
-        }
 
         Rotator *rot = mCurrentFrame.mdpToLayer[mdpIndex].rot;
         if(rot) {
@@ -992,9 +1037,9 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     return true;
 }
 
-//=============MDPCompHighRes===================================================
+//=============MDPCompSplit===================================================
 
-int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
+int MDPCompSplit::pipesNeeded(hwc_context_t *ctx,
         hwc_display_contents_1_t* list,
         int mixer) {
     int pipesNeeded = 0;
@@ -1016,7 +1061,7 @@ int MDPCompHighRes::pipesNeeded(hwc_context_t *ctx,
     return pipesNeeded;
 }
 
-bool MDPCompHighRes::arePipesAvailable(hwc_context_t *ctx,
+bool MDPCompSplit::arePipesAvailable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     overlay::Overlay& ov = *ctx->mOverlay;
 
@@ -1038,8 +1083,8 @@ bool MDPCompHighRes::arePipesAvailable(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-        MdpPipeInfoHighRes& pipe_info,
+bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
+        MdpPipeInfoSplit& pipe_info,
         ePipeType type) {
     const int xres = ctx->dpyAttr[mDpy].xres;
     const int lSplit = getLeftSplit(ctx, mDpy);
@@ -1063,7 +1108,7 @@ bool MDPCompHighRes::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
     return true;
 }
 
-bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
+bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     for(int index = 0 ; index < mCurrentFrame.layerCount; index++) {
 
@@ -1073,9 +1118,9 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoHighRes;
+        info.pipeInfo = new MdpPipeInfoSplit;
         info.rot = NULL;
-        MdpPipeInfoHighRes& pipe_info = *(MdpPipeInfoHighRes*)info.pipeInfo;
+        MdpPipeInfoSplit& pipe_info = *(MdpPipeInfoSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
 
         if(isYuvBuffer(hnd)) {
@@ -1098,10 +1143,10 @@ bool MDPCompHighRes::allocLayerPipes(hwc_context_t *ctx,
 /*
  * Configures pipe(s) for MDP composition
  */
-int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
         PipeLayerPair& PipeLayerPair) {
-    MdpPipeInfoHighRes& mdp_info =
-        *(static_cast<MdpPipeInfoHighRes*>(PipeLayerPair.pipeInfo));
+    MdpPipeInfoSplit& mdp_info =
+        *(static_cast<MdpPipeInfoSplit*>(PipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
     eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
@@ -1111,11 +1156,11 @@ int MDPCompHighRes::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipeL: %d"
              "dest_pipeR: %d",__FUNCTION__, layer, zOrder, lDest, rDest);
 
-    return configureHighRes(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
+    return configureSplit(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
                             rDest, &PipeLayerPair.rot);
 }
 
-bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
@@ -1131,8 +1176,6 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGD_IF(isDebug(),"%s: Exceeding max layer count", __FUNCTION__);
         return true;
     }
-
-    Locker::Autolock _l(mMdpCompLock);
 
     /* reset Invalidator */
     if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount)
@@ -1159,8 +1202,8 @@ bool MDPCompHighRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
         int mdpIndex = mCurrentFrame.layerToMDP[i];
 
-        MdpPipeInfoHighRes& pipe_info =
-            *(MdpPipeInfoHighRes*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
+        MdpPipeInfoSplit& pipe_info =
+            *(MdpPipeInfoSplit*)mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
         Rotator *rot = mCurrentFrame.mdpToLayer[mdpIndex].rot;
 
         ovutils::eDest indexL = pipe_info.lIndex;

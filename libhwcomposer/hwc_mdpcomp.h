@@ -46,13 +46,13 @@ public:
     /* dumpsys */
     void dump(android::String8& buf);
 
-    static MDPComp* getObject(const int& width, const int& rightSplit,
-            const int& dpy);
+    static MDPComp* getObject(hwc_context_t *ctx, const int& dpy);
     /* Handler to invoke frame redraw on Idle Timer expiry */
     static void timeout_handler(void *udata);
     /* Initialize MDP comp*/
     static bool init(hwc_context_t *ctx);
     static void resetIdleFallBack() { sIdleFallBack = false; }
+    static void reset() { sCompBytesClaimed = 0; };
 
 protected:
     enum ePipeType {
@@ -142,9 +142,12 @@ protected:
     bool isOnlyVideoDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     /* checks for conditions where YUV layers cannot be bypassed */
     bool isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer);
+    /* calcs bytes read by MDP for a given frame */
+    uint32_t calcMDPBytesRead(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list);
+    /* checks if the required bandwidth exceeds a certain max */
+    bool bandwidthCheck(hwc_context_t *ctx, const uint32_t& size);
 
-    /* set up Border fill as Base pipe */
-    static bool setupBasePipe(hwc_context_t*);
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
     /* Is feature enabled */
@@ -167,22 +170,26 @@ protected:
     static bool sDebugLogs;
     static bool sIdleFallBack;
     static int sMaxPipesPerMixer;
+    //Max bandwidth. Value is in GBPS. For ex: 2.3 means 2.3GBPS
+    static float sMaxBw;
+    //Tracks composition bytes claimed. Represented as the total w*h*bpp
+    //going to MDP mixers
+    static uint32_t sCompBytesClaimed;
     static IdleInvalidator *idleInvalidator;
     struct FrameInfo mCurrentFrame;
     struct LayerCache mCachedFrame;
-    mutable Locker mMdpCompLock;
 };
 
-class MDPCompLowRes : public MDPComp {
+class MDPCompNonSplit : public MDPComp {
 public:
-    explicit MDPCompLowRes(int dpy):MDPComp(dpy){};
-    virtual ~MDPCompLowRes(){};
+    explicit MDPCompNonSplit(int dpy):MDPComp(dpy){};
+    virtual ~MDPCompNonSplit(){};
     virtual bool draw(hwc_context_t *ctx, hwc_display_contents_1_t *list);
 
 private:
-    struct MdpPipeInfoLowRes : public MdpPipeInfo {
+    struct MdpPipeInfoNonSplit : public MdpPipeInfo {
         ovutils::eDest index;
-        virtual ~MdpPipeInfoLowRes() {};
+        virtual ~MdpPipeInfoNonSplit() {};
     };
 
     /* configure's overlay pipes for the frame */
@@ -198,20 +205,20 @@ private:
             hwc_display_contents_1_t* list);
 };
 
-class MDPCompHighRes : public MDPComp {
+class MDPCompSplit : public MDPComp {
 public:
-    explicit MDPCompHighRes(int dpy):MDPComp(dpy){};
-    virtual ~MDPCompHighRes(){};
+    explicit MDPCompSplit(int dpy):MDPComp(dpy){};
+    virtual ~MDPCompSplit(){};
     virtual bool draw(hwc_context_t *ctx, hwc_display_contents_1_t *list);
 private:
-    struct MdpPipeInfoHighRes : public MdpPipeInfo {
+    struct MdpPipeInfoSplit : public MdpPipeInfo {
         ovutils::eDest lIndex;
         ovutils::eDest rIndex;
-        virtual ~MdpPipeInfoHighRes() {};
+        virtual ~MdpPipeInfoSplit() {};
     };
 
     bool acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-                         MdpPipeInfoHighRes& pipe_info, ePipeType type);
+                         MdpPipeInfoSplit& pipe_info, ePipeType type);
 
     /* configure's overlay pipes for the frame */
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
