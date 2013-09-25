@@ -70,6 +70,12 @@ protected:
         virtual ~MdpPipeInfo(){};
     };
 
+    struct MdpYUVPipeInfo : public MdpPipeInfo{
+        ovutils::eDest lIndex;
+        ovutils::eDest rIndex;
+        virtual ~MdpYUVPipeInfo(){};
+    };
+
     /* per layer data */
     struct PipeLayerPair {
         MdpPipeInfo *pipeInfo;
@@ -132,7 +138,12 @@ protected:
     /* Checks for pipes needed versus pipes available */
     virtual bool arePipesAvailable(hwc_context_t *ctx,
             hwc_display_contents_1_t* list) = 0;
-
+    /* increments mdpCount if 4k2k yuv layer split is enabled*/
+    virtual void modifymdpCountfor4k2k(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list) = 0;
+    /* configures 4kx2k yuv layer*/
+    virtual int configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
+            PipeLayerPair& PipeLayerPair) = 0;
     /* set/reset flags for MDPComp */
     void setMDPCompLayerFlags(hwc_context_t *ctx,
                               hwc_display_contents_1_t* list);
@@ -202,6 +213,10 @@ protected:
     static IdleInvalidator *idleInvalidator;
     struct FrameInfo mCurrentFrame;
     struct LayerCache mCachedFrame;
+    //Enable 4kx2k yuv layer split
+    static bool sEnable4k2kYUVSplit;
+    bool allocSplitVGPipesfor4k2k(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list, int index);
 };
 
 class MDPCompNonSplit : public MDPComp {
@@ -231,6 +246,14 @@ private:
     /* Checks for video pipes needed versus pipes available */
     virtual bool areVGPipesAvailable(hwc_context_t *ctx,
             hwc_display_contents_1_t* list);
+
+    /* increments mdpCount if 4k2k yuv layer split is enabled*/
+    virtual void modifymdpCountfor4k2k(hwc_context_t *ctx,
+             hwc_display_contents_1_t* list);
+
+    /* configures 4kx2k yuv layer to 2 VG pipes*/
+    virtual int configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
+            PipeLayerPair& PipeLayerPair);
 };
 
 class MDPCompSplit : public MDPComp {
@@ -263,6 +286,14 @@ private:
     /* Checks for video pipes needed versus pipes available */
     virtual bool areVGPipesAvailable(hwc_context_t *ctx,
             hwc_display_contents_1_t* list);
+
+    /* increments mdpCount if 4k2k yuv layer split is enabled*/
+    virtual void modifymdpCountfor4k2k(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list);
+
+    /* configures 4kx2k yuv layer*/
+    virtual int configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
+            PipeLayerPair& PipeLayerPair);
 
     int pipesNeeded(hwc_context_t *ctx, hwc_display_contents_1_t* list,
             int mixer);
