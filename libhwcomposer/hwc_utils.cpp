@@ -355,6 +355,33 @@ int getBppandFormat(hwc_layer_1_t const* layer, bool* isRGB) {
     return bpp;
 }
 
+bool checkforContentandModemismatch(hwc_context_t* ctx,
+                                    hwc_display_contents_1_t *list, int dpy) {
+    int numAppLayers = ctx->listStats[dpy].numAppLayers;
+    bool mismatch = false;
+    for(int i = 0; i < numAppLayers; ++i) {
+        hwc_layer_1_t* layer = &list->hwLayers[i];
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        if(isYuvBuffer(hnd) and isSecureBuffer(hnd) ) {
+
+            if(isSecureModePolicy(ctx->mMDP.version)) {
+                if(ctx->mSecuring or (not ctx->mSecureMode)) {
+                    mismatch = true;
+                }
+            }
+
+            if(mismatch) {
+                /* This is needed for SF to avoid marking this layer back FB */
+                layer->flags &= ~HWC_SKIP_LAYER;
+                layer->compositionType = HWC_OVERLAY;
+                layer->hints |= HWC_HINT_CLEAR_FB;
+            }
+        }
+    }
+
+    return mismatch;
+}
+
 void setListStats(hwc_context_t *ctx,
         const hwc_display_contents_1_t *list, int dpy) {
 

@@ -145,6 +145,12 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
                 return 0;
             }
             setListStats(ctx, list, dpy);
+            if(checkforContentandModemismatch(ctx, list, dpy)){
+                /* video content has been marked for OVERLAY to avoid secure
+                   content being composed by GPU in non-secure mode */
+                ctx->mFBUpdate[dpy]->prepare(ctx, list);
+                return 0;
+            }
             bool ret = ctx->mMDPComp->prepare(ctx, list, dpy);
             if(!ret) {
                 // IF MDPcomp fails use this route
@@ -178,6 +184,13 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
                     return 0;
                 }
                 setListStats(ctx, list, dpy);
+
+                if(checkforContentandModemismatch(ctx, list, dpy)){
+                    /* video content has been marked for OVERLAY to avoid secure
+                       content being composed by GPU in non-secure mode */
+                    ctx->mFBUpdate[dpy]->prepare(ctx, list);
+                    return 0;
+                }
                 ctx->mVidOv[dpy]->prepare(ctx, list);
                 ctx->mFBUpdate[dpy]->prepare(ctx, list);
                 ctx->mLayerCache[dpy]->updateLayerCache(list);
