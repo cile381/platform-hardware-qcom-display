@@ -88,7 +88,6 @@ private:
     int mConnected;
     int mConnectedFbNum;
     int mResolutionMode;
-    char mEDIDs[128];
     int mEDIDModes[64];
     int mModeCount;
     bool mUnderscanSupported;
