@@ -213,6 +213,7 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
                        hwc_display_contents_1_t** displays)
 {
     int ret = 0;
+    int32_t mode = 4;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     Locker::Autolock _l(ctx->mBlankLock);
     reset(ctx, numDisplays, displays);
@@ -220,6 +221,19 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     ctx->mOverlay->configBegin();
     ctx->mRotMgr->configBegin();
     ctx->mNeedsRotator = false;
+    static int count = 0;
+    if((count == 0) &&
+            (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].goDefaultRes)) {
+        mode = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vFmt_K;
+        ctx->mExtDisplay->readResolution();
+        if (ctx->mExtDisplay->isValidMode(mode) &&
+                !ctx->mExtDisplay->isInterlacedMode(mode)) {
+            ctx->mResChanged = true;
+            ctx->mExtDisplay->setCustomMode(mode);
+            ctx->proc->invalidate(ctx->proc);
+	    }
+	    count += 1;
+    }
 
     if (LIKELY(!ctx->mResChanged)) {
         for (int32_t i = numDisplays; i >= 0; i--) {
@@ -541,8 +555,12 @@ static int hwc_set(hwc_composer_device_1 *dev,
             }
             closeAcquireFds(displays[i]);
         }
-        ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd, FBIOBLANK,
+        if(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].goDefaultRes){
+            ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd, FBIOBLANK,
                     FB_BLANK_POWERDOWN);
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].goDefaultRes = 0;
+
+        }
 
         if (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected) {
             ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;

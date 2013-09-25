@@ -76,8 +76,21 @@ static int openFramebufferDevice(hwc_context_t *ctx)
         ALOGE("Error retrieving panel frame rate");
         return -errno;
     }
-
     float fps  = metadata.data.panel_frame_rate;
+
+    memset(&metadata, 0 , sizeof(metadata));
+    metadata.op = metadata_op_resolution_info;
+
+    if (ioctl(fb_fd, MSMFB_METADATA_GET, &metadata) == -1) {
+        ALOGE("Error retrieving panel frame rate");
+        return -errno;
+    }
+
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].goDefaultRes =
+        metadata.data.res_cfg.set_default_res;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vFmt_K =
+        metadata.data.res_cfg.vFmt;
+
 #else
     //XXX: Remove reserved field usage on all baselines
     //The reserved[3] field is used to store FPS by the driver.
@@ -92,9 +105,15 @@ static int openFramebufferDevice(hwc_context_t *ctx)
 
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = fb_fd;
     //xres, yres may not be 32 aligned
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].stride = finfo.line_length /(info.xres/8);
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = info.xres;
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres = info.yres;
+    if (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].goDefaultRes) {
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].stride = 1920*4;
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = 1920;
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres = 1080;
+    } else {
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].stride = finfo.line_length /(info.xres/8);
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = info.xres;
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres = info.yres;
+    }
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xdpi = xdpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
