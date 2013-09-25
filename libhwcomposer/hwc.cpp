@@ -533,6 +533,10 @@ static int hwc_set(hwc_composer_device_1 *dev,
     } else {
         //Do nothing for res changed round for one frame so that all fences are
         //closed
+        int avmute = 1;
+        ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd,
+                    MSMFB_EXTERNAL_MUTE, &avmute);
+        ALOGI("%s: avmute ioctl called!\n", __FUNCTION__);
         ctx->mBasePipeSetup = false;
         for (uint32_t i = 0; i < numDisplays; i++) {
             if (display_commit(ctx, i) < 0) {
