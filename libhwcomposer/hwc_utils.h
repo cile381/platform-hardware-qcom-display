@@ -139,6 +139,8 @@ class LayerCache {
 void dumpLayer(hwc_layer_1_t const* l);
 void setListStats(hwc_context_t *ctx, const hwc_display_contents_1_t *list,
         int dpy);
+bool checkforContentandModemismatch(hwc_context_t* ctx,
+        hwc_display_contents_1_t *list, int dpy);
 void initContext(hwc_context_t *ctx);
 void closeContext(hwc_context_t *ctx);
 //Crops source buffer against destination and FB boundaries
