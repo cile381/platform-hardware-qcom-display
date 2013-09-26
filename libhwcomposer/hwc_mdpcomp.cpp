@@ -820,7 +820,17 @@ int MDPComp::draw(hwc_context_t *ctx, hwc_layer_list_t* list) {
                                  using  pipe: %d", __FUNCTION__, layer,
                                  hnd, index );
 
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, dest)) {
+            MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+            VideoFrame_t *frc;
+            if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
+                frc = &metadata->videoFrame;
+                frc->hwc_play_time = ns2us(systemTime());
+                ALOGD("%s %d %lld", __FUNCTION__, frc->counter, frc->hwc_play_time);
+            } else {
+                frc = NULL;
+            }
+
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, dest, frc)) {
                 ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
                 return -1;
             }

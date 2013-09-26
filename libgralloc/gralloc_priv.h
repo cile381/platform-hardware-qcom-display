@@ -147,6 +147,16 @@ typedef struct {
     float   contrast;
 } HSICData_t;
 
+
+typedef struct {
+    uint32_t frc_enable;
+    uint32_t fp100s;
+    uint32_t counter;
+    int64_t timestamp;
+    int64_t hwc_play_time;
+    int64_t render_time;
+} VideoFrame_t;
+
 typedef struct {
     int32_t operation;
     int32_t interlaced;
@@ -154,6 +164,7 @@ typedef struct {
     int32_t sharpness;
     int32_t video_interface;
     int32_t s3d_format;
+    VideoFrame_t videoFrame;
 } MetaData_t;
 
 #ifdef __cplusplus

@@ -68,6 +68,41 @@ int setMetaData(private_handle_t *handle, DispParamType paramType,
         case PP_PARAM_S3D_VIDEO:
             data->s3d_format = *((int32_t *)param);
             break;
+        case PP_PARAM_VIDEO_FRAME:
+            memcpy((void *)&data->videoFrame, param, sizeof(VideoFrame_t));
+            break;
+        default:
+            ALOGE("Unknown paramType %d", paramType);
+            break;
+    }
+    if(munmap(base, size))
+        ALOGE("%s: failed to unmap ptr 0x%x, err %d", __func__, (int)base,
+                                                                        errno);
+    return 0;
+}
+
+int getMetaData(private_handle_t *handle, DispParamType paramType,
+                                                    void *param) {
+    if (!handle) {
+        ALOGE("%s: Private handle is null!", __func__);
+        return -1;
+    }
+    if (handle->fd_metadata == -1) {
+        ALOGE("%s: Bad fd for extra data!", __func__);
+        return -1;
+    }
+    unsigned long size = ROUND_UP_PAGESIZE(sizeof(MetaData_t));
+    void *base = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED,
+        handle->fd_metadata, 0);
+    if (!base) {
+        ALOGE("%s: mmap() failed: Base addr is NULL!", __func__);
+        return -1;
+    }
+    MetaData_t *data = reinterpret_cast <MetaData_t *>(base);
+    switch (paramType) {
+        case PP_PARAM_VIDEO_FRAME:
+            memcpy(param, (void *)&data->videoFrame, sizeof(VideoFrame_t));
+            break;
         default:
             ALOGE("Unknown paramType %d", paramType);
             break;

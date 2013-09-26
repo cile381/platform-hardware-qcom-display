@@ -60,7 +60,7 @@ public:
     bool commit(utils::eDest dest = utils::OV_PIPE_ALL);
 
     bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest);
+            utils::eDest dest, VideoFrame_t *frc = NULL);
 
     void dump() const;
 

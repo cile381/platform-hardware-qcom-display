@@ -626,22 +626,32 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
     overlay::Overlay& ov = *(ctx->mOverlay);
     ovutils::eOverlayState state = ov.getState();
 
+    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    VideoFrame_t *frc;
+    if (metadata && (metadata->operation & PP_PARAM_VIDEO_FRAME)) {
+        ALOGD("VideoOverlay %s %lld %d", __FUNCTION__, metadata->videoFrame.timestamp, metadata->videoFrame.counter);
+        frc = &metadata->videoFrame;
+        frc->hwc_play_time = ns2us(systemTime());
+    } else {
+        frc = NULL;
+    }
+
     switch (state) {
         case ovutils::OV_2D_VIDEO_ON_PANEL_TV:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL_2D_TV:
             // Play external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1, frc)) {
                 ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
                 ret = false;
             }
             //Play CC on external
             if (cchnd && !ov.queueBuffer(cchnd->fd, cchnd->offset,
-                        ovutils::OV_PIPE2)) {
+                        ovutils::OV_PIPE2, frc)) {
                 ALOGE("%s: queueBuffer failed for cc external", __FUNCTION__);
                 ret = false;
             }
             // Play primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0, frc)) {
                 ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
                 ret = false;
             }
@@ -649,33 +659,33 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
         case ovutils::OV_2D_VIDEO_ON_PANEL:
         case ovutils::OV_3D_VIDEO_ON_2D_PANEL:
             // Play primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0, frc)) {
                 ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
                 ret = false;
             }
             break;
         case ovutils::OV_2D_VIDEO_ON_TV:
             // Play external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1, frc)) {
                 ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
                 ret = false;
             }
             //Play CC on external
             if (cchnd && !ov.queueBuffer(cchnd->fd, cchnd->offset,
-                        ovutils::OV_PIPE2)) {
+                        ovutils::OV_PIPE2, frc)) {
                 ALOGE("%s: queueBuffer failed for cc external", __FUNCTION__);
                 ret = false;
             }
             break;
         case ovutils::OV_3D_VIDEO_ON_3D_PANEL:
             // Play left view on primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0, frc)) {
                 ALOGE("%s: queueBuffer failed for left view external",
                         __FUNCTION__);
                 ret = false;
             }
             // Play right view on primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1, frc)) {
                 ALOGE("%s: queueBuffer failed for right view external",
                                                             __FUNCTION__);
                 ret = false;
@@ -684,25 +694,25 @@ bool VideoOverlay::draw(hwc_context_t *ctx, hwc_layer_list_t *list)
 
         case ovutils::OV_3D_VIDEO_ON_3D_TV:
             // Play left view on external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0, frc)) {
                 ALOGE("%s: queueBuffer failed for left view external",
                                                             __FUNCTION__);
                 ret = false;
             }
             // Play right view on external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1, frc)) {
                 ALOGE("%s: queueBuffer failed for right view external",
                                                             __FUNCTION__);
             }
             break;
         case ovutils::OV_2D_TRUE_UI_MIRROR:
             // Play external
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE1, frc)) {
                 ALOGE("%s: queueBuffer failed for external", __FUNCTION__);
                 ret = false;
             }
             // Play primary
-            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0)) {
+            if (!ov.queueBuffer(hnd->fd, hnd->offset, ovutils::OV_PIPE0, frc)) {
                 ALOGE("%s: queueBuffer failed for primary", __FUNCTION__);
                 ret = false;
             }

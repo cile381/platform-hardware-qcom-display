@@ -78,7 +78,7 @@ public:
 
     /* Queue buffer with fd from an offset*/
     virtual bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest) = 0;
+            utils::eDest dest, VideoFrame_t *frc = NULL) = 0;
 
     /* Crop existing destination using Dim coordinates */
     virtual bool setCrop(const utils::Dim& d,
@@ -113,7 +113,7 @@ public:
     bool setPosition(const utils::Dim& dim) { return true; }
     bool setTransform(const utils::eTransform& param) { return true; }
     bool setSource(const utils::PipeArgs& args) { return true; }
-    bool queueBuffer(int fd, uint32_t offset) { return true; }
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) { return true; }
     void dump() const {}
 };
 
@@ -161,7 +161,7 @@ public:
     virtual bool setSource(const utils::PipeArgs args,
             utils::eDest dest);
     virtual bool queueBuffer(int fd, uint32_t offset,
-            utils::eDest dest);
+            utils::eDest dest, VideoFrame_t *frc = NULL);
     virtual void dump() const;
 
 private:
@@ -738,35 +738,34 @@ bool OverlayImpl<P0, P1, P2, P3>::setSource(
 
 template <class P0, class P1, class P2, class P3>
 bool OverlayImpl<P0, P1, P2, P3>::queueBuffer(int fd, uint32_t offset,
-        utils::eDest dest)
+        utils::eDest dest, VideoFrame_t *frc)
 {
     OVASSERT(mPipe0 && mPipe1 && mPipe2 && mPipe3,
             "%s: Pipes are null p0=%p p1=%p p2=%p p3=%p",
             __FUNCTION__, mPipe0, mPipe1, mPipe2, mPipe3);
-
     if (utils::OV_PIPE0 & dest) {
-        if(!mPipe0->queueBuffer(fd, offset)) {
+        if(!mPipe0->queueBuffer(fd, offset, frc)) {
             ALOGE("OverlayImpl p0 failed to queueBuffer");
             return false;
         }
     }
 
     if (utils::OV_PIPE1 & dest) {
-        if(!mPipe1->queueBuffer(fd, offset)) {
+        if(!mPipe1->queueBuffer(fd, offset, frc)) {
             ALOGE("OverlayImpl p1 failed to queueBuffer");
             return false;
         }
     }
 
     if (utils::OV_PIPE2 & dest) {
-        if(!mPipe2->queueBuffer(fd, offset)) {
+        if(!mPipe2->queueBuffer(fd, offset, frc)) {
             ALOGE("OverlayImpl p2 failed to queueBuffer");
             return false;
         }
     }
 
     if (utils::OV_PIPE3 & dest) {
-        if(!mPipe3->queueBuffer(fd, offset)) {
+        if(!mPipe3->queueBuffer(fd, offset, frc)) {
             ALOGE("OverlayImpl p3 failed to queueBuffer");
             return false;
         }

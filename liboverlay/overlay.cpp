@@ -93,14 +93,14 @@ bool Overlay::commit(utils::eDest dest)
 }
 
 bool Overlay::queueBuffer(int fd, uint32_t offset,
-        utils::eDest dest)
+        utils::eDest dest, VideoFrame_t *frc)
 {
     OVASSERT(mOv,
             "%s Overlay and Rotator should be init at this point",
             __FUNCTION__);
     utils::eOverlayState st = mState.state();
     if(isStateValid(st)) {
-        if(!mOv->queueBuffer(fd, offset, dest)) {
+        if(!mOv->queueBuffer(fd, offset, dest, frc)) {
             ALOGE("Overlay %s failed", __FUNCTION__);
             return false;
         }

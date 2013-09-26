@@ -138,7 +138,7 @@ public:
     void setFlags(int mdpFlags);
 
     /* queue buffer to the overlay */
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
 
     /* sump the state of the obj */
     void dump() const;
@@ -248,8 +248,8 @@ inline bool Data::close() {
     return true;
 }
 
-inline bool Data::queueBuffer(int fd, uint32_t offset) {
-    return mMdp.play(fd, offset);
+inline bool Data::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mMdp.play(fd, offset, frc);
 }
 
 inline void Data::dump() const {

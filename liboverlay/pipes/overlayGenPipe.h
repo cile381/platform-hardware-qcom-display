@@ -66,7 +66,7 @@ public:
 
     /* Data APIs */
     /* queue buffer to the overlay */
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc = NULL);
 
     /* return cached startup args */
     const utils::PipeArgs& getArgs() const;
@@ -289,7 +289,7 @@ inline bool GenericPipe<PANEL>::commit() {
 }
 
 template <int PANEL>
-inline bool GenericPipe<PANEL>::queueBuffer(int fd, uint32_t offset) {
+inline bool GenericPipe<PANEL>::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
     //TODO Move pipe-id transfer to CtrlData class. Make ctrl and data private.
     OVASSERT(isOpen(), "State is closed, cannot queueBuffer");
     int pipeId = mCtrlData.ctrl.getPipeId();
@@ -316,7 +316,7 @@ inline bool GenericPipe<PANEL>::queueBuffer(int fd, uint32_t offset) {
             ALOGE("Null rotator in use, where an actual is required");
         }
     }
-    return mCtrlData.data.queueBuffer(finalFd, finalOffset);
+    return mCtrlData.data.queueBuffer(finalFd, finalOffset, frc);
 }
 
 template <int PANEL>
