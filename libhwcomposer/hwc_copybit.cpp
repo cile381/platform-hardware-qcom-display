@@ -127,6 +127,20 @@ unsigned int CopyBit::getRGBRenderingArea
     return renderArea;
 }
 
+bool checkNonWormholeRegion(private_handle_t* hnd, hwc_rect_t& rect)
+{
+    unsigned int height = rect.bottom - rect.top;
+    unsigned int width = rect.right - rect.left;
+    copybit_image_t buf;
+    buf.w = ALIGN(hnd->width, 32);
+    buf.h = hnd->height;
+
+    if (buf.h != height || buf.w != width)
+        return false;
+
+    return true;
+}
+
 bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
                                                             int dpy) {
 
@@ -181,6 +195,15 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
             if (layer->planeAlpha != 0xFF)
                 return true;
         }
+        /*
+         * Fallback to GPU in MDP3 when NonWormholeRegion is not of frame buffer
+         * size as artifact is seen in WormholeRegion of previous frame.
+         */
+        hwc_rect_t nonWormHoleRegion;
+        getNonWormholeRegion(list, nonWormHoleRegion);
+        if(!checkNonWormholeRegion(fbHnd, nonWormHoleRegion))
+           return true;
+
     }
 
     //Allocate render buffers if they're not allocated
@@ -200,24 +223,18 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     if (!useCopybitForYUV && ctx->listStats[dpy].yuvCount)
         return true;
 
-    // numAppLayers-1, as we iterate till 0th layer index
-    for (int i = ctx->listStats[dpy].numAppLayers-1; i >= 0 ; i--) {
-        private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
-
-        if ((hnd->bufferType == BUFFER_TYPE_VIDEO && useCopybitForYUV) ||
-            (hnd->bufferType == BUFFER_TYPE_UI && useCopybitForRGB)) {
+    mCopyBitDraw = false;
+    if (useCopybitForRGB &&
+        (useCopybitForYUV || !ctx->listStats[dpy].yuvCount)) {
+        mCopyBitDraw =  true;
+        // numAppLayers-1, as we iterate till 0th layer index
+        // Mark all layers to be drawn by copybit
+        for (int i = ctx->listStats[dpy].numAppLayers-1; i >= 0 ; i--) {
             layerProp[i].mFlags |= HWC_COPYBIT;
             list->hwLayers[i].compositionType = HWC_OVERLAY;
-            mCopyBitDraw = true;
-        } else {
-            // We currently cannot mix copybit layers with layers marked to
-            // be drawn on the framebuffer or that are on the layer cache.
-            mCopyBitDraw = false;
-            //There is no need to reset layer properties here as we return in
-            //draw if mCopyBitDraw is false
-            break;
         }
     }
+
     return true;
 }
 
@@ -341,6 +358,27 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
     // if needed in the future
     src.vert_padding = 0;
 
+    int layerTransform = layer->transform ;
+    // When flip and rotation(90) are present alter the flip,
+    // as GPU is doing the flip and rotation in opposite order
+    // to that of MDP3.0
+    // For 270 degrees, we get 90 + (H+V) which is same as doing
+    // flip first and then rotation (H+V) + 90
+    if (qdutils::MDPVersion::getInstance().getMDPVersion() < 400) {
+                if (((layer->transform& HAL_TRANSFORM_FLIP_H) ||
+                (layer->transform & HAL_TRANSFORM_FLIP_V)) &&
+                (layer->transform &  HAL_TRANSFORM_ROT_90) &&
+                !(layer->transform ==  HAL_TRANSFORM_ROT_270)){
+                      if(layer->transform & HAL_TRANSFORM_FLIP_H){
+                                 layerTransform ^= HAL_TRANSFORM_FLIP_H;
+                                 layerTransform |= HAL_TRANSFORM_FLIP_V;
+                      }
+                      if(layer->transform & HAL_TRANSFORM_FLIP_V){
+                                 layerTransform ^= HAL_TRANSFORM_FLIP_V;
+                                 layerTransform |= HAL_TRANSFORM_FLIP_H;
+                      }
+               }
+    }
     // Copybit source rect
     hwc_rect_t sourceCrop = layer->sourceCrop;
     copybit_rect_t srcRect = {sourceCrop.left, sourceCrop.top,
@@ -399,7 +437,7 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
         dtdy > scaleLimitMax ||
         dsdx < 1/scaleLimitMin ||
         dtdy < 1/scaleLimitMin) {
-        ALOGE("%s: greater than max supported size dsdx=%f dtdy=%f \
+        ALOGW("%s: greater than max supported size dsdx=%f dtdy=%f \
               scaleLimitMax=%f scaleLimitMin=%f", __FUNCTION__,dsdx,dtdy,
                                           scaleLimitMax,1/scaleLimitMin);
         return -1;
@@ -496,7 +534,7 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
     copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT,
                                           renderBuffer->height);
     copybit->set_parameter(copybit, COPYBIT_TRANSFORM,
-                                              layer->transform);
+                                              layerTransform);
     //TODO: once, we are able to read layer alpha, update this
     copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, 255);
     copybit->set_parameter(copybit, COPYBIT_BLEND_MODE,

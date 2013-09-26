@@ -77,6 +77,10 @@
 #define MDP_OV_PIPE_FORCE_DMA 0x4000
 #endif
 
+#ifndef MDSS_MDP_DUAL_PIPE
+#define MDSS_MDP_DUAL_PIPE 0x200
+#endif
+
 #define FB_DEVICE_TEMPLATE "/dev/graphics/fb%u"
 
 namespace overlay {
@@ -212,6 +216,8 @@ struct Whf {
 
 enum { MAX_PATH_LEN = 256 };
 
+enum { DEFAULT_PLANE_ALPHA = 0xFF };
+
 /**
  * Rotator flags: not to be confused with orientation flags.
  * Usually, you want to open the rotator to make sure it is
@@ -263,6 +269,7 @@ enum eMdpFlags {
     OV_MDSS_MDP_RIGHT_MIXER = MDSS_MDP_RIGHT_MIXER,
     OV_MDP_PP_EN = MDP_OVERLAY_PP_CFG_EN,
     OV_MDSS_MDP_BWC_EN = MDP_BWC_EN,
+    OV_MDSS_MDP_DUAL_PIPE = MDSS_MDP_DUAL_PIPE,
 };
 
 enum eZorder {
@@ -329,21 +336,36 @@ enum eTransform {
     OVERLAY_TRANSFORM_INV = 0x80
 };
 
+enum eBlending {
+    OVERLAY_BLENDING_UNDEFINED = 0x0,
+    /* No blending */
+    OVERLAY_BLENDING_OPAQUE,
+    /* src.rgb + dst.rgb*(1-src_alpha) */
+    OVERLAY_BLENDING_PREMULT,
+    /* src.rgb * src_alpha + dst.rgb (1 - src_alpha) */
+    OVERLAY_BLENDING_COVERAGE,
+};
+
 // Used to consolidate pipe params
 struct PipeArgs {
     PipeArgs() : mdpFlags(OV_MDP_FLAGS_NONE),
         zorder(Z_SYSTEM_ALLOC),
         isFg(IS_FG_OFF),
-        rotFlags(ROT_FLAGS_NONE){
+        rotFlags(ROT_FLAGS_NONE),
+        planeAlpha(DEFAULT_PLANE_ALPHA),
+        blending(OVERLAY_BLENDING_COVERAGE){
     }
 
     PipeArgs(eMdpFlags f, Whf _whf,
-            eZorder z, eIsFg fg, eRotFlags r) :
+            eZorder z, eIsFg fg, eRotFlags r,
+            int pA = DEFAULT_PLANE_ALPHA, eBlending b = OVERLAY_BLENDING_COVERAGE) :
         mdpFlags(f),
         whf(_whf),
         zorder(z),
         isFg(fg),
-        rotFlags(r) {
+        rotFlags(r),
+        planeAlpha(pA),
+        blending(b){
     }
 
     eMdpFlags mdpFlags; // for mdp_overlay flags
@@ -351,6 +373,8 @@ struct PipeArgs {
     eZorder zorder; // stage number
     eIsFg isFg; // control alpha & transp
     eRotFlags rotFlags;
+    int planeAlpha;
+    eBlending blending;
 };
 
 // Cannot use HW_OVERLAY_MAGNIFICATION_LIMIT, since at the time
