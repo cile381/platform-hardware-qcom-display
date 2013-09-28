@@ -147,16 +147,21 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
             ctx->dpyAttr[dpy].isActive) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
         setListStats(ctx, list, dpy);
-#ifdef VPU_TARGET
-        ctx->mVPUClient->prepare(ctx, list);
-#endif
+
+        if(ctx->mVPUClient != NULL)
+            ctx->mVPUClient->setupVpuSession(ctx, dpy, list);
+
         if(ctx->mMDPComp[dpy]->prepare(ctx, list) < 0) {
             const int fbZ = 0;
             ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZ);
         }
+
+        if(ctx->mVPUClient != NULL)
+            ctx->mVPUClient->prepare(ctx, dpy, list);
+
         if (ctx->mMDP.version < qdutils::MDP_V4_0) {
             if(ctx->mCopyBit[dpy])
-                ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+                    ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
         }
     }
     return 0;
@@ -479,9 +484,9 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ALOGE("%s: MDPComp draw failed", __FUNCTION__);
             ret = -1;
         }
-#ifdef VPU_TARGET
-        ctx->mVPUClient->draw(ctx, list);
-#endif
+
+        if(ctx->mVPUClient != NULL)
+            ctx->mVPUClient->draw(ctx, dpy, list);
 
         //TODO We dont check for SKIP flag on this layer because we need PAN
         //always. Last layer is always FB

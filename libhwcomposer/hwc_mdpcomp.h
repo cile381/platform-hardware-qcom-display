@@ -64,7 +64,6 @@ protected:
         MDPCOMP_OV_ANY,
     };
 
-    /* mdp pipe data */
     struct MdpPipeInfo {
         int zOrder;
         virtual ~MdpPipeInfo(){};
@@ -129,11 +128,15 @@ protected:
     };
 
     /* allocates pipe from pipe book */
+    virtual bool allocReservedLayerPipes(hwc_context_t *ctx,
+                                 hwc_display_contents_1_t* list) = 0;
     virtual bool allocLayerPipes(hwc_context_t *ctx,
                                  hwc_display_contents_1_t* list) = 0;
     /* allocate MDP pipes from overlay */
     ovutils::eDest getMdpPipe(hwc_context_t *ctx, ePipeType type, int mixer);
     /* configures MPD pipes */
+    virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+                          PipeLayerPair& pipeLayerPair, int index) = 0;
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                           PipeLayerPair& pipeLayerPair) = 0;
     /* Checks for pipes needed versus pipes available */
@@ -225,6 +228,8 @@ protected:
     bool postHeuristicsHandling(hwc_context_t *ctx,
             hwc_display_contents_1_t* list);
     void reset(hwc_context_t *ctx);
+    bool supportedVPULayer(hwc_context_t* ctx, hwc_layer_1_t* layer,
+                                                            int dpy, int idx);
     bool isSupportedForMDPComp(hwc_context_t *ctx, hwc_layer_1_t* layer);
     bool resourceCheck(hwc_context_t *ctx, hwc_display_contents_1_t *list);
 
@@ -264,9 +269,13 @@ private:
 
     /* configure's overlay pipes for the frame */
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+                          PipeLayerPair& pipeLayerPair, int index);
+    virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                           PipeLayerPair& pipeLayerPair);
 
     /* allocates pipes to selected candidates */
+    virtual bool allocReservedLayerPipes(hwc_context_t *ctx,
+                                 hwc_display_contents_1_t* list);
     virtual bool allocLayerPipes(hwc_context_t *ctx,
                                  hwc_display_contents_1_t* list);
 
@@ -301,13 +310,17 @@ private:
     };
 
     bool acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-                         MdpPipeInfoSplit& pipe_info, ePipeType type);
+                MdpPipeInfoSplit& pipe_info, ePipeType type);
 
     /* configure's overlay pipes for the frame */
+    virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+                          PipeLayerPair& pipeLayerPair, int index);
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                           PipeLayerPair& pipeLayerPair);
 
     /* allocates pipes to selected candidates */
+    virtual bool allocReservedLayerPipes(hwc_context_t *ctx,
+                                 hwc_display_contents_1_t* list);
     virtual bool allocLayerPipes(hwc_context_t *ctx,
                                  hwc_display_contents_1_t* list);
 

@@ -198,9 +198,9 @@ void initContext(hwc_context_t *ctx)
     // Initialize device orientation to its default orientation
     ctx->deviceOrientation = 0;
     ctx->mBufferMirrorMode = false;
-#ifdef VPU_TARGET
-    ctx->mVPUClient = new VPUClient();
-#endif
+
+    if(qdutils::MDPVersion::getInstance().is8092())
+        ctx->mVPUClient = new VPUClient(ctx);
 
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
@@ -235,11 +235,9 @@ void closeContext(hwc_context_t *ctx)
         ctx->mExtDisplay = NULL;
     }
 
-#ifdef VPU_TARGET
-    if(ctx->mVPUClient) {
+    if(qdutils::MDPVersion::getInstance().is8092() && ctx->mVPUClient) {
         delete ctx->mVPUClient;
     }
-#endif
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         if(ctx->mFBUpdate[i]) {
@@ -1249,6 +1247,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
               dpy, list->numHwLayers);
     }
 
+    LayerProp *layerProp = ctx->layerProp[dpy];
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
         if(list->hwLayers[i].compositionType == HWC_OVERLAY ||
            list->hwLayers[i].compositionType == HWC_BLIT ||
@@ -1260,8 +1259,10 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                 // Release all the app layer fds immediately,
                 // if animation is in progress.
                 list->hwLayers[i].releaseFenceFd = -1;
-            } else if(list->hwLayers[i].releaseFenceFd < 0) {
-                //If rotator has not already populated this field.
+            } else if(list->hwLayers[i].releaseFenceFd < 0 &&
+                                        !(layerProp[i].mFlags & HWC_VPUCOMP)) {
+                //If rotator has not already populated this field
+                // & if it's a not VPU layer
                 list->hwLayers[i].releaseFenceFd = dup(releaseFd);
             }
         }
@@ -1477,6 +1478,13 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         const int& dpy, eMdpFlags& mdpFlags, eZorder& z,
         eIsFg& isFg, const eDest& dest, Rotator **rot) {
 
+    return configureNonSplit(ctx, layer, dpy, mdpFlags, z, isFg, dest, rot, -1);
+}
+
+int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        const int& dpy, eMdpFlags& mdpFlags, eZorder& z,
+        eIsFg& isFg, const eDest& dest, Rotator **rot, int idx) {
+
     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
     if(!hnd) {
@@ -1497,7 +1505,25 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     int downscale = 0;
     int rotFlags = ovutils::ROT_FLAGS_NONE;
     uint32_t format = ovutils::getMdpFormat(hnd->format, isTileRendered(hnd));
-    Whf whf(getWidth(hnd), getHeight(hnd), format, hnd->size);
+
+    Whf whf;
+    if(idx != -1) {
+        LayerProp *layerProp = ctx->layerProp[dpy];
+
+        if(layerProp[idx].mFlags & HWC_VPUCOMP) {
+            whf.format =
+                getMdpFormat(ctx->mVPUClient->getLayerFormat(dpy, idx));
+            whf.w = ctx->mVPUClient->getWidth(dpy, idx);
+            whf.h = ctx->mVPUClient->getHeight(dpy, idx);
+        }
+        else idx = -1;
+    }
+    if(idx == -1) {
+        whf.w = getWidth(hnd);
+        whf.h = getHeight(hnd);
+        whf.format = getMdpFormat(hnd->format);
+    }
+    whf.size = hnd->size;
 
     // Handle R/B swap
     if (layer->flags & HWC_FORMAT_RB_SWAP) {
@@ -1587,6 +1613,15 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         const int& dpy, eMdpFlags& mdpFlagsL, eZorder& z,
         eIsFg& isFg, const eDest& lDest, const eDest& rDest,
         Rotator **rot) {
+
+    return configureSplit(ctx, layer, dpy, mdpFlagsL, z, isFg, lDest,
+            rDest, rot, -1);
+}
+
+int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        const int& dpy, eMdpFlags& mdpFlagsL, eZorder& z,
+        eIsFg& isFg, const eDest& lDest, const eDest& rDest,
+        Rotator **rot, int idx) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
     if(!hnd) {
         ALOGE("%s: layer handle is NULL", __FUNCTION__);
@@ -1604,7 +1639,25 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     const int downscale = 0;
     int rotFlags = ROT_FLAGS_NONE;
     uint32_t format = ovutils::getMdpFormat(hnd->format, isTileRendered(hnd));
-    Whf whf(getWidth(hnd), getHeight(hnd), format, hnd->size);
+
+    Whf whf;
+    if(idx != -1) {
+        LayerProp *layerProp = ctx->layerProp[dpy];
+
+        if(layerProp[idx].mFlags & HWC_VPUCOMP) {
+            whf.format =
+                getMdpFormat(ctx->mVPUClient->getLayerFormat(dpy, idx));
+            whf.w = ctx->mVPUClient->getWidth(dpy, idx);
+            whf.h = ctx->mVPUClient->getHeight(dpy, idx);
+        }
+        else idx = -1;
+    }
+    if(idx == -1) {
+        whf.w = getWidth(hnd);
+        whf.h = getHeight(hnd);
+        whf.format = getMdpFormat(hnd->format);
+    }
+    whf.size = hnd->size;
 
     // Handle R/B swap
     if (layer->flags & HWC_FORMAT_RB_SWAP) {

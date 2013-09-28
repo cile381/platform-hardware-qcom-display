@@ -135,6 +135,7 @@ struct BwcPM {
 enum {
     HWC_MDPCOMP = 0x00000001,
     HWC_COPYBIT = 0x00000002,
+    HWC_VPUCOMP = 0x00000004,
 };
 
 // HAL specific features
@@ -299,9 +300,17 @@ void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
 int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& dest,
+        overlay::Rotator **rot, int idx);
+int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& dest,
         overlay::Rotator **rot);
 
 //Routine to configure high resolution panels (> 2048 width)
+int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
+        const ovutils::eDest& rDest, overlay::Rotator **rot, int idx);
 int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
