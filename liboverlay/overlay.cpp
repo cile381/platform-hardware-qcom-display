@@ -31,6 +31,7 @@
 #include "pipes/overlayGenPipe.h"
 #include "mdp_version.h"
 #include "qdMetaData.h"
+#include "hwc_utils.h"
 
 #define PIPE_DEBUG 0
 
@@ -95,7 +96,8 @@ eDest Overlay::nextPipe(eMdpPipeType type, int dpy, int mixer) {
              mPipeBook[i].mMixer == mixer) &&
             PipeBook::isNotAllocated(i) && //Free pipe
             !(sDMAMode == DMA_BLOCK_MODE && //DMA pipe in Line mode
-               PipeBook::getPipeType((eDest)i) == OV_MDP_PIPE_DMA)) {
+               PipeBook::getPipeType((eDest)i) == OV_MDP_PIPE_DMA &&
+               dpy != HWC_DISPLAY_VIRTUAL)) {
             dest = (eDest)i;
             PipeBook::setAllocation(i);
             break;
