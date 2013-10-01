@@ -189,7 +189,8 @@ bool configPrimVid(hwc_context_t *ctx, hwc_layer_t *layer) {
             displayFrame.top < 0 ||
             displayFrame.right > fbWidth ||
             displayFrame.bottom > fbHeight) {
-        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight);
+        calculate_crop_rects(sourceCrop, displayFrame, fbWidth, fbHeight,
+                layer->transform);
     }
 
     // source crop x,y,w,h
