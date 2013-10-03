@@ -1867,6 +1867,12 @@ static int hwc_set(hwc_composer_device_t *dev,
         for (size_t i=0; i<list->numHwLayers; i++) {
             if (bDumpLayers)
                 dumpLayer(hwcModule->compositionType, list->flags, i, list->hwLayers);
+
+            private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
+            if(hnd != NULL && (hnd->flags & private_handle_t::PRIV_FLAGS_NONCONTIGUOUS_MEM )) {
+                LOGE("%s: Unable to render by hwc due to non-pmem memory",__FUNCTION__);
+                return -1;
+            }
             if (list->hwLayers[i].flags & HWC_SKIP_LAYER) {
                 continue;
             } else if(list->hwLayers[i].flags & HWC_USE_EXT_ONLY) {
