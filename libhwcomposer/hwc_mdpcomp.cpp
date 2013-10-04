@@ -253,8 +253,7 @@ bool MDPComp::needToFallbackToGPU(hwc_context_t *ctx,
         int crop_h = crop.bottom - crop.top;
 
         bpp = getBppandFormat(layer,&isRGB);
-        if(!isRGB)
-            return false;
+
         quota = crop_w * crop_h * fps * bpp;
         quota >>= shift;
         quota = quota * ab_factor / 100;
