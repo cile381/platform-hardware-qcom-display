@@ -520,16 +520,16 @@ bool MDPCompLowRes::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             return false;
         }
 
+        if(!(layerProp[i].mFlags & HWC_MDPCOMP)) {
+            continue;
+        }
+
         MdpPipeInfoLowRes& pipe_info =
                 *(MdpPipeInfoLowRes*)mCurrentFrame.pipeLayer[i].pipeInfo;
         ovutils::eDest dest = pipe_info.index;
         if(dest == ovutils::OV_INVALID) {
             ALOGE("%s: Invalid pipe index (%d)", __FUNCTION__, dest);
             return false;
-        }
-
-        if(!(layerProp[i].mFlags & HWC_MDPCOMP)) {
-            continue;
         }
 
         ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
