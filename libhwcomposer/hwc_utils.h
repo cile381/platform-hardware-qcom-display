@@ -57,6 +57,7 @@ class MDPComp;
 class CopyBit;
 class HwcDebug;
 class AssertiveDisplay;
+class VPUClient;
 
 
 struct MDPInfo {
@@ -169,7 +170,12 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 bool isSecuring(hwc_context_t* ctx, hwc_layer_1_t const* layer);
 bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
-bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
+bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+                  const int& dpy);
+bool needsScalingWithSplit(hwc_context_t* ctx, hwc_layer_1_t const* layer,
+                           const int& dpy);
+void sanitizeSourceCrop(hwc_rect_t& cropL, hwc_rect_t& cropR,
+                        private_handle_t *hnd);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 int getBlending(int blending);
@@ -178,6 +184,15 @@ int getBlending(int blending);
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
 
 int getExtOrientation(hwc_context_t* ctx);
+
+bool isValidRect(hwc_rect_t& rect);
+void deductRect(const hwc_layer_1_t* layer, hwc_rect_t& irect);
+void getIntersection(hwc_rect_t& rect1,
+                        hwc_rect_t& rect2, hwc_rect_t& irect);
+void getUnion(hwc_rect_t& rect1,
+                        hwc_rect_t& rect2, hwc_rect_t& irect);
+void optimizeLayerRects(hwc_context_t *ctx,
+                        const hwc_display_contents_1_t *list, const int& dpy);
 
 /* Calculates the destination position based on the action safe rectangle */
 void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& dst);
@@ -351,6 +366,7 @@ struct hwc_context_t {
     qhwc::MDPComp *mMDPComp[HWC_NUM_DISPLAY_TYPES];
     qhwc::HwcDebug *mHwcDebug[HWC_NUM_DISPLAY_TYPES];
     qhwc::AssertiveDisplay *mAD;
+    qhwc::VPUClient *mVPUClient;
 
     // No animation on External display feature
     // Notifies hwcomposer about the device orientation before animation.
