@@ -383,6 +383,9 @@ bool checkforContentandModemismatch(hwc_context_t* ctx,
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         if(isYuvBuffer(hnd) and isSecureBuffer(hnd) ) {
 
+            /* This is needed to avoid SF marking this layer back to FB */
+            layer->flags &= ~HWC_SKIP_LAYER;
+
             if(isSecureModePolicy(ctx->mMDP.version)) {
                 if(ctx->mSecuring or (not ctx->mSecureMode)) {
                     mismatch = true;
@@ -390,8 +393,6 @@ bool checkforContentandModemismatch(hwc_context_t* ctx,
             }
 
             if(mismatch) {
-                /* This is needed for SF to avoid marking this layer back FB */
-                layer->flags &= ~HWC_SKIP_LAYER;
                 layer->compositionType = HWC_OVERLAY;
                 layer->hints |= HWC_HINT_CLEAR_FB;
             }
@@ -420,10 +421,12 @@ void setListStats(hwc_context_t *ctx,
 
         if(list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
             continue;
-        //We disregard FB being skip for now! so the else if
+            //We disregard FB being skip for now! so the else if
         } else if (isSkipLayer(&list->hwLayers[i])) {
             ctx->listStats[dpy].skipCount++;
-        } else if (UNLIKELY(isYuvBuffer(hnd))) {
+        }
+
+        if (UNLIKELY(isYuvBuffer(hnd))) {
             int& yuvCount = ctx->listStats[dpy].yuvCount;
             ctx->listStats[dpy].yuvIndices[yuvCount] = i;
             yuvCount++;
