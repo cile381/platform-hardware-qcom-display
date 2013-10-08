@@ -793,10 +793,10 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     //do not cache the information for next draw cycle.
     if(numLayers > MAX_NUM_APP_LAYERS) {
         mCachedFrame.updateCounts(mCurrentFrame);
-        ALOGD_IF(isDebug(), "%s: Number of App layers exceeded the limit ",
-                __FUNCTION__);
+        ALOGE("%s: Number of App layers exceeded the limit ",
+        __FUNCTION__);
         ret = -1;
-        goto exit;
+        return ret;
     }
 
     //Hard conditions, if not met, cannot do MDP comp
@@ -1128,7 +1128,7 @@ bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
-        } else if(!qhwc::needsScaling(ctx, layer, mDpy)
+        } else if(!qhwc::needsScalingWithSplit(ctx, layer, mDpy)
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
             type = MDPCOMP_OV_DMA;
