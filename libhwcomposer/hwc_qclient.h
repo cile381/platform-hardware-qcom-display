@@ -36,6 +36,9 @@
 #include <binder/IServiceManager.h>
 #include <media/IMediaDeathNotifier.h>
 #include <IQClient.h>
+#include <hwc_ppmetadata.h>
+
+using namespace qhwc;
 
 struct hwc_context_t;
 
@@ -47,6 +50,26 @@ public:
     QClient(hwc_context_t *ctx);
     virtual ~QClient();
     virtual android::status_t notifyCallback(uint32_t msg, uint32_t value);
+    virtual android::status_t getStdFrameratePixclock(
+        ConfigChangeParams *params);
+    virtual android::status_t getCurrentFrameratePixclock(
+        ConfigChangeParams *params);
+    virtual android::status_t setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams);
+    virtual android::status_t setOverScanCompensationParams(
+        OSRectDimensions oscparams);
+    virtual android::status_t setPPParams(VideoPPData pParams,
+        PP_Video_Layer_Type numVideoLayer);
+    virtual android::status_t startConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType);
+    virtual  android::status_t doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params);
+    virtual android::status_t stopConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType);
+    virtual android::status_t setPQCState(int value);
 
 private:
     //Notifies of Media Player death
