@@ -223,19 +223,19 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;
 
-            if(dpy == HWC_DISPLAY_VIRTUAL) {
+            if(dpy == HWC_DISPLAY_EXTERNAL ||
+               ctx->mVirtualonExtActive) {
+                /* External display is HDMI or non-hybrid WFD solution */
+                ALOGE_IF(UEVENT_DEBUG, "%s: Sending EXTERNAL_OFFLINE ONLINE"
+                         "hotplug event", __FUNCTION__);
+                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_EXTERNAL,
+                                   EXTERNAL_ONLINE);
+            } else {
                 /* We wont be getting unblank for VIRTUAL DISPLAY and its
                  * always guaranteed from WFD stack that CONNECT uevent for
                  * VIRTUAL DISPLAY will be triggered before creating
                  * surface for the same. */
                 ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = true;
-            }
-            if(dpy == HWC_DISPLAY_EXTERNAL ||
-               ctx->mVirtualonExtActive) {
-                ALOGE_IF(UEVENT_DEBUG, "%s: Sending EXTERNAL_OFFLINE ONLINE"
-                         "hotplug event", __FUNCTION__);
-                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_EXTERNAL,
-                                   EXTERNAL_ONLINE);
             }
             break;
         }
@@ -270,6 +270,15 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 //its pipes; we don't allow inter-mixer pipe transfers.
                 {
                     Locker::Autolock _l(ctx->mDrawLock);
+
+                    // A dynamic resolution change (DRC) can be made for a WiFi
+                    // display. In order to support the resolution change, we
+                    // need to reconfigure the corresponding display attributes.
+                    // Since DRC is only on WiFi display, we only need to call
+                    // configure() on the VirtualDisplay device.
+                    if(dpy == HWC_DISPLAY_VIRTUAL)
+                        ctx->mVirtualDisplay->configure();
+
                     ctx->dpyAttr[dpy].isConfiguring = true;
                     ctx->dpyAttr[dpy].isActive = true;
                     ctx->proc->invalidate(ctx->proc);
