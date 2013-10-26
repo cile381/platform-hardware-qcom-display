@@ -709,6 +709,8 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
+    ctx->listStats[dpy].roi = ovutils::Dim(0, 0,
+                      (int)ctx->dpyAttr[dpy].xres, (int)ctx->dpyAttr[dpy].yres);
 
     if(qdutils::MDPVersion::getInstance().is8x26()) {
         optimizeLayerRects(ctx, list, dpy);

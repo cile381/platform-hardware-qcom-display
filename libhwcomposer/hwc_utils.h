@@ -102,11 +102,12 @@ struct ListStats {
     // This will be set to true during animation, otherwise false.
     bool isDisplayAnimating;
     bool secureUI; // Secure display layer
+    ovutils::Dim roi;
 };
 
 struct LayerProp {
     uint32_t mFlags; //qcom specific layer flags
-    LayerProp():mFlags(0) {};
+    LayerProp():mFlags(0){};
 };
 
 struct VsyncState {
