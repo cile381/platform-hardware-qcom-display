@@ -1605,8 +1605,8 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     float copybitsMaxScale = (float)copybit->get(copybit,COPYBIT_MAGNIFICATION_LIMIT);
     float copybitsMinScale = (float)copybit->get(copybit,COPYBIT_MINIFICATION_LIMIT);
 
-    if((layer->transform == HWC_TRANSFORM_ROT_90) ||
-                           (layer->transform == HWC_TRANSFORM_ROT_270)) {
+    if((layer->transform & HWC_TRANSFORM_ROT_90) ||
+                           (layer->transform & HWC_TRANSFORM_ROT_270)) {
         //swap screen width and height
         int tmp = screen_w;
         screen_w  = screen_h;
@@ -1638,6 +1638,12 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
        LOGD("%s:%d::Need to scale twice dsdx=%f, dtdy=%f,copybitsMaxScale=%f,copybitsMinScale=%f,screen_w=%d,screen_h=%d \
                   src_crop_width=%d src_crop_height=%d",__FUNCTION__,__LINE__,
                   dsdx,dtdy,copybitsMaxScale,1/copybitsMinScale,screen_w,screen_h,src_crop_width,src_crop_height);
+
+       if ((dsdx > copybitsMaxScale && dtdy > copybitsMaxScale) ||
+           (dsdx < 1/copybitsMinScale && dtdy < 1/copybitsMinScale)) {
+           LOGE("Simultaneous X & Y out-of-range scaling is not supported");
+           return -1;
+       }
 
        //Driver makes width and height as even
        //that may cause wrong calculation of the ratio
