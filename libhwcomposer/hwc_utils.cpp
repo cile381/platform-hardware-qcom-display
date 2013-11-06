@@ -1356,14 +1356,6 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     Whf whf(hnd->width, hnd->height,
             getMdpFormat(hnd->format), hnd->size);
 
-    // Handle R/B swap
-    if (layer->flags & HWC_FORMAT_RB_SWAP) {
-        if (whf.format == MDP_RGBA_8888)
-            whf.format = MDP_BGRA_8888;
-        else if (whf.format == MDP_RGBX_8888)
-            whf.format = MDP_BGRX_8888;
-    }
-
     if(dpy && isYuvBuffer(hnd)) {
         if(!ctx->listStats[dpy].isDisplayAnimating) {
             ctx->mPrevCropVideo = crop;
