@@ -41,6 +41,7 @@ bool MDPComp::sIdleFallBack = false;
 bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
 bool MDPComp::sEnableMixedMode = true;
+bool MDPComp::sEnablePartialFrameUpdate = false;
 int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
 float MDPComp::sMaxBw = 2.3f;
 uint32_t MDPComp::sCompBytesClaimed = 0;
@@ -75,9 +76,10 @@ void MDPComp::dump(android::String8& buf)
         dumpsys_log(buf," %7d | %7s | %8d | %9s | %2d \n",
                     index,
                     (mCurrentFrame.isFBComposed[index] ? "YES" : "NO"),
-                    mCurrentFrame.layerToMDP[index],
+                     mCurrentFrame.layerToMDP[index],
                     (mCurrentFrame.isFBComposed[index] ?
-                     (mCurrentFrame.needsRedraw ? "GLES" : "CACHE") : "MDP"),
+                    (mCurrentFrame.drop[index] ? "DROP" :
+                    (mCurrentFrame.needsRedraw ? "GLES" : "CACHE")) : "MDP"),
                     (mCurrentFrame.isFBComposed[index] ? mCurrentFrame.fbZ :
     mCurrentFrame.mdpToLayer[mCurrentFrame.layerToMDP[index]].pipeInfo->zOrder));
     dumpsys_log(buf,"\n");
@@ -106,11 +108,18 @@ bool MDPComp::init(hwc_context_t *ctx) {
         sEnableMixedMode = false;
     }
 
-    sDebugLogs = false;
     if(property_get("debug.mdpcomp.logs", property, NULL) > 0) {
         if(atoi(property) != 0)
             sDebugLogs = true;
     }
+
+    if(property_get("persist.hwc.partialupdate.enable", property, NULL) > 0) {
+        if((atoi(property) != 0) && ctx->mMDP.panel == MIPI_CMD_PANEL &&
+           qdutils::MDPVersion::getInstance().is8x74v2())
+            sEnablePartialFrameUpdate = true;
+    }
+    ALOGE_IF(isDebug(), "%s: Partial Update applicable?: %d",__FUNCTION__,
+                                                    sEnablePartialFrameUpdate);
 
     sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
     if(property_get("debug.mdpcomp.maxpermixer", property, "-1") > 0) {
@@ -182,8 +191,11 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
         } else {
-            if(!mCurrentFrame.needsRedraw)
+            /* Drop the layer when its already present in FB OR when it lies
+             * outside frame's ROI */
+            if(!mCurrentFrame.needsRedraw || mCurrentFrame.drop[index]) {
                 layer->compositionType = HWC_OVERLAY;
+            }
         }
     }
 }
@@ -376,6 +388,91 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
     return ret;
 }
 
+bool MDPComp::validateAndApplyROI(hwc_context_t *ctx,
+                               hwc_display_contents_1_t* list, hwc_rect_t roi) {
+    int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+
+    if(!isValidRect(roi))
+        return false;
+
+    for(int i = 0; i < numAppLayers; i++){
+        const hwc_layer_1_t* layer =  &list->hwLayers[i];
+
+        hwc_rect_t dstRect = layer->displayFrame;
+        hwc_rect_t srcRect = layer->sourceCrop;
+        int transform = layer->transform;
+        trimLayer(ctx, mDpy, transform, srcRect, dstRect);
+
+        hwc_rect_t res  = getIntersection(roi, dstRect);
+
+        int res_w = res.right - res.left;
+        int res_h = res.bottom - res.top;
+        int dst_w = dstRect.right - dstRect.left;
+        int dst_h = dstRect.bottom - dstRect.top;
+
+        if(!isValidRect(res)) {
+            mCurrentFrame.drop[i] = true;
+            mCurrentFrame.dropCount++;
+        }else {
+            /* Reset frame ROI when any layer which needs scaling also needs ROI
+             * cropping */
+            if((res_w != dst_w || res_h != dst_h) &&
+               needsScaling (ctx, layer, mDpy)) {
+                ALOGE("%s: Resetting ROI due to scaling", __FUNCTION__);
+                memset(&mCurrentFrame.drop, 0, sizeof(mCurrentFrame.drop));
+                mCurrentFrame.dropCount = 0;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void MDPComp::generateROI(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+    int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+
+    if(!sEnablePartialFrameUpdate) {
+        return;
+    }
+
+    if(mDpy || isDisplaySplit(ctx, mDpy)){
+        ALOGE_IF(isDebug(), "%s: ROI not supported for"
+                 "the (1) external / virtual display's (2) dual DSI displays",
+                 __FUNCTION__);
+        return;
+    }
+
+    if(list->flags & HWC_GEOMETRY_CHANGED)
+        return;
+
+    struct hwc_rect roi = (struct hwc_rect){0, 0, 0, 0};
+    for(int index = 0; index < numAppLayers; index++ ) {
+        if ((mCachedFrame.hnd[index] != list->hwLayers[index].handle) ||
+            isYuvBuffer((private_handle_t *)list->hwLayers[index].handle)) {
+            hwc_rect_t dstRect = list->hwLayers[index].displayFrame;
+            hwc_rect_t srcRect = list->hwLayers[index].sourceCrop;
+            int transform = list->hwLayers[index].transform;
+
+            /* Intersect against display boundaries */
+            trimLayer(ctx, mDpy, transform, srcRect, dstRect);
+            roi = getUnion(roi, dstRect);
+        }
+    }
+
+    if(!validateAndApplyROI(ctx, list, roi)){
+        roi = (struct hwc_rect) {0, 0,
+                    (int)ctx->dpyAttr[mDpy].xres, (int)ctx->dpyAttr[mDpy].yres};
+    }
+
+    ctx->listStats[mDpy].roi.x = roi.left;
+    ctx->listStats[mDpy].roi.y = roi.top;
+    ctx->listStats[mDpy].roi.w = roi.right - roi.left;
+    ctx->listStats[mDpy].roi.h = roi.bottom - roi.top;
+
+    ALOGD_IF(isDebug(),"%s: generated ROI: [%d, %d, %d, %d]", __FUNCTION__,
+                               roi.left, roi.top, roi.right, roi.bottom);
+}
+
 /* Checks for conditions where all the layers marked for MDP comp cannot be
  * bypassed. On such conditions we try to bypass atleast YUV layers */
 bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
@@ -452,15 +549,14 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             return false;
         }
     }
-
-    //Setup mCurrentFrame
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount;
     mCurrentFrame.fbCount = 0;
     mCurrentFrame.fbZ = -1;
-    memset(&mCurrentFrame.isFBComposed, 0, sizeof(mCurrentFrame.isFBComposed));
+    memcpy(&mCurrentFrame.isFBComposed, &mCurrentFrame.drop,
+           sizeof(mCurrentFrame.isFBComposed));
+    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount -
+        mCurrentFrame.dropCount;
 
-    int mdpCount = mCurrentFrame.mdpCount;
-    if(mdpCount > sMaxPipesPerMixer) {
+    if(mCurrentFrame.mdpCount > sMaxPipesPerMixer) {
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
         return false;
     }
@@ -504,7 +600,7 @@ bool MDPComp::partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list)
     }
 
     updateYUV(ctx, list, false /*secure only*/);
-    bool ret = batchLayers(ctx, list); //sets up fbZ also
+    bool ret = markLayersForCaching(ctx, list); //sets up fbZ also
     if(!ret) {
         ALOGD_IF(isDebug(),"%s: batching failed, dpy %d",__FUNCTION__, mDpy);
         return false;
@@ -540,10 +636,11 @@ bool MDPComp::partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list)
 bool MDPComp::isOnlyVideoDoable(hwc_context_t *ctx,
         hwc_display_contents_1_t* list, bool secureOnly) {
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+
     mCurrentFrame.reset(numAppLayers);
     updateYUV(ctx, list, secureOnly);
     int mdpCount = mCurrentFrame.mdpCount;
-    int fbNeeded = int(mCurrentFrame.fbCount != 0);
+    int fbNeeded = (mCurrentFrame.fbCount != 0);
 
     if(!isYuvPresent(ctx, mDpy)) {
         return false;
@@ -605,13 +702,126 @@ bool MDPComp::isYUVDoable(hwc_context_t* ctx, hwc_layer_1_t* layer) {
     return true;
 }
 
-bool MDPComp::batchLayers(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
-    /* Idea is to keep as many contiguous non-updating(cached) layers in FB and
-     * send rest of them through MDP. NEVER mark an updating layer for caching.
-     * But cached ones can be marked for MDP*/
+/* starts at fromIndex and check for each layer to find
+ * if it it has overlapping with any Updating layer above it in zorder
+ * till the end of the batch. returns true if it finds any intersection */
+bool MDPComp::canPushBatchToTop(const hwc_display_contents_1_t* list,
+        int fromIndex, int toIndex) {
+    for(int i = fromIndex; i < toIndex; i++) {
+        if(mCurrentFrame.isFBComposed[i] && !mCurrentFrame.drop[i]) {
+            if(intersectingUpdatingLayers(list, i+1, toIndex, i)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* Checks if given layer at targetLayerIndex has any
+ * intersection with all the updating layers in beween
+ * fromIndex and toIndex. Returns true if it finds intersectiion */
+bool MDPComp::intersectingUpdatingLayers(const hwc_display_contents_1_t* list,
+        int fromIndex, int toIndex, int targetLayerIndex) {
+    for(int i = fromIndex; i <= toIndex; i++) {
+        if(!mCurrentFrame.isFBComposed[i]) {
+            if(areLayersIntersecting(&list->hwLayers[i],
+                        &list->hwLayers[targetLayerIndex]))  {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int MDPComp::getBatch(hwc_display_contents_1_t* list,
+        int& maxBatchStart, int& maxBatchEnd,
+        int& maxBatchCount) {
+    int i = 0;
+    int updatingLayersAbove = 0;//Updating layer count in middle of batch
+    int fbZOrder =-1;
+    while (i < mCurrentFrame.layerCount) {
+        int batchCount = 0;
+        int batchStart = i;
+        int batchEnd = i;
+        int fbZ = batchStart;
+        int firstZReverseIndex = -1;
+        while(i < mCurrentFrame.layerCount) {
+            if(!mCurrentFrame.isFBComposed[i]) {
+                if(!batchCount) {
+                    i++;
+                    break;
+                }
+                updatingLayersAbove++;
+                i++;
+                continue;
+            } else {
+                if(mCurrentFrame.drop[i]) {
+                    i++;
+                    continue;
+                } else if(updatingLayersAbove <= 0) {
+                    batchCount++;
+                    batchEnd = i;
+                    i++;
+                    continue;
+                } else { //Layer is FBComposed, not a drop & updatingLayer > 0
+
+                    // We have a valid updating layer already. If layer-i not
+                    // have overlapping with all updating layers in between
+                    // batch-start and i, then we can add layer i to batch.
+                    if(!intersectingUpdatingLayers(list, batchStart, i-1, i)) {
+                        batchCount++;
+                        batchEnd = i;
+                        i++;
+                        continue;
+                    } else if(canPushBatchToTop(list, batchStart, i)) {
+                        //If All the non-updating layers with in this batch
+                        //does not have intersection with the updating layers
+                        //above in z-order, then we can safely move the batch to
+                        //higher z-order. Increment fbZ as it is moving up.
+                        if( firstZReverseIndex < 0) {
+                            firstZReverseIndex = i;
+                        }
+                        batchCount++;
+                        batchEnd = i;
+                        fbZ += updatingLayersAbove;
+                        i++;
+                        updatingLayersAbove = 0;
+                        continue;
+                    } else {
+                        //both failed.start the loop again from here.
+                        if(firstZReverseIndex >= 0) {
+                            i = firstZReverseIndex;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        if(batchCount > maxBatchCount) {
+            maxBatchCount = batchCount;
+            maxBatchStart = batchStart;
+            maxBatchEnd = batchEnd;
+            fbZOrder = fbZ;
+        }
+    }
+    return fbZOrder;
+}
+
+bool  MDPComp::markLayersForCaching(hwc_context_t* ctx,
+        hwc_display_contents_1_t* list) {
+    /* Idea is to keep as many non-updating(cached) layers in FB and
+     * send rest of them through MDP. This is done in 2 steps.
+     *   1. Find the maximum contiguous batch of non-updating layers.
+     *   2. See if we can improve this batch size for caching by adding
+     *      opaque layers around the batch, if they don't have
+     *      any overlapping with the updating layers in between.
+     * NEVER mark an updating layer for caching.
+     * But cached ones can be marked for MDP */
 
     int maxBatchStart = -1;
+    int maxBatchEnd = -1;
     int maxBatchCount = 0;
+    int fbZ = -1;
 
     /* All or Nothing is cached. No batching needed */
     if(!mCurrentFrame.fbCount) {
@@ -623,42 +833,32 @@ bool MDPComp::batchLayers(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return true;
     }
 
-    /* Search for max number of contiguous (cached) layers */
-    int i = 0;
-    while (i < mCurrentFrame.layerCount) {
-        int count = 0;
-        while(mCurrentFrame.isFBComposed[i] && i < mCurrentFrame.layerCount) {
-            count++; i++;
-        }
-        if(count > maxBatchCount) {
-            maxBatchCount = count;
-            maxBatchStart = i - count;
-            mCurrentFrame.fbZ = maxBatchStart;
-        }
-        if(i < mCurrentFrame.layerCount) i++;
-    }
+    fbZ = getBatch(list, maxBatchStart, maxBatchEnd, maxBatchCount);
 
-    /* reset rest of the layers for MDP comp */
+    /* reset rest of the layers lying inside ROI for MDP comp */
     for(int i = 0; i < mCurrentFrame.layerCount; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
-        if(i != maxBatchStart) {
-            //If an unsupported layer is being attempted to be pulled out we
-            //should fail
-            if(not isSupportedForMDPComp(ctx, layer)) {
-                return false;
+        if((i < maxBatchStart || i > maxBatchEnd) &&
+                mCurrentFrame.isFBComposed[i]){
+            if(!mCurrentFrame.drop[i]){
+                //If an unsupported layer is being attempted to
+                //be pulled out we should fail
+                if(not isSupportedForMDPComp(ctx, layer)) {
+                    return false;
+                }
+                mCurrentFrame.isFBComposed[i] = false;
             }
-            mCurrentFrame.isFBComposed[i] = false;
-        } else {
-            i += maxBatchCount;
         }
     }
 
+    // update the frame data
+    mCurrentFrame.fbZ = fbZ;
     mCurrentFrame.fbCount = maxBatchCount;
     mCurrentFrame.mdpCount = mCurrentFrame.layerCount -
-            mCurrentFrame.fbCount;
+            mCurrentFrame.fbCount - mCurrentFrame.dropCount;
 
     ALOGD_IF(isDebug(),"%s: cached count: %d",__FUNCTION__,
-             mCurrentFrame.fbCount);
+            mCurrentFrame.fbCount);
 
     return true;
 }
@@ -671,7 +871,8 @@ void MDPComp::updateLayerCache(hwc_context_t* ctx,
     for(int i = 0; i < numAppLayers; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
         if (mCachedFrame.hnd[i] == list->hwLayers[i].handle) {
-            fbCount++;
+            if(!mCurrentFrame.drop[i])
+                fbCount++;
             mCurrentFrame.isFBComposed[i] = true;
         } else {
             mCurrentFrame.isFBComposed[i] = false;
@@ -680,10 +881,12 @@ void MDPComp::updateLayerCache(hwc_context_t* ctx,
     }
 
     mCurrentFrame.fbCount = fbCount;
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount;
+    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount
+                                                    - mCurrentFrame.dropCount;
 
-    ALOGD_IF(isDebug(),"%s: MDP count: %d FB count %d",__FUNCTION__,
-            mCurrentFrame.mdpCount, mCurrentFrame.fbCount);
+    ALOGD_IF(isDebug(),"%s: MDP count: %d FB count %d drop count: %d"
+             ,__FUNCTION__, mCurrentFrame.mdpCount, mCurrentFrame.fbCount,
+            mCurrentFrame.dropCount);
 }
 
 void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
@@ -719,8 +922,8 @@ void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
     }
 
     mCurrentFrame.mdpCount = mCurrentFrame.layerCount -
-            mCurrentFrame.fbCount;
-    ALOGD_IF(isDebug(),"%s: cached count: %d",__FUNCTION__,
+            mCurrentFrame.fbCount - mCurrentFrame.dropCount;
+    ALOGD_IF(isDebug(),"%s: fb count: %d",__FUNCTION__,
              mCurrentFrame.fbCount);
 }
 
@@ -730,24 +933,25 @@ bool MDPComp::programMDP(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return false;
     }
 
-    bool fbBatch = false;
     for (int index = 0, mdpNextZOrder = 0; index < mCurrentFrame.layerCount;
             index++) {
         if(!mCurrentFrame.isFBComposed[index]) {
             int mdpIndex = mCurrentFrame.layerToMDP[index];
             hwc_layer_1_t* layer = &list->hwLayers[index];
 
+            //Leave fbZ for framebuffer. CACHE/GLES layers go here.
+            if(mdpNextZOrder == mCurrentFrame.fbZ) {
+                mdpNextZOrder++;
+            }
             MdpPipeInfo* cur_pipe = mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
             cur_pipe->zOrder = mdpNextZOrder++;
+
 
             if(configure(ctx, layer, mCurrentFrame.mdpToLayer[mdpIndex]) != 0 ){
                 ALOGD_IF(isDebug(), "%s: Failed to configure overlay for \
                          layer %d",__FUNCTION__, index);
                 return false;
             }
-        } else if(fbBatch == false) {
-                mdpNextZOrder++;
-                fbBatch = true;
         }
     }
 
@@ -833,6 +1037,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     //reset old data
     mCurrentFrame.reset(numLayers);
+    memset(&mCurrentFrame.drop, 0, sizeof(mCurrentFrame.drop));
+    mCurrentFrame.dropCount = 0;
 
     //number of app layers exceeds MAX_NUM_APP_LAYERS fall back to GPU
     //do not cache the information for next draw cycle.
@@ -852,6 +1058,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ret = -1;
         goto exit;
     }
+
+    generateROI(ctx, list);
 
     //Check whether layers marked for MDP Composition is actually doable.
     if(isFullFrameDoable(ctx, list)) {
@@ -922,6 +1130,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     //UpdateLayerFlags
     setMDPCompLayerFlags(ctx, list);
+    mCachedFrame.cacheAll(list);
     mCachedFrame.updateCounts(mCurrentFrame);
 
     // unlock it before calling dump function to avoid deadlock
