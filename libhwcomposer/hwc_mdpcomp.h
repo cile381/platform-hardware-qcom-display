@@ -90,6 +90,10 @@ protected:
         /* layer composing on FB? */
         int fbCount;
         bool isFBComposed[MAX_NUM_APP_LAYERS];
+        /* layers lying outside ROI. Will
+         * be dropped off from the composition */
+        int dropCount;
+        bool drop[MAX_NUM_APP_LAYERS];
 
         bool needsRedraw;
         int fbZ;
@@ -150,6 +154,10 @@ protected:
             hwc_display_contents_1_t* list);
     /* checks if the required bandwidth exceeds a certain max */
     bool bandwidthCheck(hwc_context_t *ctx, const uint32_t& size);
+    /* generates ROI based on the modified area of the frame */
+    void generateROI(hwc_context_t *ctx, hwc_display_contents_1_t* list);
+    bool validateAndApplyROI(hwc_context_t *ctx, hwc_display_contents_1_t* list,
+                             hwc_rect_t roi);
 
     /* Is debug enabled */
     static bool isDebug() { return sDebugLogs ? true : false; };
@@ -160,8 +168,17 @@ protected:
     /* tracks non updating layers*/
     void updateLayerCache(hwc_context_t* ctx, hwc_display_contents_1_t* list);
     /* optimize layers for mdp comp*/
-    bool batchLayers(hwc_context_t *ctx, hwc_display_contents_1_t* list);
-    /* updates cache map with YUV info */
+    bool markLayersForCaching(hwc_context_t* ctx,
+            hwc_display_contents_1_t* list);
+    int getBatch(hwc_display_contents_1_t* list,
+            int& maxBatchStart, int& maxBatchEnd,
+            int& maxBatchCount);
+    bool canPushBatchToTop(const hwc_display_contents_1_t* list,
+            int fromIndex, int toIndex);
+    bool intersectingUpdatingLayers(const hwc_display_contents_1_t* list,
+            int fromIndex, int toIndex, int targetLayerIndex);
+
+        /* updates cache map with YUV info */
     void updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
             bool secureOnly);
     bool programMDP(hwc_context_t *ctx, hwc_display_contents_1_t* list);
@@ -172,6 +189,8 @@ protected:
     int mDpy;
     static bool sEnabled;
     static bool sEnableMixedMode;
+    /* Enables Partial frame composition */
+    static bool sEnablePartialFrameUpdate;
     static bool sDebugLogs;
     static bool sIdleFallBack;
     static int sMaxPipesPerMixer;

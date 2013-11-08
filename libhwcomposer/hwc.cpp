@@ -446,6 +446,9 @@ static int hwc_query(struct hwc_composer_device_1* dev,
             supported |= HWC_DISPLAY_EXTERNAL_BIT;
         value[0] = supported;
         break;
+    case HWC_FORMAT_RB_SWAP:
+        value[0] = 1;
+        break;
     default:
         return -EINVAL;
     }
@@ -494,7 +497,8 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             }
         }
 
-        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
+        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,
+                                            ctx->listStats[dpy].roi)) {
             ALOGE("%s: display commit fail for %d dpy!", __FUNCTION__, dpy);
             ret = -1;
         }

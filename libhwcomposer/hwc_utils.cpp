@@ -709,6 +709,8 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
+    ctx->listStats[dpy].roi = ovutils::Dim(0, 0,
+                      (int)ctx->dpyAttr[dpy].xres, (int)ctx->dpyAttr[dpy].yres);
 
     if(qdutils::MDPVersion::getInstance().is8x26()) {
         optimizeLayerRects(ctx, list, dpy);
@@ -921,6 +923,13 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
     crop_t += crop_h * topCutRatio;
     crop_r -= crop_w * rightCutRatio;
     crop_b -= crop_h * bottomCutRatio;
+}
+
+bool areLayersIntersecting(const hwc_layer_1_t* layer1,
+        const hwc_layer_1_t* layer2) {
+    hwc_rect_t irect = getIntersection(layer1->displayFrame,
+            layer2->displayFrame);
+    return isValidRect(irect);
 }
 
 bool isValidRect(const hwc_rect& rect)
@@ -1385,6 +1394,14 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     Whf whf(hnd->width, hnd->height,
             getMdpFormat(hnd->format), hnd->size);
 
+    // Handle R/B swap
+    if (layer->flags & HWC_FORMAT_RB_SWAP) {
+        if (hnd->format == HAL_PIXEL_FORMAT_RGBA_8888)
+            whf.format = getMdpFormat(HAL_PIXEL_FORMAT_BGRA_8888);
+        else if (hnd->format == HAL_PIXEL_FORMAT_RGBX_8888)
+            whf.format = getMdpFormat(HAL_PIXEL_FORMAT_BGRX_8888);
+    }
+
     if(dpy && isYuvBuffer(hnd)) {
         if(!ctx->listStats[dpy].isDisplayAnimating) {
             ctx->mPrevCropVideo = crop;
@@ -1507,6 +1524,14 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     Whf whf(hnd->width, hnd->height,
             getMdpFormat(hnd->format), hnd->size);
+
+    // Handle R/B swap
+    if (layer->flags & HWC_FORMAT_RB_SWAP) {
+        if (hnd->format == HAL_PIXEL_FORMAT_RGBA_8888)
+            whf.format = getMdpFormat(HAL_PIXEL_FORMAT_BGRA_8888);
+        else if (hnd->format == HAL_PIXEL_FORMAT_RGBX_8888)
+            whf.format = getMdpFormat(HAL_PIXEL_FORMAT_BGRX_8888);
+    }
 
     if(dpy && isYuvBuffer(hnd)) {
         if(!ctx->listStats[dpy].isDisplayAnimating) {
