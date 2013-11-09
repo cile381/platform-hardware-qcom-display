@@ -101,6 +101,7 @@ struct ListStats {
     // Notifies hwcomposer about the start and end of animation
     // This will be set to true during animation, otherwise false.
     bool isDisplayAnimating;
+    bool secureUI; // Secure display layer
 };
 
 struct LayerProp {
@@ -190,12 +191,10 @@ void dumpsys_log(android::String8& buf, const char* fmt, ...);
 
 int getExtOrientation(hwc_context_t* ctx);
 
-bool isValidRect(hwc_rect_t& rect);
+bool isValidRect(const hwc_rect_t& rect);
 void deductRect(const hwc_layer_1_t* layer, hwc_rect_t& irect);
-void getIntersection(hwc_rect_t& rect1,
-                        hwc_rect_t& rect2, hwc_rect_t& irect);
-void getUnion(hwc_rect_t& rect1,
-                        hwc_rect_t& rect2, hwc_rect_t& irect);
+hwc_rect_t getIntersection(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
+hwc_rect_t getUnion(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 void optimizeLayerRects(hwc_context_t *ctx,
                         const hwc_display_contents_1_t *list, const int& dpy);
 
@@ -308,6 +307,11 @@ static inline bool isExtBlock(const private_handle_t* hnd) {
 //Return true if buffer is for external display only with a Close Caption flag.
 static inline bool isExtCC(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_EXTERNAL_CC));
+}
+
+//Return true if the buffer is intended for Secure Display
+static inline bool isSecureDisplayBuffer(const private_handle_t* hnd) {
+    return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_DISPLAY));
 }
 
 template<typename T> inline T max(T a, T b) { return (a > b) ? a : b; }

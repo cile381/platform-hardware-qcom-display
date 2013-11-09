@@ -708,6 +708,7 @@ void setListStats(hwc_context_t *ctx,
     char property[PROPERTY_VALUE_MAX];
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
+    ctx->listStats[dpy].secureUI = false;
 
     if(qdutils::MDPVersion::getInstance().is8x26()) {
         optimizeLayerRects(ctx, list, dpy);
@@ -720,6 +721,9 @@ void setListStats(hwc_context_t *ctx,
 #ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
+        }
+        if(isSecureDisplayBuffer(hnd)) {
+            ctx->listStats[dpy].secureUI = true;
         }
 #endif
         // continue if number of app layers exceeds MAX_NUM_APP_LAYERS
@@ -919,26 +923,51 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
     crop_b -= crop_h * bottomCutRatio;
 }
 
-bool isValidRect(hwc_rect_t& rect) {
-    return ((rect.bottom > rect.top) && (rect.right > rect.left)) ;
+bool isValidRect(const hwc_rect& rect)
+{
+   return ((rect.bottom > rect.top) && (rect.right > rect.left)) ;
 }
 
-/* computes intersection of two rects into 3rd arg/rect */
-void getIntersection(hwc_rect_t& rect1,
-                        hwc_rect_t& rect2, hwc_rect_t& irect) {
-    irect.left   = max(rect1.left, rect2.left);
-    irect.top    = max(rect1.top, rect2.top);
-    irect.right  = min(rect1.right, rect2.right);
-    irect.bottom = min(rect1.bottom, rect2.bottom);
+/* computes the intersection of two rects */
+hwc_rect_t getIntersection(const hwc_rect_t& rect1, const hwc_rect_t& rect2)
+{
+   hwc_rect_t res;
+
+   if(!isValidRect(rect1) || !isValidRect(rect2)){
+      return (hwc_rect_t){0, 0, 0, 0};
+   }
+
+
+   res.left = max(rect1.left, rect2.left);
+   res.top = max(rect1.top, rect2.top);
+   res.right = min(rect1.right, rect2.right);
+   res.bottom = min(rect1.bottom, rect2.bottom);
+
+   if(!isValidRect(res))
+      return (hwc_rect_t){0, 0, 0, 0};
+
+   return res;
 }
 
-/* get union of two rects into 3rd rect */
-void getUnion(hwc_rect_t& rect1,
-                        hwc_rect_t& rect2, hwc_rect_t& irect) {
-    irect.left   = min(rect1.left, rect2.left);
-    irect.top    = min(rect1.top, rect2.top);
-    irect.right  = max(rect1.right, rect2.right);
-    irect.bottom = max(rect1.bottom, rect2.bottom);
+/* computes the union of two rects */
+hwc_rect_t getUnion(const hwc_rect &rect1, const hwc_rect &rect2)
+{
+   hwc_rect_t res;
+
+   if(!isValidRect(rect1)){
+      return rect2;
+   }
+
+   if(!isValidRect(rect2)){
+      return rect1;
+   }
+
+   res.left = min(rect1.left, rect2.left);
+   res.top = min(rect1.top, rect2.top);
+   res.right =  max(rect1.right, rect2.right);
+   res.bottom =  max(rect1.bottom, rect2.bottom);
+
+   return res;
 }
 
 /* deducts given rect from layers display-frame and source crop.
@@ -989,7 +1018,8 @@ void optimizeLayerRects(hwc_context_t *ctx,
                 if(!needsScaling(ctx, &list->hwLayers[j], dpy)) {
                     hwc_rect_t& bottomframe =
                         (hwc_rect_t&)list->hwLayers[j].displayFrame;
-                    getIntersection(bottomframe, topframe, (hwc_rect_t&)irect);
+
+                    hwc_rect_t irect = getIntersection(bottomframe, topframe);
                     if(isValidRect(irect)) {
                         //if intersection is valid rect, deduct it
                         deductRect(&list->hwLayers[j], irect);
@@ -1015,11 +1045,11 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 
     for (uint32_t i = 1; i < last; i++) {
         hwc_rect_t displayFrame = list->hwLayers[i].displayFrame;
-        getUnion(nwr, displayFrame, nwr);
+        nwr = getUnion(nwr, displayFrame);
     }
 
     //Intersect with the framebuffer
-    getIntersection(nwr, fbDisplayFrame, nwr);
+    nwr = getIntersection(nwr, fbDisplayFrame);
 }
 
 bool isExternalActive(hwc_context_t* ctx) {
@@ -1045,16 +1075,11 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     int count = 0;
     int releaseFd = -1;
     int fbFd = -1;
-    int rotFd = -1;
     bool swapzero = false;
     int mdpVersion = qdutils::MDPVersion::getInstance().getMDPVersion();
 
     struct mdp_buf_sync data;
     memset(&data, 0, sizeof(data));
-    //Until B-family supports sync for rotator
-#ifdef MDSS_TARGET
-    data.flags = MDP_BUF_SYNC_FLAG_WAIT;
-#endif
     data.acq_fen_fd = acquireFd;
     data.rel_fen_fd = &releaseFd;
 
@@ -1063,34 +1088,37 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         if(atoi(property) == 0)
             swapzero = true;
     }
+
     bool isExtAnimating = false;
     if(dpy)
        isExtAnimating = ctx->listStats[dpy].isDisplayAnimating;
 
     //Send acquireFenceFds to rotator
-#ifdef MDSS_TARGET
-    //TODO B-family
-#else
-    //A-family
-    int rotFd = ctx->mRotMgr->getRotDevFd();
-    struct msm_rotator_buf_sync rotData;
-
     for(uint32_t i = 0; i < ctx->mLayerRotMap[dpy]->getCount(); i++) {
+        int rotFd = ctx->mRotMgr->getRotDevFd();
+        int rotReleaseFd = -1;
+        struct mdp_buf_sync rotData;
         memset(&rotData, 0, sizeof(rotData));
-        int& acquireFenceFd =
-                ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd;
-        rotData.acq_fen_fd = acquireFenceFd;
+        rotData.acq_fen_fd =
+                &ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd;
+        rotData.rel_fen_fd = &rotReleaseFd; //driver to populate this
         rotData.session_id = ctx->mLayerRotMap[dpy]->getRot(i)->getSessId();
-        ioctl(rotFd, MSM_ROTATOR_IOCTL_BUFFER_SYNC, &rotData);
-        close(acquireFenceFd);
-        //For MDP to wait on.
-        acquireFenceFd = dup(rotData.rel_fen_fd);
-        //A buffer is free to be used by producer as soon as its copied to
-        //rotator.
-        ctx->mLayerRotMap[dpy]->getLayer(i)->releaseFenceFd =
-                rotData.rel_fen_fd;
+        int ret = 0;
+        ret = ioctl(rotFd, MSMFB_BUFFER_SYNC, &rotData);
+        if(ret < 0) {
+            ALOGE("%s: ioctl MSMFB_BUFFER_SYNC failed for rot sync, err=%s",
+                    __FUNCTION__, strerror(errno));
+        } else {
+            close(ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd);
+            //For MDP to wait on.
+            ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd =
+                    dup(rotReleaseFd);
+            //A buffer is free to be used by producer as soon as its copied to
+            //rotator
+            ctx->mLayerRotMap[dpy]->getLayer(i)->releaseFenceFd =
+                    rotReleaseFd;
+        }
     }
-#endif
 
     //Accumulate acquireFenceFds for MDP
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
@@ -1164,14 +1192,8 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     if (ctx->mCopyBit[dpy])
         ctx->mCopyBit[dpy]->setReleaseFd(releaseFd);
 
-#ifdef MDSS_TARGET
-    //TODO When B is implemented remove #ifdefs from here
-    //The API called applies to RotMem buffers
-#else
-    //A-family
     //Signals when MDP finishes reading rotator buffers.
     ctx->mLayerRotMap[dpy]->setReleaseFd(releaseFd);
-#endif
 
     // if external is animating, close the relaseFd
     if(isExtAnimating) {
@@ -1228,6 +1250,13 @@ void setMdpFlags(hwc_layer_1_t *layer,
         }
     }
 
+    if(isSecureDisplayBuffer(hnd)) {
+        // Secure display needs both SECURE_OVERLAY and SECURE_DISPLAY_OV
+        ovutils::setMdpFlags(mdpFlags,
+                             ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
+        ovutils::setMdpFlags(mdpFlags,
+                             ovutils::OV_MDP_SECURE_DISPLAY_OVERLAY_SESSION);
+    }
     //No 90 component and no rot-downscale then flips done by MDP
     //If we use rot then it might as well do flips
     if(!(transform & HWC_TRANSFORM_ROT_90) && !rotDownscale) {
