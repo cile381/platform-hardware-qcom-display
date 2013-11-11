@@ -1005,9 +1005,11 @@ static bool canUseCopybit(const framebuffer_device_t* fbDev, const hwc_layer_lis
     unsigned int renderArea = 0;
 
     for(int i = 0; i < list->numHwLayers; i++ ) {
-        int w, h;
-        getLayerResolution(&list->hwLayers[i], w, h);
-        renderArea += w*h;
+        if (list->hwLayers[i].handle) { // Non-color layer
+            int w, h;
+            getLayerResolution(&list->hwLayers[i], w, h);
+            renderArea += w*h;
+        }
     }
 
     return (renderArea <= (2 * fb_w * fb_h));
@@ -1869,6 +1871,13 @@ static int hwc_set(hwc_composer_device_t *dev,
 
     int ret = 0;
     if (list) {
+        if (hwcModule->compositionType & COMPOSITION_TYPE_DYN) {
+            statCount(ctx, list);
+            if (!canUseCopybit(hwcModule->fbDevice, list, ctx->yuvBufferCount)) {
+                LOGD("%s: Cannot use copybit for current frame", __FUNCTION__);
+                return -1;
+            }
+        }
         bool bDumpLayers = needToDumpLayers(); // Check need for debugging dumps
         for (size_t i=0; i<list->numHwLayers; i++) {
             if (bDumpLayers)
