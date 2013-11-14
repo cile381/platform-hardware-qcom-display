@@ -138,7 +138,9 @@ static void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers) {
 
 static void handleGeomChange(hwc_context_t *ctx, int dpy,
         hwc_display_contents_1_t *list) {
-    if(list->flags & HWC_GEOMETRY_CHANGED) {
+    /* No point to calling overlay_set on MDP3 */
+    if(list->flags & HWC_GEOMETRY_CHANGED &&
+            ctx->mMDP.version >= qdutils::MDP_V4_0) {
         ctx->mOverlay->forceSet(dpy);
     }
 }
@@ -497,7 +499,8 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             }
         }
 
-        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
+        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,
+                                            ctx->listStats[dpy].roi)) {
             ALOGE("%s: display commit fail for %d dpy!", __FUNCTION__, dpy);
             ret = -1;
         }

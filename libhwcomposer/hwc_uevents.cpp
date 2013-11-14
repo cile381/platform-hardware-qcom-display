@@ -141,6 +141,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                          "event", __FUNCTION__);
                 ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL,
                                    EXTERNAL_OFFLINE);
+                ctx->mVirtualonExtActive = false;
             }
             break;
         }
@@ -309,7 +310,10 @@ static void *uevent_loop(void *param)
     char thread_name[64] = HWC_UEVENT_THREAD_NAME;
     prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
     setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY);
-    uevent_init();
+    if(!uevent_init()) {
+        ALOGE("%s: failed to init uevent ",__FUNCTION__);
+        return NULL;
+    }
 
     while(1) {
         len = uevent_next_event(udata, sizeof(udata) - 2);
