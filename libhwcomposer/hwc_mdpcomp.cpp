@@ -1002,8 +1002,10 @@ uint32_t MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     uint32_t size = 0;
 
-    if(!qdutils::MDPVersion::getInstance().is8x74v2())
+    if((!qdutils::MDPVersion::getInstance().is8x74v2()) &&
+            (!qdutils::MDPVersion::getInstance().is8x26())) {
         return 0;
+    }
 
     for (uint32_t i = 0; i < list->numHwLayers - 1; i++) {
         if(!mCurrentFrame.isFBComposed[i]) {
@@ -1034,7 +1036,8 @@ uint32_t MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
 bool MDPComp::bandwidthCheck(hwc_context_t *ctx, const uint32_t& size) {
     //Will be added for other targets if we run into bandwidth issues and when
     //we have profiling data to set an upper limit.
-    if(qdutils::MDPVersion::getInstance().is8x74v2()) {
+    if(qdutils::MDPVersion::getInstance().is8x74v2() ||
+            qdutils::MDPVersion::getInstance().is8x26()) {
         const uint32_t ONE_GIG = 1024 * 1024 * 1024;
         double panelRefRate =
                 1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
