@@ -116,10 +116,12 @@ enum {
     HAL_3D_IN_TOP_BOTTOM              = 0x20000,
     HAL_3D_IN_INTERLEAVE              = 0x40000,
     HAL_3D_IN_SIDE_BY_SIDE_R_L        = 0x80000,
+    HAL_3D_IN_FRAME_PACKING           = 0x100000,
     HAL_3D_OUT_SIDE_BY_SIDE           = 0x1000,
     HAL_3D_OUT_TOP_BOTTOM             = 0x2000,
     HAL_3D_OUT_INTERLEAVE             = 0x4000,
-    HAL_3D_OUT_MONOSCOPIC             = 0x8000
+    HAL_3D_OUT_MONOSCOPIC             = 0x8000,
+    HAL_3D_OUT_FRAME_PACKING          = 0x800
 };
 
 enum {
