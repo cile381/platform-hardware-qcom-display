@@ -35,6 +35,7 @@
 
 using namespace android;
 using namespace qService;
+using namespace qhwc;
 
 namespace qClient {
 
@@ -70,6 +71,53 @@ status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
         default:
             return NO_ERROR;
     }
+    return NO_ERROR;
+}
+
+status_t QClient::getStdFrameratePixclock(
+        ConfigChangeParams *params) {
+    return NO_ERROR;
+}
+
+status_t QClient::getCurrentFrameratePixclock(
+        ConfigChangeParams *params) {
+    return NO_ERROR;
+}
+
+status_t QClient::setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams) {
+    return NO_ERROR;
+}
+
+status_t QClient::setOverScanCompensationParams(
+        OSRectDimensions oscparams) {
+    return NO_ERROR;
+}
+
+status_t QClient::startConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType){
+    return NO_ERROR;
+}
+
+status_t QClient::doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) {
+    return NO_ERROR;
+}
+
+status_t QClient::stopConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType) {
+    return NO_ERROR;
+}
+
+status_t QClient::setPPParams(VideoPPData pParams,
+        PP_Video_Layer_Type numVideoLayer){
+    return NO_ERROR;
+}
+
+status_t QClient::setPQCState(int value) {
     return NO_ERROR;
 }
 
