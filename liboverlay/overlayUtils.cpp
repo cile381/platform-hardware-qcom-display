@@ -122,6 +122,10 @@ int getMdpFormat(int format) {
             return MDP_Y_CBCR_H1V1;
         case HAL_PIXEL_FORMAT_YCrCb_444_SP:
             return MDP_Y_CRCB_H1V1;
+        case HAL_PIXEL_FORMAT_YCbCr_444_I:
+            return MDP_YCBCR_H1V1;
+        case HAL_PIXEL_FORMAT_YCrCb_444_I:
+            return MDP_YCRCB_H1V1;
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
             return MDP_Y_CBCR_H2V2_VENUS;
         default:
