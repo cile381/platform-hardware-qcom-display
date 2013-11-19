@@ -114,6 +114,14 @@ status_t QClient::stopConfigChange(
 
 status_t QClient::setPPParams(VideoPPData pParams,
         PP_Video_Layer_Type numVideoLayer){
+    if(numVideoLayer < PP_MAX_VG_PIPES) {
+        pParams.isValid = true;
+        mHwcContext->mPpParams[numVideoLayer]= pParams;
+    }
+    else{
+        ALOGE("invalid layer type : %d",numVideoLayer);
+        return BAD_VALUE;
+    }
     return NO_ERROR;
 }
 
