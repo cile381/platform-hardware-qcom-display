@@ -278,7 +278,7 @@ int Overlay::initOverlay() {
     const char *strDtvPanel = "dtv panel";
     const char *strWbPanel = "writeback panel";
 
-    for(int num = 1; num < MAX_FB_DEVICES; num++) {
+    for(int num = 0; num < MAX_FB_DEVICES; num++) {
         snprintf (msmFbTypePath, sizeof(msmFbTypePath),
                 "/sys/class/graphics/fb%d/msm_fb_type", num);
         displayDeviceFP = fopen(msmFbTypePath, "r");
@@ -289,6 +289,8 @@ int Overlay::initOverlay() {
 
             if(strncmp(fbType, strDtvPanel, strlen(strDtvPanel)) == 0) {
                 sDpyFbMap[DPY_EXTERNAL] = num;
+                if(num == 0)
+                    mHdmiPrimary = true;
             } else if(strncmp(fbType, strWbPanel, strlen(strWbPanel)) == 0) {
                 sDpyFbMap[DPY_WRITEBACK] = num;
             }
@@ -298,6 +300,10 @@ int Overlay::initOverlay() {
     }
 
     return 0;
+}
+
+bool Overlay::isHDMIPrimary() {
+    return mHdmiPrimary;
 }
 
 bool Overlay::displayCommit(const int& fd, uint32_t wait_for_finish) {
@@ -369,6 +375,7 @@ int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
 int Overlay::PipeBook::sLastUsageBitmap = 0;
 int Overlay::PipeBook::sAllocatedBitmap = 0;
+bool Overlay::mHdmiPrimary = false;
 utils::eMdpPipeType Overlay::PipeBook::pipeTypeLUT[utils::OV_MAX] =
     {utils::OV_MDP_PIPE_ANY};
 
