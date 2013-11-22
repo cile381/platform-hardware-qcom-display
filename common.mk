@@ -23,7 +23,7 @@ ifeq ($(TARGET_USES_POST_PROCESSING),true)
 endif
 
 #Common C flags
-common_flags := -DDEBUG_CALC_FPS -Wno-missing-field-initializers
+common_flags += -DDEBUG_CALC_FPS -Wno-missing-field-initializers
 common_flags += -Werror
 
 ifeq ($(ARCH_ARM_HAVE_NEON),true)

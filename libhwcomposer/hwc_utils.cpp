@@ -680,6 +680,7 @@ void setListStats(hwc_context_t *ctx,
         if (UNLIKELY(isYuvBuffer(hnd))) {
             int& yuvCount = ctx->listStats[dpy].yuvCount;
             ctx->listStats[dpy].yuvIndices[yuvCount] = i;
+            ctx->mYuvHnd[yuvCount] = hnd;
             yuvCount++;
 
             if(layer->transform & HWC_TRANSFORM_ROT_90)
@@ -1220,7 +1221,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     }
 
     MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
-
+    int yuvOrder = -1;
     hwc_rect_t crop = layer->sourceCrop;
     hwc_rect_t dst = layer->displayFrame;
     int transform = layer->transform;
@@ -1229,6 +1230,13 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     int rotFlags = ovutils::ROT_FLAGS_NONE;
     Whf whf(hnd->width, hnd->height,
             getMdpFormat(hnd->format), hnd->size);
+
+
+    for (int i = 0; i < (ctx->listStats[dpy].yuvCount); i++ ) {
+        if (ctx->mYuvHnd[i] == hnd) {
+            yuvOrder = i;
+        }
+    }
 
     if(dpy && isYuvBuffer(hnd)) {
         if(!ctx->listStats[dpy].isDisplayAnimating) {
@@ -1292,6 +1300,27 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     PipeArgs parg(mdpFlags, whf, z, isFg,
                   static_cast<eRotFlags>(rotFlags), layer->planeAlpha,
                   (ovutils::eBlending) getBlending(layer->blending));
+    if ( (yuvOrder == VIDEO_LAYER_0) or (yuvOrder == VIDEO_LAYER_1) ) {
+        if(metadata && (ctx->mPpParams[yuvOrder].isValid) ) {
+            if (metadata->operation & PP_PARAM_VID_INTFC) {
+            /* Preference will be for the HSIC & QSEED values
+             * set through binder */
+                metadata->operation |= ctx->mPpParams[yuvOrder].ops;
+                if(metadata->operation & PP_PARAM_HSIC) {
+                    metadata->hsicData.hue = ctx->mPpParams[yuvOrder].hue;
+                    metadata->hsicData.saturation =
+                        ctx->mPpParams[yuvOrder].saturation;
+                    metadata->hsicData.intensity =
+                        ctx->mPpParams[yuvOrder].intensity;
+                    metadata->hsicData.contrast =
+                        ctx->mPpParams[yuvOrder].contrast;
+                }
+                if(metadata->operation & PP_PARAM_SHARPNESS) {
+                    metadata->sharpness = ctx->mPpParams[yuvOrder].sharpness;
+                }
+            }
+        }
+    }
 
     if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
