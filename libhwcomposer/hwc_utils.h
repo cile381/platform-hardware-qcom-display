@@ -129,6 +129,7 @@ enum {
 
 // HAL specific features
 enum {
+    HWC_COLOR_FILL = 0x00000008,
     HWC_FORMAT_RB_SWAP = 0x00000040,
 };
 
