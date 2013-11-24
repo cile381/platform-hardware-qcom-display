@@ -104,8 +104,9 @@ enum {
     HAL_PIXEL_FORMAT_YCbCr_444_SP           = 0x10F,
     HAL_PIXEL_FORMAT_YCrCb_444_SP           = 0x110,
     HAL_PIXEL_FORMAT_YCrCb_422_I            = 0x111,
+    HAL_PIXEL_FORMAT_YCbCr_444_I            = 0x120,
+    HAL_PIXEL_FORMAT_YCrCb_444_I            = 0x140,
     HAL_PIXEL_FORMAT_INTERLACE              = 0x180,
-
 };
 
 /* possible formats for 3D content*/
@@ -115,10 +116,12 @@ enum {
     HAL_3D_IN_TOP_BOTTOM              = 0x20000,
     HAL_3D_IN_INTERLEAVE              = 0x40000,
     HAL_3D_IN_SIDE_BY_SIDE_R_L        = 0x80000,
+    HAL_3D_IN_FRAME_PACKING           = 0x100000,
     HAL_3D_OUT_SIDE_BY_SIDE           = 0x1000,
     HAL_3D_OUT_TOP_BOTTOM             = 0x2000,
     HAL_3D_OUT_INTERLEAVE             = 0x4000,
-    HAL_3D_OUT_MONOSCOPIC             = 0x8000
+    HAL_3D_OUT_MONOSCOPIC             = 0x8000,
+    HAL_3D_OUT_FRAME_PACKING          = 0x800
 };
 
 enum {

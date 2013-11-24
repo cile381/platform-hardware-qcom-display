@@ -30,12 +30,14 @@
 #include <linux/fb.h>
 #include "qdMetaData.h"
 #include <overlayUtils.h>
+#include <hwc_ppmetadata.h>
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 #define MAX_NUM_APP_LAYERS 32
 #define MAX_DISPLAY_DIM 2048
+#define PP_MAX_VG_PIPES 2
 
 //Fwrd decls
 struct hwc_context_t;
@@ -370,6 +372,10 @@ struct hwc_context_t {
     //used for enabling C2D Feature only for 8960 Non Pro Device
     int mSocId;
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
+    // Post-processing parameters
+    qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
+    //Total YUV layer handle in the context
+    private_handle_t *mYuvHnd[MAX_NUM_APP_LAYERS];
 };
 
 namespace qhwc {

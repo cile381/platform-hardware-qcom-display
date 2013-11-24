@@ -37,6 +37,7 @@
 #include <IQService.h>
 #include <IQClient.h>
 
+using namespace qhwc;
 struct hwc_context_t;
 
 namespace qService {
@@ -49,6 +50,26 @@ public:
     virtual void unsecuring(uint32_t startEnd);
     virtual void connect(const android::sp<qClient::IQClient>& client);
     virtual android::status_t screenRefresh();
+    virtual android::status_t getStdFrameratePixclock(ConfigChangeParams
+            *params);
+    virtual android::status_t getCurrentFrameratePixclock(ConfigChangeParams
+            *params);
+    virtual android::status_t setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams);
+    virtual android::status_t setOverScanCompensationParams(
+        OSRectDimensions oscparams);
+    virtual android::status_t startConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType);
+    virtual android::status_t doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params);
+    virtual android::status_t stopConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType);
+    virtual android::status_t setPPParams(VideoPPData pParams,
+        PP_Video_Layer_Type numVideoLayer);
+    virtual android::status_t setPQCState(int value);
     virtual void setExtOrientation(uint32_t orientation);
     virtual void setBufferMirrorMode(uint32_t enable);
     static void init();

@@ -26,6 +26,9 @@
 #include <utils/Errors.h>
 #include <utils/RefBase.h>
 #include <binder/IInterface.h>
+#include <hwc_ppmetadata.h>
+
+using namespace qhwc;
 
 namespace qClient {
 // ----------------------------------------------------------------------------
@@ -34,6 +37,26 @@ class IQClient : public android::IInterface
 public:
     DECLARE_META_INTERFACE(QClient);
     virtual android::status_t notifyCallback(uint32_t msg, uint32_t value) = 0;
+    virtual android::status_t getStdFrameratePixclock(ConfigChangeParams
+            *params) = 0;
+    virtual android::status_t getCurrentFrameratePixclock(
+            ConfigChangeParams *params) = 0;
+    virtual android::status_t setOverScanParams(
+            PP_Video_Layer_Type numVideoLayer,
+            OSRectDimensions ossrcparams,
+            OSRectDimensions osdstparams) = 0;
+    virtual android::status_t setOverScanCompensationParams(
+            OSRectDimensions oscparams) = 0;
+    virtual android::status_t setPPParams(VideoPPData pParams,
+            PP_Video_Layer_Type numVideoLayer) = 0;
+    virtual android::status_t startConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t doConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType,
+            ConfigChangeParams params) = 0;
+    virtual android::status_t stopConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t setPQCState(int value) = 0;
 };
 
 // ----------------------------------------------------------------------------

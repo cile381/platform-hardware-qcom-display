@@ -21,6 +21,8 @@
 #include "mdp_version.h"
 
 #define HSIC_SETTINGS_DEBUG 0
+#define CONVERT_RGB2RGB     0
+#define CONVERT_YUV2RGB     3
 
 static inline bool isEqual(float f1, float f2) {
         return ((int)(f1*100) == (int)(f2*100)) ? true : false;
@@ -145,10 +147,12 @@ bool MdpCtrl::set() {
     doTransform();
     doDownscale();
     utils::Whf whf = getSrcWhf();
-    if(utils::isYuv(whf.format)) {
+    if(utils::isYuvH2(whf.format)) {
         normalizeCrop(mOVInfo.src_rect.x, mOVInfo.src_rect.w);
-        normalizeCrop(mOVInfo.src_rect.y, mOVInfo.src_rect.h);
         utils::even_floor(mOVInfo.dst_rect.w);
+    }
+    if(utils::isYuvV2(whf.format)) {
+        normalizeCrop(mOVInfo.src_rect.y, mOVInfo.src_rect.h);
         utils::even_floor(mOVInfo.dst_rect.h);
     }
 
@@ -252,13 +256,23 @@ bool MdpCtrl::setVisualParams(const MetaData_t& data) {
             needUpdate = true;
         }
 
+        if(utils::isRgb(mOVInfo.src.format))
+            mParams.params.conv_params.ops = CONVERT_RGB2RGB;
+        else
+            mParams.params.conv_params.ops = CONVERT_YUV2RGB;
+
         if (needUpdate) {
-            mParams.params.pa_params.hue = data.hsicData.hue;
-            mParams.params.pa_params.sat = data.hsicData.saturation;
-            mParams.params.pa_params.intensity = data.hsicData.intensity;
-            mParams.params.pa_params.contrast = data.hsicData.contrast;
+            mParams.params.conv_params.hue =
+                    mParams.params.pa_params.hue = data.hsicData.hue;
+            mParams.params.conv_params.sat =
+                    mParams.params.pa_params.sat = data.hsicData.saturation;
+            mParams.params.conv_params.intensity =
+                    mParams.params.pa_params.intensity =
+                    data.hsicData.intensity;
+            mParams.params.conv_params.contrast =
+                    mParams.params.pa_params.contrast = data.hsicData.contrast;
             mParams.params.pa_params.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
-            mParams.operation |= PP_OP_PA;
+            mParams.operation = PP_OP_PA | PP_OP_HSIC;
         }
     }
 

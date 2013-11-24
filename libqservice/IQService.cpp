@@ -32,6 +32,7 @@
 
 using namespace android;
 using namespace qClient;
+using namespace qhwc;
 
 // ---------------------------------------------------------------------------
 
@@ -71,6 +72,127 @@ public:
         status_t result = reply.readInt32();
         return result;
     }
+    virtual status_t getStdFrameratePixclock(ConfigChangeParams *params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_STD_FRAMERATE_PIXCLOCK,
+                data, &reply);
+        params->param1 = reply.readFloat();
+        params->param2 = reply.readFloat();
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual status_t getCurrentFrameratePixclock(ConfigChangeParams
+            *params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        status_t result = remote()->transact(GET_CURRENT_FRAMERATE_PIXCLOCK,
+                data, &reply);
+        params->param1 = reply.readFloat();
+        params->param2 = reply.readFloat();
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams) {
+        Parcel data,reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(numVideoLayer);
+        data.writeInt32(ossrcparams.left);
+        data.writeInt32(ossrcparams.top);
+        data.writeInt32(ossrcparams.right);
+        data.writeInt32(ossrcparams.bottom);
+        data.writeInt32(ossrcparams.isValid);
+
+        data.writeInt32(osdstparams.left);
+        data.writeInt32(osdstparams.top);
+        data.writeInt32(osdstparams.right);
+        data.writeInt32(osdstparams.bottom);
+        data.writeInt32(osdstparams.isValid);
+        status_t result = remote()->transact(
+                SET_OVERSCAN_PARAMS,data,&reply);
+        result = reply.readInt32();
+        return result;
+     }
+
+     virtual android::status_t setOverScanCompensationParams(
+            OSRectDimensions oscparams) {
+        Parcel data,reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(oscparams.left);
+        data.writeInt32(oscparams.top);
+        data.writeInt32(oscparams.right);
+        data.writeInt32(oscparams.bottom);
+        data.writeInt32(oscparams.isValid);
+        status_t result = remote()->transact(
+                SET_OVERSCANCOMPENSATION_PARAMS,data,&reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+     virtual android::status_t startConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType){
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        status_t result = remote()->transact(
+                START_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) {
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        data.writeFloat(params.param1);
+        data.writeFloat(params.param2);
+        status_t result = remote()->transact(
+                DO_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual android::status_t stopConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType){
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(configChangeType);
+        status_t result = remote()->transact(STOP_CONFIG_CHANGE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual status_t setPPParams(VideoPPData pParams,
+            PP_Video_Layer_Type numVideoLayer){
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(numVideoLayer);
+        data.writeInt32((int32_t) pParams.ops);
+        data.writeInt32(pParams.hue);
+        data.writeFloat(pParams.saturation);
+        data.writeInt32(pParams.intensity);
+        data.writeFloat(pParams.contrast);
+        data.writeInt32(pParams.sharpness);
+        status_t result = remote()->transact(SET_PP_PARAMS, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
+
+    virtual status_t setPQCState(int value){
+        Parcel data, reply;
+        data.writeInterfaceToken(IQService::getInterfaceDescriptor());
+        data.writeInt32(value);
+        status_t result = remote()->transact(SET_PQCSTATE, data, &reply);
+        result = reply.readInt32();
+        return result;
+    }
 
     virtual void setExtOrientation(uint32_t orientation) {
         Parcel data, reply;
@@ -108,6 +230,108 @@ status_t BnQService::onTransact(
     const bool permission = (callerUid == AID_MEDIA);
 
     switch(code) {
+        case GET_STD_FRAMERATE_PIXCLOCK:{
+            CHECK_INTERFACE(IQService, data, reply);
+            ConfigChangeParams params;
+            status_t res = getStdFrameratePixclock(&params);
+            reply->writeFloat(params.param1);
+            reply->writeFloat(params.param2);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case GET_CURRENT_FRAMERATE_PIXCLOCK:{
+            CHECK_INTERFACE(IQService, data, reply);
+            ConfigChangeParams params;
+            status_t res = getCurrentFrameratePixclock(&params);
+            reply->writeFloat(params.param1);
+            reply->writeFloat(params.param2);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_OVERSCAN_PARAMS:{
+            PP_Video_Layer_Type numVideoLayer;
+            OSRectDimensions ovsrcparams;
+            OSRectDimensions ovdstparams;
+            CHECK_INTERFACE(IQService, data, reply);
+            numVideoLayer = (PP_Video_Layer_Type)data.readInt32();
+            ovsrcparams.left = data.readInt32();
+            ovsrcparams.top = data.readInt32();
+            ovsrcparams.right = data.readInt32();
+            ovsrcparams.bottom = data.readInt32();
+            ovsrcparams.isValid = data.readInt32();
+
+            ovdstparams.left = data.readInt32();
+            ovdstparams.top = data.readInt32();
+            ovdstparams.right = data.readInt32();
+            ovdstparams.bottom = data.readInt32();
+            ovdstparams.isValid = data.readInt32();
+            status_t res = setOverScanParams(numVideoLayer,ovsrcparams,
+                    ovdstparams);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_OVERSCANCOMPENSATION_PARAMS: {
+            OSRectDimensions oscparams;
+            CHECK_INTERFACE(IQService, data, reply);
+            oscparams.left = data.readInt32();
+            oscparams.top = data.readInt32();
+            oscparams.right = data.readInt32();
+            oscparams.bottom = data.readInt32();
+            oscparams.isValid = data.readInt32();
+            status_t res = setOverScanCompensationParams(oscparams);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case START_CONFIG_CHANGE:{
+            CONFIG_CHANGE_TYPE configType;
+            CHECK_INTERFACE(IHWComposer, data, reply);
+            configType = (CONFIG_CHANGE_TYPE)data.readInt32();
+            status_t res = startConfigChange(configType);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case DO_CONFIG_CHANGE:{
+            CONFIG_CHANGE_TYPE configType;
+            ConfigChangeParams params;
+            CHECK_INTERFACE(IQClient, data, reply);
+            configType = (CONFIG_CHANGE_TYPE)data.readInt32();
+            params.param1 = data.readFloat();
+            params.param2 = data.readFloat();
+            status_t res = doConfigChange(configType,params);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case STOP_CONFIG_CHANGE:{
+            CONFIG_CHANGE_TYPE configType;
+            CHECK_INTERFACE(IQService, data, reply);
+            configType = (CONFIG_CHANGE_TYPE)data.readInt32();
+            status_t res = stopConfigChange(configType);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_PP_PARAMS: {
+            VideoPPData pParams;
+            PP_Video_Layer_Type numVideoLayer;
+            CHECK_INTERFACE(IQService, data, reply);
+            numVideoLayer = (PP_Video_Layer_Type)data.readInt32();
+            pParams.ops = data.readInt32();
+            pParams.hue = data.readInt32();
+            pParams.saturation = data.readFloat();
+            pParams.intensity = data.readInt32();
+            pParams.contrast = data.readFloat();
+            pParams.sharpness = data.readInt32();
+            status_t res = setPPParams(pParams, numVideoLayer);
+            reply->writeInt32(res);
+            return NO_ERROR;
+        } break;
+        case SET_PQCSTATE: {
+           int value;
+           CHECK_INTERFACE(IQService, data, reply);
+           value = data.readInt32();
+           status_t res = setPQCState(value);
+           reply->writeInt32(res);
+           return NO_ERROR;
+        } break;
         case SECURING: {
             if(!permission) {
                 ALOGE("display.qservice SECURING access denied: \

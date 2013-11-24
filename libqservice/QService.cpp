@@ -32,6 +32,7 @@
 #define QSERVICE_DEBUG 0
 
 using namespace android;
+using namespace qhwc;
 
 namespace qService {
 
@@ -67,6 +68,85 @@ android::status_t QService::screenRefresh() {
     status_t result = NO_ERROR;
     if(mClient.get()) {
         result = mClient->notifyCallback(SCREEN_REFRESH, 0);
+    }
+    return result;
+}
+
+android::status_t QService::getStdFrameratePixclock(ConfigChangeParams
+            *params) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->getStdFrameratePixclock(params);
+    }
+    return result;
+}
+
+android::status_t QService::getCurrentFrameratePixclock(
+            ConfigChangeParams *params) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->getCurrentFrameratePixclock(params);
+    }
+    return result;
+}
+android::status_t QService::setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->setOverScanParams( numVideoLayer, ossrcparams,
+                osdstparams);
+    }
+    return result;
+}
+
+android::status_t QService::setOverScanCompensationParams(
+        OSRectDimensions oscparams) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->setOverScanCompensationParams(oscparams);
+    }
+    return result;
+}
+android::status_t QService::startConfigChange(
+            CONFIG_CHANGE_TYPE configChangeType) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->startConfigChange(configChangeType);
+    }
+    return result;
+
+}
+android::status_t QService::doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->doConfigChange(configChangeType, params);
+    }
+    return result;
+}
+android::status_t QService::setPPParams(VideoPPData pParams,
+            PP_Video_Layer_Type numVideoLayer) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->setPPParams(pParams,numVideoLayer);
+    }
+    return result;
+}
+android::status_t QService::stopConfigChange(CONFIG_CHANGE_TYPE
+            configChangeType) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->stopConfigChange(configChangeType);
+    }
+    return result;
+}
+android::status_t QService::setPQCState(int value){
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->setPQCState(value);
     }
     return result;
 }

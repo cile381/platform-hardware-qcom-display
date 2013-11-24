@@ -28,6 +28,9 @@
 #include <binder/IInterface.h>
 #include <binder/IBinder.h>
 #include <IQClient.h>
+#include <hwc_ppmetadata.h>
+
+using namespace qhwc;
 
 namespace qService {
 // ----------------------------------------------------------------------------
@@ -40,6 +43,15 @@ public:
         SECURING = android::IBinder::FIRST_CALL_TRANSACTION,
         UNSECURING, // Hardware unsecuring start/end notification
         CONNECT,
+        GET_STD_FRAMERATE_PIXCLOCK,
+        GET_CURRENT_FRAMERATE_PIXCLOCK,
+        SET_OVERSCAN_PARAMS,
+        SET_OVERSCANCOMPENSATION_PARAMS,
+        START_CONFIG_CHANGE,
+        DO_CONFIG_CHANGE,
+        STOP_CONFIG_CHANGE,
+        SET_PP_PARAMS,
+        SET_PQCSTATE,
         SCREEN_REFRESH,
         EXTERNAL_ORIENTATION,
         BUFFER_MIRRORMODE,
@@ -54,6 +66,26 @@ public:
     virtual android::status_t screenRefresh() = 0;
     virtual void setExtOrientation(uint32_t orientation) = 0;
     virtual void setBufferMirrorMode(uint32_t enable) = 0;
+    virtual android::status_t getStdFrameratePixclock(ConfigChangeParams
+        *params) = 0;
+    virtual android::status_t getCurrentFrameratePixclock(ConfigChangeParams
+        *params) = 0;
+    virtual android::status_t setOverScanParams(
+        PP_Video_Layer_Type numVideoLayer,
+        OSRectDimensions ossrcparams,
+        OSRectDimensions osdstparams) = 0;
+    virtual android::status_t setOverScanCompensationParams(
+        OSRectDimensions oscparams) = 0;
+    virtual android::status_t setPPParams(VideoPPData pParams,
+        PP_Video_Layer_Type numVideoLayer) = 0;
+    virtual android::status_t startConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t doConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params) = 0;
+    virtual android::status_t stopConfigChange(
+        CONFIG_CHANGE_TYPE configChangeType) = 0;
+    virtual android::status_t setPQCState(int value) = 0;
 };
 
 // ----------------------------------------------------------------------------
@@ -62,9 +94,9 @@ class BnQService : public android::BnInterface<IQService>
 {
 public:
     virtual android::status_t onTransact( uint32_t code,
-                                          const android::Parcel& data,
-                                          android::Parcel* reply,
-                                          uint32_t flags = 0);
+        const android::Parcel& data,
+        android::Parcel* reply,
+        uint32_t flags = 0);
 };
 
 // ----------------------------------------------------------------------------
