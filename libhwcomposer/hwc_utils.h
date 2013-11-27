@@ -138,6 +138,43 @@ private:
     uint32_t mCount;
 };
 
+class OverScanCompensation {
+private:
+    OverScanCompensation() : mX(0), mY(0),
+                   mWidth(0), mHeight(0),
+                   mOSCSet(false){ };
+    int mX;
+    int mY;
+    int mWidth;
+    int mHeight;
+    bool mOSCSet;
+    static OverScanCompensation *sOverScanCompensation;
+public:
+    ~OverScanCompensation() { };
+    static OverScanCompensation* getInstance() {
+        if(!sOverScanCompensation) {
+            sOverScanCompensation = new OverScanCompensation();
+        }
+        return sOverScanCompensation;
+    }
+    void setDimension(int x, int y, int w, int h, bool OSCSet) {
+        mX = x;
+        mY = y;
+        mWidth = w;
+        mHeight = h;
+        mOSCSet = OSCSet;
+    }
+    bool isOSCDimensionsSet() {
+        return mOSCSet;
+    }
+    void getDimension(int&x, int&y, int &w, int&h) {
+        x = mX;
+        y = mY;
+        w = mWidth;
+        h = mHeight;
+    }
+};
+
 inline uint32_t LayerRotMap::getCount() const {
     return mCount;
 }
@@ -153,12 +190,16 @@ inline overlay::Rotator* LayerRotMap::getRot(uint32_t index) const {
 }
 
 // -----------------------------------------------------------------------------
+ovutils::Dim getOSCPosition(const ovutils::Dim& dim, hwc_context_t *ctx);
 // Utility functions - implemented in hwc_utils.cpp
 void dumpLayer(hwc_layer_1_t const* l);
 void setListStats(hwc_context_t *ctx, const hwc_display_contents_1_t *list,
         int dpy);
 void initContext(hwc_context_t *ctx);
 void closeContext(hwc_context_t *ctx);
+//Sets the overscan crop and dst values
+void set_ov_dimensions(hwc_context_t *ctx, int numVideoLayer,
+        hwc_rect& crop, hwc_rect_t& dst);
 //Crops source buffer against destination and FB boundaries
 void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
                          const hwc_rect_t& scissor, int orient);
@@ -226,7 +267,7 @@ int configRotator(overlay::Rotator *rot, ovutils::Whf& whf,
 int configMdp(overlay::Overlay *ov, const ovutils::PipeArgs& parg,
         const ovutils::eTransform& orient, const hwc_rect_t& crop,
         const hwc_rect_t& pos, const MetaData_t *metadata,
-        const ovutils::eDest& dest);
+        const ovutils::eDest& dest, hwc_context_t *ctx);
 
 void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
         hwc_rect_t& crop);
@@ -372,6 +413,12 @@ struct hwc_context_t {
     //used for enabling C2D Feature only for 8960 Non Pro Device
     int mSocId;
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
+    //OverScanCompensation parameters
+    qhwc::OSRectDimensions oscparams;
+
+    //OverScan parameters
+    qhwc::OSRectDimensions ossrcparams[PP_MAX_VG_PIPES];
+    qhwc::OSRectDimensions osdstparams[PP_MAX_VG_PIPES];
     // Post-processing parameters
     qhwc::VideoPPData mPpParams[PP_MAX_VG_PIPES];
     //Total YUV layer handle in the context

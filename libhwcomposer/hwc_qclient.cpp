@@ -88,11 +88,21 @@ status_t QClient::setOverScanParams(
         PP_Video_Layer_Type numVideoLayer,
         OSRectDimensions ossrcparams,
         OSRectDimensions osdstparams) {
+
+    if(numVideoLayer < PP_MAX_VG_PIPES) {
+        mHwcContext->ossrcparams[numVideoLayer].set(ossrcparams);
+        mHwcContext->osdstparams[numVideoLayer].set(osdstparams);
+    }
+    else{
+        ALOGE("invalid layer type : %d",numVideoLayer);
+        return BAD_VALUE;
+    }
     return NO_ERROR;
 }
 
 status_t QClient::setOverScanCompensationParams(
         OSRectDimensions oscparams) {
+    mHwcContext->oscparams.set(oscparams);
     return NO_ERROR;
 }
 
