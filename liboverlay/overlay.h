@@ -45,7 +45,7 @@ public:
     //High res panels can be backed by 2 layer mixers and a single fb node.
     enum { DPY_PRIMARY, DPY_EXTERNAL, DPY_WRITEBACK, DPY_UNUSED };
     enum { DPY_MAX = DPY_UNUSED };
-    enum { MAX_FB_DEVICES = DPY_MAX };
+    enum { MAX_FB_DEVICES = DPY_WRITEBACK };
 
     /* dtor close */
     ~Overlay();
@@ -79,6 +79,10 @@ public:
 
     /* Closes open pipes, called during startup */
     static int initOverlay();
+
+    /* Returns true if HDMI is primary display */
+    static bool isHDMIPrimary();
+
     /* Returns the singleton instance of overlay */
     static Overlay* getInstance();
     /* Returns available ("unallocated") pipes for a display */
@@ -150,6 +154,9 @@ private:
 
     /* Dump string */
     char mDumpStr[256];
+
+    /* flag to indicate if the HDMI is primary display or not*/
+    static bool mHdmiPrimary;
 
     /* Singleton Instance*/
     static Overlay *sInstance;

@@ -361,12 +361,13 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
             }
         }
         value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
-        if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, value) < 0 ) {
-            ALOGE("%s: Failed to handle blank event(%d) for Primary!!",
-                  __FUNCTION__, blank );
-            return -1;
+        if(!Overlay::isHDMIPrimary()) {
+            if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, value) < 0 ) {
+                ALOGE("%s: Failed to handle blank event(%d) for Primary!!",
+                      __FUNCTION__, blank );
+                return -1;
+            }
         }
-
         if(!blank) {
             // Enable HPD here, as during bootup unblank is called
             // when SF is completely initialized
