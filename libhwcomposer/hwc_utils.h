@@ -129,6 +129,7 @@ enum {
 
 // HAL specific features
 enum {
+    HWC_COLOR_FILL = 0x00000008,
     HWC_FORMAT_RB_SWAP = 0x00000040,
 };
 
@@ -406,6 +407,9 @@ struct hwc_context_t {
     bool mBufferMirrorMode;
 
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
+
+    // Panel reset flag will be set if BTA check fails
+    bool mPanelResetStatus;
 };
 
 namespace qhwc {
