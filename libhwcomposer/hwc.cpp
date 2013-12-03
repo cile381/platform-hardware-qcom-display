@@ -257,6 +257,14 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     //Will be unlocked at the end of set
     ctx->mDrawLock.lock();
+
+    OverScanCompensation::getInstance()->setDimension(
+            ctx->oscparams.left,
+            ctx->oscparams.top,
+            ctx->oscparams.right - ctx->oscparams.left,
+            ctx->oscparams.bottom - ctx->oscparams.top,
+            ctx->oscparams.isValid);
+
     reset(ctx, numDisplays, displays);
 
     ctx->mOverlay->configBegin();

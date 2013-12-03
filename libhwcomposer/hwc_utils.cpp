@@ -175,6 +175,11 @@ void initContext(hwc_context_t *ctx)
     ctx->vstate.fakevsync = false;
     ctx->mBasePipeSetup = false;
     ctx->mExtOrientation = 0;
+    ctx->oscparams.set(0);
+    for(int i=0; i<PP_MAX_VG_PIPES; i++){
+       ctx->ossrcparams[i].set(0);
+       ctx->osdstparams[i].set(0);
+    }
 
     //Right now hwc starts the service but anybody could do it, or it could be
     //independent process as well.
@@ -717,6 +722,24 @@ void setListStats(hwc_context_t *ctx,
     }
 }
 
+void set_ov_dimensions(hwc_context_t *ctx, int numVideoLayer,
+        hwc_rect& crop, hwc_rect_t& dst) {
+    if(numVideoLayer < PP_MAX_VG_PIPES) {
+        if(ctx->ossrcparams[numVideoLayer].isValid) {
+            crop.left = ctx->ossrcparams[numVideoLayer].left;
+            crop.top = ctx->ossrcparams[numVideoLayer].top;
+            crop.right = ctx->ossrcparams[numVideoLayer].right;
+            crop.bottom = ctx->ossrcparams[numVideoLayer].bottom;
+        }
+        if(ctx->osdstparams[numVideoLayer].isValid) {
+            dst.left = ctx->osdstparams[numVideoLayer].left;
+            dst.top = ctx->osdstparams[numVideoLayer].top;
+            dst.right = ctx->osdstparams[numVideoLayer].right;
+            dst.bottom = ctx->osdstparams[numVideoLayer].bottom;
+        }
+    }
+}
+
 
 static inline void calc_cut(double& leftCutRatio, double& topCutRatio,
         double& rightCutRatio, double& bottomCutRatio, int orient) {
@@ -1172,7 +1195,7 @@ bool setupBasePipe(hwc_context_t *ctx) {
 inline int configMdp(Overlay *ov, const PipeArgs& parg,
         const eTransform& orient, const hwc_rect_t& crop,
         const hwc_rect_t& pos, const MetaData_t *metadata,
-        const eDest& dest) {
+        const eDest& dest, hwc_context_t *ctx) {
     ov->setSource(parg, dest);
     ov->setTransform(orient, dest);
 
@@ -1184,7 +1207,7 @@ inline int configMdp(Overlay *ov, const PipeArgs& parg,
     int posW = pos.right - pos.left;
     int posH = pos.bottom - pos.top;
     Dim position(pos.left, pos.top, posW, posH);
-    ov->setPosition(position, dest);
+    ov->setPosition(getOSCPosition(position, ctx), dest);
 
     if (metadata)
         ov->setVisualParams(*metadata, dest);
@@ -1321,8 +1344,10 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             }
         }
     }
-
-    if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest) < 0) {
+    if ( (yuvOrder == VIDEO_LAYER_0) or (yuvOrder == VIDEO_LAYER_1) ) {
+            set_ov_dimensions(ctx, yuvOrder, crop, dst);
+    }
+    if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest, ctx) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
         ctx->mLayerRotMap[dpy]->reset();
         return -1;
@@ -1446,7 +1471,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
                        (ovutils::eBlending) getBlending(layer->blending));
 
         if(configMdp(ctx->mOverlay, pargL, orient,
-                tmp_cropL, tmp_dstL, metadata, lDest) < 0) {
+                tmp_cropL, tmp_dstL, metadata, lDest, ctx) < 0) {
             ALOGE("%s: commit failed for left mixer config", __FUNCTION__);
             return -1;
         }
@@ -1461,7 +1486,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         tmp_dstR.right = tmp_dstR.right - tmp_dstR.left;
         tmp_dstR.left = 0;
         if(configMdp(ctx->mOverlay, pargR, orient,
-                tmp_cropR, tmp_dstR, metadata, rDest) < 0) {
+                tmp_cropR, tmp_dstR, metadata, rDest, ctx) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
             return -1;
         }
@@ -1503,6 +1528,56 @@ int getSocIdFromSystem() {
         fclose(device);
     }
     return soc_id;
+}
+
+OverScanCompensation* OverScanCompensation::sOverScanCompensation = NULL;
+Dim getOSCPosition(const Dim& dim, hwc_context_t *ctx) {
+
+    float prifbWidth  = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+    float prifbHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+    int oscx = 0;
+    int oscy = 0;
+    int oscwidth = 0;
+    int oscheight = 0;
+
+    float x_ratio = ((float)dim.x/prifbWidth);
+    float y_ratio = ((float)dim.y/prifbHeight);
+    float w_ratio = ((float)dim.w/prifbWidth);
+    float h_ratio = ((float)dim.h/prifbHeight);
+
+    if(OverScanCompensation::getInstance()->isOSCDimensionsSet()) {
+        OverScanCompensation* oscinstance = OverScanCompensation::getInstance();
+        oscinstance->getDimension(oscx,oscy,oscwidth,oscheight);
+
+        /* Don't rely too much on the osc values set via binder. Check for outliers */
+        if(oscx < 0 or oscx > prifbWidth)
+            oscx = 0;
+        if(oscy < 0 or oscy > prifbHeight)
+            oscy = 0;
+        if(oscwidth <= 0 or oscwidth >= prifbWidth)
+            oscwidth = prifbWidth;
+        if(oscheight <= 0 or oscheight >= prifbHeight)
+            oscheight = prifbHeight;
+        if(oscx + oscwidth > prifbWidth) {
+            oscx = 0;
+            oscwidth =  prifbWidth;
+        }
+        if(oscy + oscheight > prifbHeight) {
+            oscy = 0;
+            oscheight = prifbHeight;
+        }
+
+        utils::Dim oscdim;
+        oscdim.x = (x_ratio * oscwidth) + oscx;
+        oscdim.y = (y_ratio * oscheight) + oscy;
+        oscdim.w = (w_ratio * oscwidth);
+        oscdim.h = (h_ratio * oscheight);
+        oscdim.o = dim.o;
+
+        return oscdim;
+    } else {
+        return Dim(dim);
+    }
 }
 
 };//namespace qhwc
