@@ -170,11 +170,32 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     // Following are MDP3 limitations for which we
     // need to fallback to GPU composition:
     // 1. Plane alpha is not supported by MDP3.
+    // 2. Scaling is within range
     if (qdutils::MDPVersion::getInstance().getMDPVersion() < 400) {
         for (int i = ctx->listStats[dpy].numAppLayers-1; i >= 0 ; i--) {
+            int dst_h, dst_w, src_h, src_w;
+            float dx, dy;
             hwc_layer_1_t *layer = (hwc_layer_1_t *) &list->hwLayers[i];
             if (layer->planeAlpha != 0xFF)
                 return true;
+
+            if (layer->transform & HAL_TRANSFORM_ROT_90) {
+                src_h = layer->sourceCrop.right - layer->sourceCrop.left;
+                src_w = layer->sourceCrop.bottom - layer->sourceCrop.top;
+            } else {
+                src_h = layer->sourceCrop.bottom - layer->sourceCrop.top;
+                src_w = layer->sourceCrop.right - layer->sourceCrop.left;
+            }
+            dst_h = layer->displayFrame.bottom - layer->displayFrame.top;
+            dst_w = layer->displayFrame.right - layer->displayFrame.left;
+
+            dx = (float)dst_w/src_w;
+            dy = (float)dst_h/src_h;
+            if (dx > MAX_SCALE_FACTOR || dx < MIN_SCALE_FACTOR)
+                return false;
+
+            if (dy > MAX_SCALE_FACTOR || dy < MIN_SCALE_FACTOR)
+                return false;
         }
     }
 
@@ -316,6 +337,9 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
 
     private_handle_t *hnd = (private_handle_t *)layer->handle;
     if(!hnd) {
+        if (layer->flags & HWC_COLOR_FILL) { // Color layer
+            return fillColorUsingCopybit(layer, renderBuffer);
+        }
         ALOGE("%s: invalid handle", __FUNCTION__);
         return -1;
     }
@@ -562,6 +586,44 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
     if(err < 0)
         ALOGE("%s: copybit stretch failed",__FUNCTION__);
     return err;
+}
+
+int CopyBit::fillColorUsingCopybit(hwc_layer_1_t *layer,
+                          private_handle_t *renderBuffer)
+{
+    if (!renderBuffer) {
+        ALOGE("%s: Render Buffer is NULL", __FUNCTION__);
+        return -1;
+    }
+
+    // Copybit dst
+    copybit_image_t dst;
+    dst.w = ALIGN(renderBuffer->width, 32);
+    dst.h = renderBuffer->height;
+    dst.format = renderBuffer->format;
+    dst.base = (void *)renderBuffer->base;
+    dst.handle = (native_handle_t *)renderBuffer;
+
+    // Copybit dst rect
+    hwc_rect_t displayFrame = layer->displayFrame;
+    copybit_rect_t dstRect = {displayFrame.left, displayFrame.top,
+                              displayFrame.right, displayFrame.bottom};
+
+    uint32_t color = layer->transform;
+    copybit_device_t *copybit = mEngine;
+    copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_WIDTH,
+                           renderBuffer->width);
+    copybit->set_parameter(copybit, COPYBIT_FRAMEBUFFER_HEIGHT,
+                           renderBuffer->height);
+    copybit->set_parameter(copybit, COPYBIT_DITHER,
+                           (dst.format == HAL_PIXEL_FORMAT_RGB_565) ?
+                           COPYBIT_ENABLE : COPYBIT_DISABLE);
+    copybit->set_parameter(copybit, COPYBIT_BLEND_MODE, layer->blending);
+    copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, layer->planeAlpha);
+    copybit->set_parameter(copybit, COPYBIT_BLIT_TO_FRAMEBUFFER,COPYBIT_ENABLE);
+    int res = copybit->fill_color(copybit, &dst, &dstRect, color);
+    copybit->set_parameter(copybit,COPYBIT_BLIT_TO_FRAMEBUFFER,COPYBIT_DISABLE);
+    return res;
 }
 
 void CopyBit::getLayerResolution(const hwc_layer_1_t* layer,
