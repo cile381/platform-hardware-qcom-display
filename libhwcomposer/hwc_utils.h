@@ -34,6 +34,11 @@
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 #define MAX_NUM_APP_LAYERS 32
+//These scaling factors are specific for MDP3. Normally scaling factor
+//is only 4, but copybit will create temp buffer to let it run through
+//twice
+#define MAX_SCALE_FACTOR 16
+#define MIN_SCALE_FACTOR 0.0625
 
 //Fwrd decls
 struct hwc_context_t;
@@ -129,6 +134,7 @@ enum {
 
 // HAL specific features
 enum {
+    HWC_COLOR_FILL = 0x00000008,
     HWC_FORMAT_RB_SWAP = 0x00000040,
 };
 
@@ -406,6 +412,9 @@ struct hwc_context_t {
     bool mBufferMirrorMode;
 
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
+
+    // Panel reset flag will be set if BTA check fails
+    bool mPanelResetStatus;
 };
 
 namespace qhwc {
