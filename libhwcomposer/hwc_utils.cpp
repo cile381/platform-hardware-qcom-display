@@ -1323,24 +1323,23 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     PipeArgs parg(mdpFlags, whf, z, isFg,
                   static_cast<eRotFlags>(rotFlags), layer->planeAlpha,
                   (ovutils::eBlending) getBlending(layer->blending));
-    if ( (yuvOrder == VIDEO_LAYER_0) or (yuvOrder == VIDEO_LAYER_1) ) {
+    if ( ((yuvOrder == VIDEO_LAYER_0) && metadata->operation &
+            PP_PARAM_VID_INTFC) || (yuvOrder == VIDEO_LAYER_1) ) {
         if(metadata && (ctx->mPpParams[yuvOrder].isValid) ) {
-            if (metadata->operation & PP_PARAM_VID_INTFC) {
             /* Preference will be for the HSIC & QSEED values
              * set through binder */
-                metadata->operation |= ctx->mPpParams[yuvOrder].ops;
-                if(metadata->operation & PP_PARAM_HSIC) {
-                    metadata->hsicData.hue = ctx->mPpParams[yuvOrder].hue;
-                    metadata->hsicData.saturation =
-                        ctx->mPpParams[yuvOrder].saturation;
-                    metadata->hsicData.intensity =
-                        ctx->mPpParams[yuvOrder].intensity;
-                    metadata->hsicData.contrast =
-                        ctx->mPpParams[yuvOrder].contrast;
-                }
-                if(metadata->operation & PP_PARAM_SHARPNESS) {
-                    metadata->sharpness = ctx->mPpParams[yuvOrder].sharpness;
-                }
+            metadata->operation |= ctx->mPpParams[yuvOrder].ops;
+            if(metadata->operation & PP_PARAM_HSIC) {
+                metadata->hsicData.hue = ctx->mPpParams[yuvOrder].hue;
+                metadata->hsicData.saturation =
+                    ctx->mPpParams[yuvOrder].saturation;
+                metadata->hsicData.intensity =
+                    ctx->mPpParams[yuvOrder].intensity;
+                metadata->hsicData.contrast =
+                    ctx->mPpParams[yuvOrder].contrast;
+            }
+            if(metadata->operation & PP_PARAM_SHARPNESS) {
+                metadata->sharpness = ctx->mPpParams[yuvOrder].sharpness;
             }
         }
     }
