@@ -99,6 +99,8 @@ struct ListStats {
     int extOnlyLayerIndex;
     bool needsAlphaScale;
     bool preMultipliedAlpha;
+    int yuv4k2kIndices[MAX_NUM_APP_LAYERS];
+    int yuv4k2kCount;
     // Notifies hwcomposer about the start and end of animation
     // This will be set to true during animation, otherwise false.
     bool isDisplayAnimating;
@@ -268,6 +270,10 @@ int configMdp(overlay::Overlay *ov, const ovutils::PipeArgs& parg,
         const hwc_rect_t& pos, const MetaData_t *metadata,
         const ovutils::eDest& dest);
 
+int configColorLayer(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& dest);
+
 void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
         hwc_rect_t& crop);
 
@@ -279,6 +285,13 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
 
 //Routine to configure high resolution panels (> 2048 width)
 int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer, const int& dpy,
+        ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
+        ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
+        const ovutils::eDest& rDest, overlay::Rotator **rot);
+
+//Routine to split and configure high resolution YUV layer (> 2048 width)
+int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        const int& dpy,
         ovutils::eMdpFlags& mdpFlags, ovutils::eZorder& z,
         ovutils::eIsFg& isFg, const ovutils::eDest& lDest,
         const ovutils::eDest& rDest, overlay::Rotator **rot);
@@ -303,6 +316,12 @@ static inline bool isSkipLayer(const hwc_layer_1_t* l) {
 // Returns true if the buffer is yuv
 static inline bool isYuvBuffer(const private_handle_t* hnd) {
     return (hnd && (hnd->bufferType == BUFFER_TYPE_VIDEO));
+}
+
+// Returns true if the buffer is yuv
+static inline bool is4kx2kYuvBuffer(const private_handle_t* hnd) {
+    return (hnd && (hnd->bufferType == BUFFER_TYPE_VIDEO) &&
+            (hnd->width > 2048));
 }
 
 // Returns true if the buffer is secure
@@ -459,7 +478,8 @@ static inline bool isYuvPresent (hwc_context_t *ctx, int dpy) {
 }
 
 static inline bool has90Transform(hwc_layer_1_t *layer) {
-    return (layer->transform & HWC_TRANSFORM_ROT_90);
+    return ((layer->transform & HWC_TRANSFORM_ROT_90) &&
+            !(layer->flags & HWC_COLOR_FILL));
 }
 
 inline bool isSecurePresent(hwc_context_t *ctx, int dpy) {
