@@ -31,6 +31,7 @@
 #define OVERLAY_H
 
 #include "overlayUtils.h"
+#include "mdp_version.h"
 #include "utils/threads.h"
 
 struct MetaData_t;
@@ -117,6 +118,7 @@ private:
     explicit Overlay();
     /*Validate index range, abort if invalid */
     void validate(int index);
+    static void setDMAMultiplexingSupported();
     void dump() const;
 
     /* Just like a Facebook for pipes, but much less profile info */
@@ -176,6 +178,7 @@ private:
     static Overlay *sInstance;
     static int sDpyFbMap[DPY_MAX];
     static int sDMAMode;
+    static bool sDMAMultiplexingSupported;
     static int sForceSetBitmap;
 };
 
@@ -234,6 +237,12 @@ inline int Overlay::availablePipes(int dpy, utils::eMdpPipeType type) {
 inline void Overlay::setDMAMode(const int& mode) {
     if(mode == DMA_LINE_MODE || mode == DMA_BLOCK_MODE)
         sDMAMode = mode;
+}
+
+inline void Overlay::setDMAMultiplexingSupported() {
+    sDMAMultiplexingSupported = false;
+    if(qdutils::MDPVersion::getInstance().is8x26())
+        sDMAMultiplexingSupported = true;
 }
 
 inline int Overlay::getDMAMode() {
