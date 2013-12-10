@@ -586,6 +586,15 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ALOGD_IF(isDebug(), "%s: Unsupported layer in list",__FUNCTION__);
             return false;
         }
+
+        //For 8x26, if there is only one layer which needs scale for secondary
+        //while no scale for primary display, DMA pipe is occupied by primary.
+        //If need to fall back to GLES composition, virtual display lacks DMA
+        //pipe and error is reported.
+        if(qdutils::MDPVersion::getInstance().is8x26() &&
+                                mDpy >= HWC_DISPLAY_EXTERNAL &&
+                                qhwc::needsScaling(ctx, layer, mDpy))
+            return false;
     }
     mCurrentFrame.fbCount = 0;
     mCurrentFrame.fbZ = -1;
@@ -1139,46 +1148,6 @@ bool MDPComp::programMDP(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     return true;
 }
 
-bool MDPComp::programYUV(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
-    if(!allocLayerPipes(ctx, list)) {
-        ALOGD_IF(isDebug(), "%s: Unable to allocate MDP pipes", __FUNCTION__);
-        return false;
-    }
-    //If we are in this block, it means we have yuv + rgb layers both
-    int mdpIdx = 0;
-    for (int index = 0; index < mCurrentFrame.layerCount; index++) {
-        if(!mCurrentFrame.isFBComposed[index]) {
-            hwc_layer_1_t* layer = &list->hwLayers[index];
-            int mdpIndex = mCurrentFrame.layerToMDP[index];
-            MdpPipeInfo* cur_pipe =
-                    mCurrentFrame.mdpToLayer[mdpIndex].pipeInfo;
-            cur_pipe->zOrder = mdpIdx++;
-
-            private_handle_t *hnd = (private_handle_t *)layer->handle;
-            if(is4kx2kYuvBuffer(hnd) && sEnable4k2kYUVSplit){
-                if(configure4k2kYuv(ctx, layer,
-                            mCurrentFrame.mdpToLayer[mdpIndex])
-                        != 0 ){
-                    ALOGD_IF(isDebug(), "%s: Failed to configure split pipes \
-                            for layer %d",__FUNCTION__, index);
-                    return false;
-                }
-                else{
-                    mdpIdx++;
-                }
-                continue;
-            }
-            if(configure(ctx, layer,
-                        mCurrentFrame.mdpToLayer[mdpIndex]) != 0 ){
-                ALOGD_IF(isDebug(), "%s: Failed to configure overlay for \
-                        layer %d",__FUNCTION__, index);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 bool MDPComp::resourceCheck(hwc_context_t *ctx,
         hwc_display_contents_1_t *list) {
     const bool fbUsed = mCurrentFrame.fbCount;
@@ -1360,7 +1329,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                 goto exit;
             }
         }
-        if(!programYUV(ctx, list)) {
+        if(!programMDP(ctx, list)) {
             reset(numLayers, list);
             ctx->mOverlay->clear(mDpy);
             ret = -1;

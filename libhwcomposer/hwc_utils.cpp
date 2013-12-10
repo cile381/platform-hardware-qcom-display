@@ -150,7 +150,8 @@ void initContext(hwc_context_t *ctx)
     if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
                            qdutils::COMPOSITION_TYPE_MDP |
                            qdutils::COMPOSITION_TYPE_C2D)) {
-            ctx->mCopyBit[HWC_DISPLAY_PRIMARY] = new CopyBit();
+            ctx->mCopyBit[HWC_DISPLAY_PRIMARY] = new CopyBit(ctx,
+                    HWC_DISPLAY_PRIMARY);
     }
 
     ctx->mExtDisplay = new ExternalDisplay(ctx);
@@ -1261,7 +1262,7 @@ void setMdpFlags(hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
         int rotDownscale, int transform) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
-    MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
+    MetaData_t *metadata = hnd ? (MetaData_t *)hnd->base_metadata : NULL;
 
     if(layer->blending == HWC_BLENDING_PREMULT) {
         ovutils::setMdpFlags(mdpFlags,
@@ -1517,6 +1518,7 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             ctx->mOverlay->clear(dpy);
+            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1534,6 +1536,7 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
+        ctx->mLayerRotMap[dpy]->clear();
         return -1;
     }
     return 0;
@@ -1643,6 +1646,7 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             ctx->mOverlay->clear(dpy);
+            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1708,6 +1712,7 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configMdp(ctx->mOverlay, pargL, orient,
                 tmp_cropL, tmp_dstL, metadata, lDest) < 0) {
             ALOGE("%s: commit failed for left mixer config", __FUNCTION__);
+            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
     }
@@ -1723,6 +1728,7 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configMdp(ctx->mOverlay, pargR, orient,
                 tmp_cropR, tmp_dstR, metadata, rDest) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
+            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
     }
@@ -1857,9 +1863,9 @@ bool canUseRotator(hwc_context_t *ctx, int dpy) {
     if(qdutils::MDPVersion::getInstance().is8x26() &&
             ctx->mVirtualDisplay->isConnected() &&
             !ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause) {
-        // Allow if YUV needs rotation and DMA is configured to BLOCK mode for
-        // primary. For portrait videos usecase on WFD, Driver supports
-        // multiplexing of DMA pipe in LINE and BLOCK mode.
+        /* 8x26 mdss driver supports multiplexing of DMA pipe
+         * in LINE and BLOCK modes for writeback panels.
+         */
         if(dpy == HWC_DISPLAY_PRIMARY)
             return false;
     }
@@ -1945,6 +1951,21 @@ void LayerRotMap::reset() {
         mRot[i] = 0;
     }
     mCount = 0;
+}
+
+void LayerRotMap::clear() {
+    for (uint32_t i = 0; i < mCount; i++) {
+        //mCount represents rotator objects for just this display.
+        //We could have popped mCount topmost objects from mRotMgr, but if each
+        //round has the same failure, typical of stability runs, it would lead
+        //to unnecessary memory allocation, deallocation each time. So we let
+        //the rotator objects be around, but just knock off the fences they
+        //hold. Ultimately the rotator objects will be GCed when not required.
+        //Also resetting fences is required if at least one rotation round has
+        //succeeded before. It'll be a NOP otherwise.
+        mRot[i]->resetReleaseFd();
+    }
+    reset();
 }
 
 void LayerRotMap::setReleaseFd(const int& fence) {
