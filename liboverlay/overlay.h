@@ -32,6 +32,7 @@
 
 #include "overlayUtils.h"
 #include "utils/threads.h"
+#include "qdMetaData.h"
 
 struct MetaData_t;
 
@@ -75,7 +76,7 @@ public:
     void setPosition(const utils::Dim& dim, utils::eDest dest);
     void setVisualParams(const MetaData_t& data, utils::eDest dest);
     bool commit(utils::eDest dest);
-    bool queueBuffer(int fd, uint32_t offset, utils::eDest dest);
+    bool queueBuffer(int fd, uint32_t offset, utils::eDest dest, VideoFrame_t  *frc);
 
     /* Closes open pipes, called during startup */
     static int initOverlay();

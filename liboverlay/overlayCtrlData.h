@@ -108,7 +108,7 @@ public:
     /* get overlay id in the mdp struct */
     int getPipeId() const;
     /* queue buffer to the overlay */
-    bool queueBuffer(int fd, uint32_t offset);
+    bool queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc);
     /* sump the state of the obj */
     void dump() const;
     /* Return the dump in the specified buffer */
@@ -255,8 +255,8 @@ inline bool Data::close() {
     return true;
 }
 
-inline bool Data::queueBuffer(int fd, uint32_t offset) {
-    return mMdp.play(fd, offset);
+inline bool Data::queueBuffer(int fd, uint32_t offset, VideoFrame_t *frc) {
+    return mMdp.play(fd, offset, frc);
 }
 
 inline void Data::dump() const {
