@@ -433,6 +433,7 @@ inline bool MdpData::play(int fd, uint32_t offset, VideoFrame_t *frc) {
         mOvData.frc_data.frame_rate = frc->fp100s;
         mOvData.frc_data.frame_cnt = frc->counter;
         mOvData.frc_data.timestamp = (uint32_t)(frc->timestamp / 100);
+        mOvData.frc_data.render_delay =(uint32_t)((frc->hwc_play_time - frc->render_time) / 100);
     } else {
         mOvData.frc_data.enable = false;
     }
