@@ -242,10 +242,9 @@ MDPComp::LayerCache::LayerCache() {
 
 void MDPComp::LayerCache::reset() {
     memset(&hnd, 0, sizeof(hnd));
-    mdpCount = 0;
-    fbCount = 0;
+    memset(&isFBComposed, true, sizeof(isFBComposed));
+    memset(&drop, false, sizeof(drop));
     layerCount = 0;
-    fbZ = -1;
 }
 
 void MDPComp::LayerCache::cacheAll(hwc_display_contents_1_t* list) {
@@ -256,10 +255,21 @@ void MDPComp::LayerCache::cacheAll(hwc_display_contents_1_t* list) {
 }
 
 void MDPComp::LayerCache::updateCounts(const FrameInfo& curFrame) {
-    mdpCount = curFrame.mdpCount;
-    fbCount = curFrame.fbCount;
     layerCount = curFrame.layerCount;
-    fbZ = curFrame.fbZ;
+    memcpy(&isFBComposed, &curFrame.isFBComposed, sizeof(isFBComposed));
+    memcpy(&drop, &curFrame.drop, sizeof(drop));
+}
+
+bool MDPComp::LayerCache::isSameFrame(const FrameInfo& curFrame) {
+    if(layerCount != curFrame.layerCount)
+        return false;
+    for(int i = 0; i < curFrame.layerCount; i++) {
+        if((curFrame.isFBComposed[i] != isFBComposed[i]) ||
+                (curFrame.drop[i] != drop[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool MDPComp::isSupportedForMDPComp(hwc_context_t *ctx, hwc_layer_1_t* layer) {
@@ -278,6 +288,10 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
     if(!hnd) {
+        if (layer->flags & HWC_COLOR_FILL) {
+            // Color layer
+            return true;
+        }
         ALOGE("%s: layer handle is NULL", __FUNCTION__);
         return false;
     }
@@ -1084,13 +1098,9 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         } else { //Success
             //Any change in composition types needs an FB refresh
             mCurrentFrame.needsRedraw = false;
-            if(mCurrentFrame.fbCount &&
-                    ((mCurrentFrame.mdpCount != mCachedFrame.mdpCount) ||
-                     (mCurrentFrame.fbCount != mCachedFrame.fbCount) ||
-                     (mCurrentFrame.fbZ != mCachedFrame.fbZ) ||
-                     (!mCurrentFrame.mdpCount) ||
+            if(!mCachedFrame.isSameFrame(mCurrentFrame) ||
                      (list->flags & HWC_GEOMETRY_CHANGED) ||
-                     isSkipPresent(ctx, mDpy))) {
+                     isSkipPresent(ctx, mDpy)) {
                 mCurrentFrame.needsRedraw = true;
             }
         }
@@ -1281,8 +1291,13 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         hwc_layer_1_t *layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         if(!hnd) {
-            ALOGE("%s handle null", __FUNCTION__);
-            return false;
+            if (!(layer->flags & HWC_COLOR_FILL)) {
+                ALOGE("%s handle null", __FUNCTION__);
+                return false;
+            }
+            // No PLAY for Color layer
+            layerProp[i].mFlags &= ~HWC_MDPCOMP;
+            continue;
         }
 
         int mdpIndex = mCurrentFrame.layerToMDP[i];
