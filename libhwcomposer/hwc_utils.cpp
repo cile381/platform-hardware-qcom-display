@@ -134,7 +134,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
-    ctx->mRotMgr = new RotMgr();
+    ctx->mRotMgr = RotMgr::getInstance();
 
     //Is created and destroyed only once for primary
     //For external it could get created and destroyed multiple times depending
@@ -311,12 +311,12 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     float xRatio = 1.0;
     float yRatio = 1.0;
 
-    float fbWidth = ctx->dpyAttr[dpy].xres;
-    float fbHeight = ctx->dpyAttr[dpy].yres;
+    int fbWidth = ctx->dpyAttr[dpy].xres;
+    int fbHeight = ctx->dpyAttr[dpy].yres;
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         // if downscale Mode is enabled for external, need to query
         // the actual width and height, as that is the physical w & h
-        ctx->mExtDisplay->getAttributes((int&)fbWidth, (int&)fbHeight);
+         ctx->mExtDisplay->getAttributes(fbWidth, fbHeight);
     }
 
 
@@ -329,7 +329,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     float asX = 0;
     float asY = 0;
     float asW = fbWidth;
-    float asH= fbHeight;
+    float asH = fbHeight;
 
     // based on the action safe ratio, get the Action safe rectangle
     asW = fbWidth * (1.0f -  asWidthRatio / 100.0f);
@@ -390,6 +390,7 @@ void getAspectRatioPosition(int destWidth, int destHeight, int srcWidth,
 // based on the position and aspect ratio with orientation
 void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
                             hwc_rect_t& inRect, hwc_rect_t& outRect) {
+    hwc_rect_t viewFrame = ctx->mViewFrame[dpy];
     // Physical display resolution
     float fbWidth  = ctx->dpyAttr[dpy].xres;
     float fbHeight = ctx->dpyAttr[dpy].yres;
@@ -427,14 +428,20 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
         yPos = rect.top;
         width = rect.right - rect.left;
         height = rect.bottom - rect.top;
+        // swap viewframe coordinates for 90 degree rotation.
+        swap(viewFrame.left, viewFrame.top);
+        swap(viewFrame.right, viewFrame.bottom);
     }
+    // if viewframe left and top coordinates are non zero value then exclude it
+    // during the computation of xRatio and yRatio
+    xRatio = (inPos.x - viewFrame.left)/actualWidth;
+    yRatio = (inPos.y - viewFrame.top)/actualHeight;
+    // Use viewframe width and height to compute wRatio and hRatio.
+    wRatio = inPos.w/(viewFrame.right - viewFrame.left);
+    hRatio = inPos.h/(viewFrame.bottom - viewFrame.top);
+
 
     //Calculate the position...
-    xRatio = inPos.x/actualWidth;
-    yRatio = inPos.y/actualHeight;
-    wRatio = inPos.w/actualWidth;
-    hRatio = inPos.h/actualHeight;
-
     outPos.x = (xRatio * width) + xPos;
     outPos.y = (yRatio * height) + yPos;
     outPos.w = wRatio * width;
@@ -657,11 +664,13 @@ bool needsScalingWithSplit(hwc_context_t* ctx, hwc_layer_1_t const* layer,
     cropL = sourceCrop;
     dstL = displayFrame;
     hwc_rect_t scissorL = { 0, 0, lSplit, hw_h };
+    scissorL = getIntersection(ctx->mViewFrame[dpy], scissorL);
     qhwc::calculate_crop_rects(cropL, dstL, scissorL, 0);
 
     cropR = sourceCrop;
     dstR = displayFrame;
     hwc_rect_t scissorR = { lSplit, 0, hw_w, hw_h };
+    scissorR = getIntersection(ctx->mViewFrame[dpy], scissorR);
     qhwc::calculate_crop_rects(cropR, dstR, scissorR, 0);
 
     // Sanitize Crop to stitch
@@ -719,6 +728,7 @@ static void trimLayer(hwc_context_t *ctx, const int& dpy, const int& transform,
     if(dst.left < 0 || dst.top < 0 ||
             dst.right > hw_w || dst.bottom > hw_h) {
         hwc_rect_t scissor = {0, 0, hw_w, hw_h };
+        scissor = getIntersection(ctx->mViewFrame[dpy], scissor);
         qhwc::calculate_crop_rects(crop, dst, scissor, transform);
     }
 }
@@ -756,6 +766,7 @@ void setListStats(hwc_context_t *ctx,
                       (int)ctx->dpyAttr[dpy].xres, (int)ctx->dpyAttr[dpy].yres);
     ctx->listStats[dpy].secureUI = false;
     ctx->listStats[dpy].yuv4k2kCount = 0;
+    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
 
     trimList(ctx, list, dpy);
     optimizeLayerRects(ctx, list, dpy);
@@ -764,6 +775,9 @@ void setListStats(hwc_context_t *ctx,
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
+        // Calculate view frame of each display from the layer displayframe
+        ctx->mViewFrame[dpy] = getUnion(ctx->mViewFrame[dpy],
+                                        layer->displayFrame);
 #ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
@@ -1526,8 +1540,6 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
-            ctx->mOverlay->clear(dpy);
-            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1545,7 +1557,6 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
-        ctx->mLayerRotMap[dpy]->clear();
         return -1;
     }
     return 0;
@@ -1654,8 +1665,6 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
-            ctx->mOverlay->clear(dpy);
-            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1676,12 +1685,14 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         tmp_cropL = crop;
         tmp_dstL = dst;
         hwc_rect_t scissor = {0, 0, lSplit, hw_h };
+        scissor = getIntersection(ctx->mViewFrame[dpy], scissor);
         qhwc::calculate_crop_rects(tmp_cropL, tmp_dstL, scissor, 0);
     }
     if(rDest != OV_INVALID) {
         tmp_cropR = crop;
         tmp_dstR = dst;
         hwc_rect_t scissor = {lSplit, 0, hw_w, hw_h };
+        scissor = getIntersection(ctx->mViewFrame[dpy], scissor);
         qhwc::calculate_crop_rects(tmp_cropR, tmp_dstR, scissor, 0);
     }
 
@@ -1721,7 +1732,6 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configMdp(ctx->mOverlay, pargL, orient,
                 tmp_cropL, tmp_dstL, metadata, lDest) < 0) {
             ALOGE("%s: commit failed for left mixer config", __FUNCTION__);
-            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
     }
@@ -1737,7 +1747,6 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(configMdp(ctx->mOverlay, pargR, orient,
                 tmp_cropR, tmp_dstR, metadata, rDest) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
-            ctx->mLayerRotMap[dpy]->clear();
             return -1;
         }
     }
@@ -1784,7 +1793,6 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
-            ctx->mOverlay->clear(dpy);
             return -1;
         }
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1963,17 +1971,7 @@ void LayerRotMap::reset() {
 }
 
 void LayerRotMap::clear() {
-    for (uint32_t i = 0; i < mCount; i++) {
-        //mCount represents rotator objects for just this display.
-        //We could have popped mCount topmost objects from mRotMgr, but if each
-        //round has the same failure, typical of stability runs, it would lead
-        //to unnecessary memory allocation, deallocation each time. So we let
-        //the rotator objects be around, but just knock off the fences they
-        //hold. Ultimately the rotator objects will be GCed when not required.
-        //Also resetting fences is required if at least one rotation round has
-        //succeeded before. It'll be a NOP otherwise.
-        mRot[i]->resetReleaseFd();
-    }
+    RotMgr::getInstance()->markUnusedTop(mCount);
     reset();
 }
 
