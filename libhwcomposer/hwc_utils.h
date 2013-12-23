@@ -280,6 +280,14 @@ static inline bool isSecureDisplayBuffer(const private_handle_t* hnd) {
     return (hnd && (hnd->flags & private_handle_t::PRIV_FLAGS_SECURE_DISPLAY));
 }
 
+static inline int getWidth(const private_handle_t* hnd) {
+    return hnd->width;
+}
+
+static inline int getHeight(const private_handle_t* hnd) {
+    return hnd->height;
+}
+
 template<typename T> inline T max(T a, T b) { return (a > b) ? a : b; }
 template<typename T> inline T min(T a, T b) { return (a < b) ? a : b; }
 
@@ -370,6 +378,8 @@ struct hwc_context_t {
     //used for enabling C2D Feature only for 8960 Non Pro Device
     int mSocId;
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
+    //previous Width & Height
+    overlay::utils::Whf mPrevWHF[HWC_NUM_DISPLAY_TYPES];
 };
 
 namespace qhwc {
