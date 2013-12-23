@@ -77,8 +77,15 @@ int IonAlloc::alloc_buffer(alloc_data& data)
     ionAllocData.flags = data.uncached ? 0 : ION_FLAG_CACHED;
     // ToDo: replace usage of alloc data structure with
     //  ionallocdata structure.
-    if (data.flags & ION_SECURE)
+    if (data.flags & ION_SECURE) {
         ionAllocData.flags |= ION_SECURE;
+    }
+    else {
+        if (data.flags & (ION_HEAP(ION_CP_MM_HEAP_ID))) {
+	    ionAllocData.flags |= ION_FORCE_CONTIGUOUS;
+	    ALOGE("ionAllocData flags = %x heap mask %x",ionAllocData.flags, ionAllocData.heap_mask);
+	}
+    }
 
     err = open_device();
     if (err)
