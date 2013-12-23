@@ -427,8 +427,7 @@ int  CopyBit::drawLayerUsingCopybit(hwc_context_t *dev, hwc_layer_1_t *layer,
     float copybitsMinScale =
                        (float)copybit->get(copybit,COPYBIT_MINIFICATION_LIMIT);
 
-    if((layer->transform == HWC_TRANSFORM_ROT_90) ||
-                           (layer->transform == HWC_TRANSFORM_ROT_270)) {
+    if (layer->transform & HWC_TRANSFORM_ROT_90) {
         //swap screen width and height
         int tmp = screen_w;
         screen_w  = screen_h;
@@ -618,6 +617,7 @@ int CopyBit::fillColorUsingCopybit(hwc_layer_1_t *layer,
     copybit->set_parameter(copybit, COPYBIT_DITHER,
                            (dst.format == HAL_PIXEL_FORMAT_RGB_565) ?
                            COPYBIT_ENABLE : COPYBIT_DISABLE);
+    copybit->set_parameter(copybit, COPYBIT_TRANSFORM, 0);
     copybit->set_parameter(copybit, COPYBIT_BLEND_MODE, layer->blending);
     copybit->set_parameter(copybit, COPYBIT_PLANE_ALPHA, layer->planeAlpha);
     copybit->set_parameter(copybit, COPYBIT_BLIT_TO_FRAMEBUFFER,COPYBIT_ENABLE);
