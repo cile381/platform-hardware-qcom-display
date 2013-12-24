@@ -698,7 +698,8 @@ void MDPComp::updateLayerCache(hwc_context_t* ctx,
 
     for(int i = 0; i < numAppLayers; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
-        if (mCachedFrame.hnd[i] == list->hwLayers[i].handle) {
+        if ((mCachedFrame.hnd[i] == list->hwLayers[i].handle) &&
+            (!OverScanCompensation::getInstance()->isOSCDimensionsSet())){
             fbCount++;
             mCurrentFrame.isFBComposed[i] = true;
         } else {
