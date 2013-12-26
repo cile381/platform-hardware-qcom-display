@@ -842,7 +842,7 @@ bool MDPComp::programYUV(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     const int numLayers = ctx->listStats[mDpy].numAppLayers;
-
+    int ret = 1;
     //reset old data
     mCurrentFrame.reset(numLayers);
 
@@ -927,7 +927,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         if(!programYUV(ctx, list)) {
             reset(numLayers, list);
             return -1;
-        }
+        } else
+            ret = 0;
     } else {
         reset(numLayers, list);
         return -1;
@@ -946,7 +947,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGE("%s",sDump.string());
     }
 
-    return 0;
+    return ret;
 }
 
 //=============MDPCompLowRes===================================================
