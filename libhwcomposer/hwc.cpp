@@ -340,7 +340,7 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
     hwc_context_t* ctx = (hwc_context_t*)(dev);
 
     Locker::Autolock _l(ctx->mDrawLock);
-    int ret = 0, value = 0;
+    int ret = 0;
 
     /* In case of non-hybrid WFD session, we are fooling SF by
      * piggybacking on HDMI display ID for virtual.
@@ -363,20 +363,24 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
     case HWC_DISPLAY_PRIMARY:
         if(blank) {
             int dpy = HWC_DISPLAY_PRIMARY;
-            if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)){
-                ALOGE("%s: display commit fail for primary!", __FUNCTION__);
-                ret = -1;
+            if(Overlay::isHDMIPrimary()) {
+                if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)){
+                    ALOGE("%s: display commit fail for primary!", __FUNCTION__);
+                    ret = -1;
+                }
+            } else {
+                if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, FB_BLANK_POWERDOWN) < 0 ) {
+                    ALOGE("%s: Failed to handle blank event(%d) for Primary!!",
+                          __FUNCTION__, blank );
+                    return -1;
+                }
             }
-        }
-        value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
-        if(!Overlay::isHDMIPrimary()) {
-            if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, value) < 0 ) {
-                ALOGE("%s: Failed to handle blank event(%d) for Primary!!",
+        } else {
+            if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, FB_BLANK_UNBLANK) < 0 ) {
+                ALOGE("%s: Failed to handle unblank event(%d) for Primary!!",
                       __FUNCTION__, blank );
                 return -1;
             }
-        }
-        if(!blank) {
             // Enable HPD here, as during bootup unblank is called
             // when SF is completely initialized
             ctx->mExtDisplay->setHPD(1);
