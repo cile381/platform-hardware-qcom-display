@@ -220,6 +220,15 @@ int getDownscaleFactor(const int& src_w, const int& src_h,
             // Down-scale to <= 12.5% of orig.
             dscale_factor = utils::ROT_DS_EIGHTH;
         }
+
+        if (dscale_factor == utils::ROT_DS_NONE) {
+            float w_ratio = (float)src_w / (float)dst_w;
+            float h_ratio = (float)src_h / (float)dst_h;
+            if ((dst_w == 720 && dst_h == 1280 && w_ratio > 1.5) ||
+                    (dst_h == 720 && dst_w == 1280 && h_ratio > 1.5)) {
+                dscale_factor = utils::ROT_DS_HALF;
+            }
+        }
     }
     return dscale_factor;
 }
