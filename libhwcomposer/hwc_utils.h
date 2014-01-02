@@ -58,6 +58,7 @@ class IFBUpdate;
 class IVideoOverlay;
 class MDPComp;
 class CopyBit;
+class HwcDebug;
 
 
 struct MDPInfo {
@@ -86,6 +87,8 @@ struct DisplayAttributes {
     bool isConfiguring;
     // External Display is in MDP Downscale mode indicator
     bool mDownScaleMode;
+    // Ext dst Rect
+    hwc_rect_t mDstRect;
 };
 
 struct ListStats {
@@ -197,7 +200,7 @@ void dumpsys_log(android::String8& buf, const char* fmt, ...);
 int getExtOrientation(hwc_context_t* ctx);
 
 bool isValidRect(const hwc_rect_t& rect);
-void deductRect(const hwc_layer_1_t* layer, hwc_rect_t& irect);
+hwc_rect_t deductRect(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 hwc_rect_t getIntersection(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 hwc_rect_t getUnion(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 void optimizeLayerRects(hwc_context_t *ctx,
@@ -387,6 +390,8 @@ struct hwc_context_t {
     qhwc::ListStats listStats[HWC_NUM_DISPLAY_TYPES];
     qhwc::LayerProp *layerProp[HWC_NUM_DISPLAY_TYPES];
     qhwc::MDPComp *mMDPComp[HWC_NUM_DISPLAY_TYPES];
+    qhwc::HwcDebug *mHwcDebug[HWC_NUM_DISPLAY_TYPES];
+    hwc_rect_t mViewFrame[HWC_NUM_DISPLAY_TYPES];
 
     // No animation on External display feature
     // Notifies hwcomposer about the device orientation before animation.
@@ -417,7 +422,8 @@ struct hwc_context_t {
     //used for enabling C2D Feature only for 8960 Non Pro Device
     int mSocId;
     qhwc::LayerRotMap *mLayerRotMap[HWC_NUM_DISPLAY_TYPES];
-
+    //previous Width & Height
+    overlay::utils::Whf mPrevWHF[HWC_NUM_DISPLAY_TYPES];
     // Panel reset flag will be set if BTA check fails
     bool mPanelResetStatus;
 };

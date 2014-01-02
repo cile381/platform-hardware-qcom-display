@@ -30,6 +30,7 @@
 #include "hwc_fbupdate.h"
 #include "mdp_version.h"
 #include "hwc_copybit.h"
+#include "hwc_dump_layers.h"
 #include "external.h"
 #include "virtual.h"
 #include "hwc_qclient.h"
@@ -163,6 +164,9 @@ void initContext(hwc_context_t *ctx)
         ctx->mLayerRotMap[i] = new LayerRotMap();
     }
 
+    for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+        ctx->mHwcDebug[i] = new HwcDebug(i);
+    }
     MDPComp::init(ctx);
 
     ctx->vstate.enable = false;
@@ -233,6 +237,10 @@ void closeContext(hwc_context_t *ctx)
             delete ctx->mLayerRotMap[i];
             ctx->mLayerRotMap[i] = NULL;
         }
+        if(ctx->mHwcDebug[i]) {
+            delete ctx->mHwcDebug[i];
+            ctx->mHwcDebug[i] = NULL;
+        }
     }
 
 
@@ -283,12 +291,12 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     float xRatio = 1.0;
     float yRatio = 1.0;
 
-    float fbWidth = ctx->dpyAttr[dpy].xres;
-    float fbHeight = ctx->dpyAttr[dpy].yres;
+    int fbWidth = ctx->dpyAttr[dpy].xres;
+    int fbHeight = ctx->dpyAttr[dpy].yres;
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         // if downscale Mode is enabled for external, need to query
         // the actual width and height, as that is the physical w & h
-        ctx->mExtDisplay->getAttributes((int&)fbWidth, (int&)fbHeight);
+         ctx->mExtDisplay->getAttributes(fbWidth, fbHeight);
     }
 
 
@@ -301,7 +309,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     float asX = 0;
     float asY = 0;
     float asW = fbWidth;
-    float asH= fbHeight;
+    float asH = fbHeight;
 
     // based on the action safe ratio, get the Action safe rectangle
     asW = fbWidth * (1.0f -  asWidthRatio / 100.0f);
@@ -653,6 +661,7 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
+    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
 
     optimizeLayerRects(ctx, list, dpy);
 
@@ -660,6 +669,9 @@ void setListStats(hwc_context_t *ctx,
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
+        // Calculate view frame of each display from the layer displayframe
+        ctx->mViewFrame[dpy] = getUnion(ctx->mViewFrame[dpy],
+                                        layer->displayFrame);
 #ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
@@ -898,36 +910,25 @@ hwc_rect_t getUnion(const hwc_rect &rect1, const hwc_rect &rect2)
    return res;
 }
 
-/* deducts given rect from layers display-frame and source crop.
-   also it avoid hole creation.*/
-void deductRect(const hwc_layer_1_t* layer, hwc_rect_t& irect) {
-    hwc_rect_t& disprect = (hwc_rect_t&)layer->displayFrame;
-    hwc_rect_t srcrect = integerizeSourceCrop(layer->sourceCropf);
-    int irect_w = irect.right - irect.left;
-    int irect_h = irect.bottom - irect.top;
+/* Not a geometrical rect deduction. Deducts rect2 from rect1 only if it results
+ * a single rect */
+hwc_rect_t deductRect(const hwc_rect_t& rect1, const hwc_rect_t& rect2) {
 
-    if((disprect.left == irect.left) && (disprect.right == irect.right)) {
-        if((disprect.top == irect.top) && (irect.bottom <= disprect.bottom)) {
-            disprect.top = irect.bottom;
-            srcrect.top += irect_h;
-        }
-        else if((disprect.bottom == irect.bottom)
-                                && (irect.top >= disprect.top)) {
-            disprect.bottom = irect.top;
-            srcrect.bottom -= irect_h;
-        }
-    }
-    else if((disprect.top == irect.top) && (disprect.bottom == irect.bottom)) {
-        if((disprect.left == irect.left) && (irect.right <= disprect.right)) {
-            disprect.left = irect.right;
-            srcrect.left += irect_w;
-        }
-        else if((disprect.right == irect.right)
-                                && (irect.left >= disprect.left)) {
-            disprect.right = irect.left;
-            srcrect.right -= irect_w;
-        }
-    }
+   hwc_rect_t res = rect1;
+
+   if((rect1.left == rect2.left) && (rect1.right == rect2.right)) {
+      if((rect1.top == rect2.top) && (rect2.bottom <= rect1.bottom))
+         res.top = rect2.bottom;
+      else if((rect1.bottom == rect2.bottom)&& (rect2.top >= rect1.top))
+         res.bottom = rect2.top;
+   }
+   else if((rect1.top == rect2.top) && (rect1.bottom == rect2.bottom)) {
+      if((rect1.left == rect2.left) && (rect2.right <= rect1.right))
+         res.left = rect2.right;
+      else if((rect1.right == rect2.right)&& (rect2.left >= rect1.left))
+         res.right = rect2.left;
+   }
+   return res;
 }
 
 void optimizeLayerRects(hwc_context_t *ctx,
@@ -943,17 +944,23 @@ void optimizeLayerRects(hwc_context_t *ctx,
             hwc_rect_t& topframe =
                 (hwc_rect_t&)list->hwLayers[i].displayFrame;
             while(j >= 0) {
-                if(!needsScaling(ctx, &list->hwLayers[j], dpy)) {
-                    hwc_rect_t& bottomframe =
-                        (hwc_rect_t&)list->hwLayers[j].displayFrame;
+               if(!needsScaling(ctx, &list->hwLayers[j], dpy)) {
+                  hwc_layer_1_t* layer = (hwc_layer_1_t*)&list->hwLayers[j];
+                  hwc_rect_t& bottomframe = layer->displayFrame;
+                  hwc_rect_t& bottomCrop = layer->sourceCrop;
+                  int transform =layer->transform;
 
-                    hwc_rect_t irect = getIntersection(bottomframe, topframe);
-                    if(isValidRect(irect)) {
-                        //if intersection is valid rect, deduct it
-                        deductRect(&list->hwLayers[j], irect);
-                    }
-                }
-                j--;
+                  hwc_rect_t irect = getIntersection(bottomframe, topframe);
+                  if(isValidRect(irect)) {
+                     hwc_rect_t dest_rect;
+                     //if intersection is valid rect, deduct it
+                     dest_rect  = deductRect(bottomframe, irect);
+                     qhwc::calculate_crop_rects(bottomCrop, bottomframe,
+                                                dest_rect, transform);
+
+                  }
+               }
+               j--;
             }
         }
         i--;
@@ -1363,6 +1370,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     calcExtDisplayPosition(ctx, hnd, dpy, crop, dst,
                                            transform, orient);
 
+    bool forceRot = false;
     if(isYuvBuffer(hnd) && ctx->mMDP.version >= qdutils::MDP_V4_2 &&
        ctx->mMDP.version < qdutils::MDSS_V5) {
         downscale =  getDownscaleFactor(
@@ -1373,13 +1381,25 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         if(downscale) {
             rotFlags = ROT_DOWNSCALE_ENABLED;
         }
+
+        uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
+        uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
+        if(prevWidth != (uint32_t)getWidth(hnd) ||
+                prevHeight != (uint32_t)getHeight(hnd)) {
+            uint32_t prevBufArea = prevWidth * prevHeight;
+            if(prevBufArea) {
+                forceRot = true;
+            }
+            prevWidth = (uint32_t)getWidth(hnd);
+            prevHeight = (uint32_t)getHeight(hnd);
+        }
     }
 
     setMdpFlags(layer, mdpFlags, downscale, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
     if(isYuvBuffer(hnd) && //if 90 component or downscale, use rot
-            ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
+            ((transform & HWC_TRANSFORM_ROT_90) || downscale || forceRot)) {
         *rot = ctx->mRotMgr->getNext();
         if(*rot == NULL) return -1;
         Whf origWhf(hnd->width, hnd->height,
@@ -1457,11 +1477,25 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         }
     }
 
+    bool forceRot = false;
+    if(isYuvBuffer(hnd)) {
+        uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
+        uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
+        if(prevWidth != (uint32_t)getWidth(hnd) ||
+                prevHeight != (uint32_t)getHeight(hnd)) {
+            uint32_t prevBufArea = (prevWidth * prevHeight);
+            if(prevBufArea) {
+                forceRot = true;
+            }
+            prevWidth = (uint32_t)getWidth(hnd);
+            prevHeight = (uint32_t)getHeight(hnd);
+        }
+    }
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
-    if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
+    if(isYuvBuffer(hnd) && ((transform & HWC_TRANSFORM_ROT_90) || forceRot)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
         Whf origWhf(hnd->width, hnd->height,
