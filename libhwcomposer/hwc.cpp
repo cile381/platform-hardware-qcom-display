@@ -676,8 +676,10 @@ static int hwc_set(hwc_composer_device_1 *dev,
                    hwc_display_contents_1_t** displays)
 {
     int ret = 0;
+    static int modeChangeState = RES_CHANGE_NONE;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if (LIKELY(!ctx->mResChanged)) {
+        modeChangeState = RES_CHANGE_NONE;
         for (uint32_t i = 0; i <= numDisplays; i++) {
             hwc_display_contents_1_t* list = displays[i];
             int dpy = getDpyforExternalDisplay(ctx, i);
@@ -706,32 +708,37 @@ static int hwc_set(hwc_composer_device_1 *dev,
     } else {
         //Do nothing for res changed round for one frame so that all fences are
         //closed
-        int avmute = 1;
-        ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd,
-                    MSMFB_EXTERNAL_MUTE, &avmute);
-        ALOGI("%s: avmute ioctl called!\n", __FUNCTION__);
-        ctx->mBasePipeSetup = false;
-        for (uint32_t i = 0; i < numDisplays; i++) {
-            if (!Overlay::displayCommit(ctx->dpyAttr[i].fd)) {
-                ALOGE("%s: display commit fail!", __FUNCTION__);
-                ret = -1;
+        if(RES_CHANGE_NONE == modeChangeState) {
+            int avmute = 1;
+            modeChangeState = RES_CHANGE_PROGRESS;
+            ret = ioctl(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd,
+                        MSMFB_EXTERNAL_MUTE, &avmute);
+            ALOGI("%s: avmute ioctl called!\n", __FUNCTION__);
+            ctx->mBasePipeSetup = false;
+            for (uint32_t i = 0; i < numDisplays; i++) {
+                if (!Overlay::displayCommit(ctx->dpyAttr[i].fd)) {
+                    ALOGE("%s: display commit fail!", __FUNCTION__);
+                    ret = -1;
+                }
+                closeAcquireFds(displays[i]);
             }
-            closeAcquireFds(displays[i]);
-        }
 
-        if (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected) {
-            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
-            ctx->mExtDisplay->teardown();
-            ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL, 0);
-            ctx->mDrawLock.unlock();
-            return ret;
+            if (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected) {
+                ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
+                ctx->mExtDisplay->teardown();
+                ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL, 0);
+                ctx->mDrawLock.unlock();
+                return ret;
+            }
         }
-
-        int result = ctx->mExtDisplay->setHdmiPrimaryMode();
-        if (result == EXT_MODE_CHANGED) {
-            setupExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
-        } else {
-            cleanExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+        if(RES_CHANGE_PROGRESS == modeChangeState){
+            modeChangeState = RES_CHANGE_DONE;
+            int result = ctx->mExtDisplay->setHdmiPrimaryMode();
+            if (result == EXT_MODE_CHANGED) {
+                setupExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+            } else {
+                cleanExternalObjs(ctx, HWC_DISPLAY_EXTERNAL);
+            }
         }
     }
     // This is only indicative of how many times SurfaceFlinger posts
