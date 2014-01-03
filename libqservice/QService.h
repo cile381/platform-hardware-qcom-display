@@ -72,6 +72,7 @@ public:
     virtual android::status_t setPQCState(int value);
     virtual void setExtOrientation(uint32_t orientation);
     virtual void setBufferMirrorMode(uint32_t enable);
+    virtual android::status_t setMode(int32_t mode);
     static void init();
 private:
     QService();

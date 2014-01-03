@@ -175,6 +175,7 @@ void initContext(hwc_context_t *ctx)
     ctx->vstate.fakevsync = false;
     ctx->mBasePipeSetup = false;
     ctx->mExtOrientation = 0;
+    ctx->mResChanged = false;
     ctx->oscparams.set(0);
     for(int i=0; i<PP_MAX_VG_PIPES; i++){
        ctx->ossrcparams[i].set(0);
@@ -917,6 +918,37 @@ void closeAcquireFds(hwc_display_contents_1_t* list) {
     }
 }
 
+void setupExternalObjs(hwc_context_t* ctx, int dpy) {
+
+    ctx->mFBUpdate[dpy] =
+        IFBUpdate::getObject(ctx->dpyAttr[dpy].xres, dpy);
+    ctx->mMDPComp[dpy] =
+        MDPComp::getObject(ctx->dpyAttr[dpy].xres, dpy);
+    int compositionType =
+        qdutils::QCCompositionType::getInstance().getCompositionType();
+
+    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
+                           qdutils::COMPOSITION_TYPE_MDP |
+                           qdutils::COMPOSITION_TYPE_C2D)) {
+        ctx->mCopyBit[dpy] = new CopyBit();
+    }
+}
+
+void cleanExternalObjs(hwc_context_t* ctx, int dpy) {
+        if(ctx->mFBUpdate[dpy]) {
+            delete ctx->mFBUpdate[dpy];
+            ctx->mFBUpdate[dpy] = NULL;
+        }
+        if(ctx->mCopyBit[dpy]){
+            delete ctx->mCopyBit[dpy];
+            ctx->mCopyBit[dpy] = NULL;
+        }
+        if(ctx->mMDPComp[dpy]) {
+            delete ctx->mMDPComp[dpy];
+            ctx->mMDPComp[dpy] = NULL;
+        }
+}
+
 int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         int fd) {
     int ret = 0;
@@ -1154,8 +1186,7 @@ inline int configRotator(Rotator *rot, Whf& whf,
  * Sets up BORDERFILL as default base pipe and detaches RGB0.
  * Framebuffer is always updated using PLAY ioctl.
  */
-bool setupBasePipe(hwc_context_t *ctx) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
+bool setupBasePipe(hwc_context_t *ctx, int dpy) {
     int fb_stride = ctx->dpyAttr[dpy].stride;
     int fb_width = ctx->dpyAttr[dpy].xres;
     int fb_height = ctx->dpyAttr[dpy].yres;

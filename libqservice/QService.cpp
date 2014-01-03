@@ -81,6 +81,14 @@ android::status_t QService::getStdFrameratePixclock(ConfigChangeParams
     return result;
 }
 
+android::status_t QService::setMode(int32_t mode) {
+    status_t result = NO_ERROR;
+    if(mClient.get()) {
+        result = mClient->notifyCallback(SET_MODE, mode);
+    }
+    return result;
+}
+
 android::status_t QService::getCurrentFrameratePixclock(
             ConfigChangeParams *params) {
     status_t result = NO_ERROR;

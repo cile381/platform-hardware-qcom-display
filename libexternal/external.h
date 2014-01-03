@@ -36,6 +36,11 @@ enum external_scansupport_type {
     EXT_SCAN_BOTH_SUPPORTED     = 3
 };
 
+enum mode_state {
+    EXT_MODE_CHANGED = 1,
+    EXT_MODE_RESET   = 2,
+};
+
 class ExternalDisplay
 {
 public:
@@ -43,13 +48,19 @@ public:
     ~ExternalDisplay();
     void setHPD(uint32_t startEnd);
     void setActionSafeDimension(int w, int h);
+    void setCustomMode(int mode) {mCustomMode = mode;}
     bool isCEUnderscanSupported() { return mUnderscanSupported; }
-    int configure();
+    int configure(int mode = -1);
     void getAttributes(int& width, int& height);
     int teardown();
     bool isConnected() {
         return  mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].connected;
     }
+    int  setHdmiPrimaryMode();
+    bool hasResolutionChanged() { return mHdmiPrimaryResChanged;}
+    bool readResolution();
+    bool isValidMode(int ID);
+    bool isInterlacedMode(int mode);
 
 private:
     int getModeCount() const;
@@ -57,17 +68,14 @@ private:
     void setEDIDMode(int resMode);
     void setSPDInfo(const char* node, const char* property);
     void readCEUnderscanInfo();
-    bool readResolution();
     int  parseResolution(char* edidStr, int* edidModes);
     void setResolution(int ID);
     bool openFrameBuffer();
     bool closeFrameBuffer();
     bool writeHPDOption(int userOption) const;
-    bool isValidMode(int ID);
     int  getModeOrder(int mode);
     int  getUserMode();
     int  getBestMode();
-    bool isInterlacedMode(int mode);
     void resetInfo();
     void setAttributes();
     void getAttrForMode(int& width, int& height, int& fps);
@@ -81,8 +89,11 @@ private:
     bool mUnderscanSupported;
     hwc_context_t *mHwcContext;
     fb_var_screeninfo mVInfo;
+
     // Holds all the HDMI modes and timing info supported by driver
     msm_hdmi_mode_timing_info* supported_video_mode_lut;
+    bool mHdmiPrimaryResChanged;
+    int mCustomMode;
 };
 
 }; //qhwc

@@ -43,7 +43,7 @@ namespace qhwc {
 #define UNKNOWN_STRING                  "unknown"
 #define SPD_NAME_LENGTH                 16
 
-int ExternalDisplay::configure() {
+int ExternalDisplay::configure(int mode) {
     if(!openFrameBuffer()) {
         ALOGE("%s: Failed to open FB: %d", __FUNCTION__, mFbNum);
         return -1;
@@ -54,7 +54,9 @@ int ExternalDisplay::configure() {
     /* Used for changing the resolution
      * getUserMode will get the preferred
      * mode set thru adb shell */
-    int mode = getUserMode();
+    int usermode = getUserMode();
+    if(usermode != -1)
+        mode = usermode;
     if (mode == -1) {
         //Get the best mode and set
         mode = getBestMode();
@@ -72,7 +74,9 @@ void ExternalDisplay::getAttributes(int& width, int& height) {
 }
 
 int ExternalDisplay::teardown() {
-    closeFrameBuffer();
+    if(!overlay::Overlay::isHDMIPrimary()) {
+        closeFrameBuffer();
+    }
     resetInfo();
     // unset system property
     property_set("hw.hdmiON", "0");
@@ -81,7 +85,8 @@ int ExternalDisplay::teardown() {
 
 ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
     mCurrentMode(-1), mModeCount(0),
-    mUnderscanSupported(false), mHwcContext(ctx)
+    mUnderscanSupported(false), mHwcContext(ctx),
+    mHdmiPrimaryResChanged(false), mCustomMode(-1)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     mFbNum = overlay::Overlay::getInstance()->getFbForDpy(HWC_DISPLAY_EXTERNAL);
@@ -438,6 +443,37 @@ int ExternalDisplay::getUserMode() {
     return -1;
 }
 
+/* This function fakes a secondary display and hotplugs it so that
+ * SurfaceFlinger can compose according to the HDMI resolution
+ * */
+int ExternalDisplay::setHdmiPrimaryMode() {
+    int mode = mCustomMode;
+    int dpy = HWC_DISPLAY_EXTERNAL;
+    ALOGI("%s: Attempting to set mode: %d", __FUNCTION__, mode);
+    configure(mode);
+
+    if(isValidMode(mode) && !isInterlacedMode(mode)) {
+        //Fake primary HDMI as secondary
+        mHwcContext->dpyAttr[dpy].isPause = false;
+        mHwcContext->dpyAttr[dpy].connected = true;
+        mHwcContext->proc->hotplug(mHwcContext->proc, dpy, 1);
+        mHdmiPrimaryResChanged = true;
+        return EXT_MODE_CHANGED;
+    } else if(mHdmiPrimaryResChanged) {
+        //Go back to default HDMI as primary
+        teardown();
+        mHwcContext->dpyAttr[dpy].connected = false;
+        mHwcContext->proc->hotplug(mHwcContext->proc, dpy, 0);
+        mHdmiPrimaryResChanged = false;
+        return EXT_MODE_RESET;
+    } else {
+        teardown();
+        ALOGE("%s: Invalid mode set for HDMI", __FUNCTION__);
+        return -EINVAL;
+    }
+
+}
+
 // Get the best mode for the current HD TV
 int ExternalDisplay::getBestMode() {
     int bestOrder = 0;
@@ -454,7 +490,7 @@ int ExternalDisplay::getBestMode() {
     return bestMode;
 }
 
-inline bool ExternalDisplay::isValidMode(int ID)
+bool ExternalDisplay::isValidMode(int ID)
 {
     bool valid = false;
     for (int i = 0; i < mModeCount; i++) {
@@ -476,8 +512,10 @@ bool ExternalDisplay::isInterlacedMode(int ID) {
         case HDMI_VFRMT_1440x576i50_16_9:
         case HDMI_VFRMT_1920x1080i60_16_9:
             interlaced = true;
+            break;
         default:
             interlaced = false;
+            break;
     }
     return interlaced;
 }
@@ -575,23 +613,25 @@ void ExternalDisplay::setAttributes() {
         // Always set dpyAttr res to mVInfo res
         mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = width;
         mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = height;
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
-        int priW = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
-        int priH = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
-        // if primary resolution is more than the hdmi resolution
-        // configure dpy attr to primary resolution and set
-        // downscale mode
-        if((priW * priH) > (width * height)) {
-            mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priW;
-            mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priH;
-            // HDMI is always in landscape, so always assign the higher
-            // dimension to hdmi's xres
-            if(priH > priW) {
-                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priH;
-                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priW;
+        if(!mHwcContext->mResChanged) {
+            mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
+            int priW = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+            int priH = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+            // if primary resolution is more than the hdmi resolution
+            // configure dpy attr to primary resolution and set
+            // downscale mode
+            if((priW * priH) > (width * height)) {
+                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priW;
+                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priH;
+                // HDMI is always in landscape, so always assign the higher
+                // dimension to hdmi's xres
+                if(priH > priW) {
+                    mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priH;
+                    mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priW;
+                }
+                // Set External Display MDP Downscale mode indicator
+                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode =true;
             }
-            // Set External Display MDP Downscale mode indicator
-            mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode =true;
         }
         mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].vsync_period =
                 1000000000l / fps;
