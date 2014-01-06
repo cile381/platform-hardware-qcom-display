@@ -269,7 +269,7 @@ int configRotator(overlay::Rotator *rot, ovutils::Whf& whf,
 int configMdp(overlay::Overlay *ov, const ovutils::PipeArgs& parg,
         const ovutils::eTransform& orient, const hwc_rect_t& crop,
         const hwc_rect_t& pos, const MetaData_t *metadata,
-        const ovutils::eDest& dest, hwc_context_t *ctx);
+        const ovutils::eDest& dest, hwc_context_t *ctx, const int& dpy);
 
 void updateSource(ovutils::eTransform& orient, ovutils::Whf& whf,
         hwc_rect_t& crop);
