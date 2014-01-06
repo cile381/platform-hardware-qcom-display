@@ -46,8 +46,7 @@ bool isGPUSupportedFormat(const native_handle *handle)
         (format == HAL_PIXEL_FORMAT_YCrCb_422_SP) ||
         (format == HAL_PIXEL_FORMAT_YCbCr_422_SP) ||
         (format == HAL_PIXEL_FORMAT_YCbCr_444_I)  ||
-        (format == HAL_PIXEL_FORMAT_YCbCr_444_I)  ||
-        (metadata->operation & PP_PARAM_S3D_VIDEO)) {
+        (format == HAL_PIXEL_FORMAT_YCrCb_444_I)) {
         return false;
     }
     return true;
