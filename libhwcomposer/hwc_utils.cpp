@@ -1565,11 +1565,14 @@ Dim getOSCPosition(const Dim& dim, hwc_context_t *ctx) {
 
     float prifbWidth  = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
     float prifbHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+    if(ctx->mExtDisplay->hasResolutionChanged()) {
+        prifbWidth  = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].xres;
+        prifbHeight = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].yres;
+    }
     int oscx = 0;
     int oscy = 0;
     int oscwidth = 0;
     int oscheight = 0;
-
     float x_ratio = ((float)dim.x/prifbWidth);
     float y_ratio = ((float)dim.y/prifbHeight);
     float w_ratio = ((float)dim.w/prifbWidth);
