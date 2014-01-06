@@ -122,6 +122,13 @@ enum {
     HWC_COPYBIT = 0x00000002,
 };
 
+// Dymamic Resolution Change States
+enum {
+    RES_CHANGE_NONE = 0,
+    RES_CHANGE_PROGRESS,
+    RES_CHANGE_DONE,
+};
+
 class LayerRotMap {
 public:
     LayerRotMap() { reset(); }
