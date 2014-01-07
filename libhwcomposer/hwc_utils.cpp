@@ -1226,7 +1226,7 @@ bool setupBasePipe(hwc_context_t *ctx, int dpy) {
 inline int configMdp(Overlay *ov, const PipeArgs& parg,
         const eTransform& orient, const hwc_rect_t& crop,
         const hwc_rect_t& pos, const MetaData_t *metadata,
-        const eDest& dest, hwc_context_t *ctx) {
+        const eDest& dest, hwc_context_t *ctx, const int& dpy) {
     ov->setSource(parg, dest);
     ov->setTransform(orient, dest);
 
@@ -1238,7 +1238,10 @@ inline int configMdp(Overlay *ov, const PipeArgs& parg,
     int posW = pos.right - pos.left;
     int posH = pos.bottom - pos.top;
     Dim position(pos.left, pos.top, posW, posH);
-    ov->setPosition(getOSCPosition(position, ctx), dest);
+    if(dpy)
+        ov->setPosition(position, dest);
+    else
+        ov->setPosition(getOSCPosition(position, ctx), dest);
 
     if (metadata)
         ov->setVisualParams(*metadata, dest);
@@ -1374,10 +1377,14 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             }
         }
     }
-    if ( (yuvOrder == VIDEO_LAYER_0) or (yuvOrder == VIDEO_LAYER_1) ) {
+
+    if(!dpy) {
+        if ( (yuvOrder == VIDEO_LAYER_0) or (yuvOrder == VIDEO_LAYER_1) ) {
             set_ov_dimensions(ctx, yuvOrder, crop, dst);
+        }
     }
-    if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest, ctx) < 0) {
+
+    if(configMdp(ctx->mOverlay, parg, orient, crop, dst, metadata, dest, ctx, dpy) < 0) {
         ALOGE("%s: commit failed for low res panel", __FUNCTION__);
         ctx->mLayerRotMap[dpy]->reset();
         return -1;
@@ -1501,7 +1508,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
                        (ovutils::eBlending) getBlending(layer->blending));
 
         if(configMdp(ctx->mOverlay, pargL, orient,
-                tmp_cropL, tmp_dstL, metadata, lDest, ctx) < 0) {
+                tmp_cropL, tmp_dstL, metadata, lDest, ctx, dpy) < 0) {
             ALOGE("%s: commit failed for left mixer config", __FUNCTION__);
             return -1;
         }
@@ -1516,7 +1523,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         tmp_dstR.right = tmp_dstR.right - tmp_dstR.left;
         tmp_dstR.left = 0;
         if(configMdp(ctx->mOverlay, pargR, orient,
-                tmp_cropR, tmp_dstR, metadata, rDest, ctx) < 0) {
+                tmp_cropR, tmp_dstR, metadata, rDest, ctx, dpy) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
             return -1;
         }
