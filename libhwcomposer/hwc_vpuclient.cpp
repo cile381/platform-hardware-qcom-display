@@ -179,6 +179,7 @@ int VPUClient::setupVpuSession(hwc_context_t *ctx, int display,
 
             // marking the layer pipes for vpu.
             prop->vpuPipe = true;
+            layer->flags |= HWC_VPU_PIPE;
 
             // getting image width and height
             prop->width = layer->displayFrame.right - layer->displayFrame.left;
@@ -201,6 +202,28 @@ int VPUClient::setupVpuSession(hwc_context_t *ctx, int display,
 
             // storing locally the vpu supported format from VFM
             prop->format = vLayer->vpuOutPixFmt;
+
+            // Dummy buffer for the first frame of the video
+            if(!(vLayer->outFlags & RESERVE_PREV_PIPES )) {
+                // debug buffer for the first video frame
+                if(mHnd != NULL)
+                    free_buffer(mHnd);
+
+                // TO-FIX: out dummy buffer is currently allocated based on
+                // RGB888 format
+                err = alloc_buffer(&mHnd, prop->width, prop->height,
+                    HAL_PIXEL_FORMAT_RGB_888, GRALLOC_USAGE_PRIVATE_IOMMU_HEAP);
+
+                if(err == -1)
+                    ALOGE("%s: Debug buffer allocation failed!", __FUNCTION__);
+
+                if(prop->format == HAL_PIXEL_FORMAT_RGB_888)
+                    memset((void*)mHnd->base, 0x0, mHnd->size);
+                else
+                    memset((void*)mHnd->base, 0xaa, mHnd->size);
+
+                prop->firstBuffer = true;
+            }
         }
     }
 

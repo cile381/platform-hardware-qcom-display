@@ -78,7 +78,21 @@ public:
     int getHeight(int dpy, int layer);
 
     bool supportedVPULayer(hwc_context_t* ctx, hwc_layer_1_t* layer, int dpy,
-                                                                       int idx);
+            int idx);
+
+    // To check if the current frame is a first video frame
+    bool isFirstBuffer(int dpy, int layer) {
+        return mProp[dpy][layer].firstBuffer;
+    }
+    // mark the first buffer displayed.
+    void firstBufferDisplayed(int dpy, int layer) {
+        mProp[dpy][layer].firstBuffer = false;
+    }
+    // dummy buffer
+    private_handle_t* getDummyHandle(int dpy, int layer) {
+        return mHandle[dpy][layer];
+    }
+    private_handle_t* mHnd;
 private:
     vpu::VPU *mVPU;
     void* mVPULib;
@@ -95,10 +109,14 @@ private:
         int pipeCount;
         bool vpuPipe;
         hwc_frect_t sourceCropf;
+        bool firstBuffer;
         int pipeID[MAX_PIPES_PER_LAYER];
     };
 
     VpuLayerProp mProp[HWC_NUM_DISPLAY_TYPES][MAX_LAYERS];
+    /* dummy buffer handle */
+    private_handle_t* mHandle[HWC_NUM_DISPLAY_TYPES][MAX_LAYERS];
+
     int mDebugLogs;
     int32_t isDebug() { return (mDebugLogs == 1); }
     int32_t isDebug2() { return (mDebugLogs >= 2 ); }
