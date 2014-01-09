@@ -554,6 +554,15 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
 
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
 
+    if(ctx->mVPUClient != NULL) {
+        // Due to very limited RGB pipes - the pipes are only reseved for
+        // framebuffer, i.e; only Video Layers will be processed through MDP/GPU
+        // for mpq8092 case, and the UI will be composed through GPU
+        ALOGD_IF(isDebug(), "%s: MPQ client - UI will be drawn through GPU",
+                        __FUNCTION__);
+        return false;
+    }
+
     if(sIdleFallBack && !ctx->listStats[mDpy].secureUI) {
         ALOGD_IF(isDebug(), "%s: Idle fallback dpy %d",__FUNCTION__, mDpy);
         return false;
@@ -889,10 +898,40 @@ bool MDPComp::videoOnlyComp(hwc_context_t *ctx,
     mCurrentFrame.reset(numAppLayers);
     updateYUV(ctx, list, secureOnly);
     int mdpCount = mCurrentFrame.mdpCount;
+    bool allowGpuFallback = true;
 
     if(!isYuvPresent(ctx, mDpy) or (mdpCount == 0)) {
         reset(ctx);
         return false;
+    }
+
+    // For mpq8092 - only video layers should be processed through MDP/VPU
+    // So, this function will always get hit in case of mpq8092. If VPU cannot
+    // support a video layer, then it will be drawn through GPU, as MDP cannot
+    // support the input formats.
+    if(ctx->mVPUClient != NULL)
+    {
+        char property[PROPERTY_VALUE_MAX];
+        if((property_get("persist.hwc.noGpuFallback", property, NULL) > 0) &&
+            (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
+                (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
+            allowGpuFallback = false;
+        }
+
+        bool vpuSupported = false;
+        for(int i = 0; i < mCurrentFrame.layerCount; i++) {
+            hwc_layer_1_t* layer = &list->hwLayers[i];
+            // TO-DO: check for multiple videos; if one is supported and one
+            // not supported
+            if( supportedVPULayer(ctx, layer,mDpy, i) )
+                vpuSupported = true;
+        }
+
+        if(!vpuSupported && allowGpuFallback) {
+            ALOGD_IF(isDebug(), "%s: MPQ: Gpu fallback- video not supported by \
+                    VPU", __FUNCTION__);
+            return false;
+        }
     }
 
     /* Bail out if we are processing only secured video layers
