@@ -598,6 +598,15 @@ bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer,
     src_w = sourceCrop.right - sourceCrop.left;
     src_h = sourceCrop.bottom - sourceCrop.top;
 
+    if(OverScanCompensation::getInstance()->isOSCDimensionsSet()) {
+        int posW = displayFrame.right - displayFrame.left;
+        int posH = displayFrame.bottom - displayFrame.top;
+        Dim position(displayFrame.left, displayFrame.top, posW, posH);
+        Dim oscPos = getOSCPosition(position, ctx);
+        dst_w = oscPos.w;
+        dst_h = oscPos.h;
+    }
+
     if(((src_w != dst_w) || (src_h != dst_h)))
         return true;
 
