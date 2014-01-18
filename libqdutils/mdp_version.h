@@ -117,7 +117,9 @@ public:
     uint8_t getDMAPipes() { return mDMAPipes; }
     bool supportsDecimation();
     uint32_t getMaxMDPDownscale();
+    uint32_t getMaxMDPUpscale();
     bool supportsBWC();
+    bool supportsMacroTile();
     int getLeftSplit() { return mSplit.left(); }
     int getRightSplit() { return mSplit.right(); }
     unsigned long getLowBw() { return mLowBw; }
@@ -157,6 +159,7 @@ private:
     uint32_t mFeatures;
     uint32_t mMDPDownscale;
     uint32_t mMDPUpscale;
+    bool mMacroTileEnabled;
     Split mSplit;
     unsigned long mLowBw; //kbps
     unsigned long mHighBw; //kbps
