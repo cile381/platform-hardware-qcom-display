@@ -133,6 +133,75 @@ static void reset_layer_prop(hwc_context_t* ctx, int dpy, int numAppLayers) {
     ctx->layerProp[dpy] = new LayerProp[numAppLayers];
 }
 
+bool configChange_prepare(hwc_context_t* ctx) {
+
+    switch(ctx->mConfigChangeState->getState()) {
+        case qhwc::CONFIG_CHANGE_START_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_START_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_START_FINISH:
+            return true;
+        case qhwc::CONFIG_CHANGE_DO_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_DO_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_DO_FINISH:
+            return true;
+        case qhwc::CONFIG_CHANGE_STOP_BEGIN:
+            ctx->mConfigChangeState->setState(
+                    qhwc::CONFIG_CHANGE_STOP_INPROGRESS);
+        case qhwc::CONFIG_CHANGE_STOP_FINISH:
+            return false;
+    }
+    return false;
+}
+
+bool configChange_set(hwc_context_t* ctx, int dpy) {
+
+    switch(ctx->mConfigChangeState->getState()) {
+        case qhwc::CONFIG_CHANGE_START_BEGIN:
+            return false;
+        case qhwc::CONFIG_CHANGE_START_INPROGRESS:
+            commitOnPrimary(ctx, dpy);
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_START_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+            return true;
+        case qhwc::CONFIG_CHANGE_DO_INPROGRESS:
+            switch(ctx->mConfigChangeType) {
+                case qhwc::PICTURE_QUALITY_CORRECTION:
+                    return true;
+                case qhwc::PIXEL_CLOCK_CORRECTION:
+                    if(canChangePLLSettings(ctx)){
+                        hwc_vsync_control(ctx, dpy, 0);
+                        changePLLSettings(ctx, dpy);
+                        commitOnPrimary(ctx, dpy);
+                        hwc_vsync_control(ctx, dpy, 1);
+                    }
+                    break;
+                default:
+                    break;
+            }
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_DO_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+            return true;
+        case qhwc::CONFIG_CHANGE_STOP_INPROGRESS:
+            pthread_mutex_lock(&(ctx->mConfigChangeLock));
+            ctx->mConfigChangeState->setState(qhwc::CONFIG_CHANGE_STOP_FINISH);
+            pthread_cond_signal(&ctx->mConfigChangeCond);
+            pthread_mutex_unlock(&(ctx->mConfigChangeLock));
+        case qhwc::CONFIG_CHANGE_STOP_FINISH:
+            return false;
+        case qhwc::CONFIG_CHANGE_START_FINISH:
+        case qhwc::CONFIG_CHANGE_DO_BEGIN:
+        case qhwc::CONFIG_CHANGE_DO_FINISH:
+        case qhwc::CONFIG_CHANGE_STOP_BEGIN:
+            return true;
+    }
+    return false;
+}
 
 static int hwc_prepare_primary(hwc_composer_device_1 *dev,
         hwc_display_contents_1_t *list, int dpy) {
@@ -281,7 +350,11 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     ctx->mOverlay->configBegin();
     ctx->mRotMgr->configBegin();
     ctx->mNeedsRotator = false;
-    if (LIKELY(!ctx->mResChanged)) {
+    if(configChange_prepare(ctx)) {
+        /* Don't configure any pipes when configuration
+         * change is in progress
+         */
+    } else if (LIKELY(!ctx->mResChanged)) {
         for (int32_t i = numDisplays; i >= 0; i--) {
             hwc_display_contents_1_t *list = displays[i];
             int dpy = getDpyforExternalDisplay(ctx, i);
@@ -680,29 +753,33 @@ static int hwc_set(hwc_composer_device_1 *dev,
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if (LIKELY(!ctx->mResChanged)) {
         modeChangeState = RES_CHANGE_NONE;
-        for (uint32_t i = 0; i <= numDisplays; i++) {
-            hwc_display_contents_1_t* list = displays[i];
-            int dpy = getDpyforExternalDisplay(ctx, i);
-            switch(dpy) {
-                case HWC_DISPLAY_PRIMARY:
-                    if(ctx->mExtDisplay->hasResolutionChanged()) {
-                        ret = hwc_set_dummy(ctx, list, i);
-                    } else {
-                        ret = hwc_set_primary(ctx, list, i);
-                    }
-                    break;
-                case HWC_DISPLAY_EXTERNAL:
-                    if(ctx->mExtDisplay->hasResolutionChanged()) {
-                        ret = hwc_set_primary(ctx, list, i);
-                    } else {
-                        ret = hwc_set_external(ctx, list, i);
-                    }
-                    break;
-                case HWC_DISPLAY_VIRTUAL:
-                    ret = hwc_set_virtual(ctx, list);
-                    break;
-                default:
-                    ret = -EINVAL;
+        if(configChange_set(ctx, HWC_DISPLAY_PRIMARY)) {
+            /* Configuration change in progress*/
+        } else {
+            for (uint32_t i = 0; i <= numDisplays; i++) {
+                hwc_display_contents_1_t* list = displays[i];
+                int dpy = getDpyforExternalDisplay(ctx, i);
+                switch(dpy) {
+                    case HWC_DISPLAY_PRIMARY:
+                        if(ctx->mExtDisplay->hasResolutionChanged()) {
+                            ret = hwc_set_dummy(ctx, list, i);
+                        } else {
+                            ret = hwc_set_primary(ctx, list, i);
+                        }
+                        break;
+                    case HWC_DISPLAY_EXTERNAL:
+                        if(ctx->mExtDisplay->hasResolutionChanged()) {
+                            ret = hwc_set_primary(ctx, list, i);
+                        } else {
+                            ret = hwc_set_external(ctx, list, i);
+                        }
+                        break;
+                    case HWC_DISPLAY_VIRTUAL:
+                        ret = hwc_set_virtual(ctx, list);
+                        break;
+                    default:
+                        ret = -EINVAL;
+                }
             }
         }
     } else {

@@ -89,6 +89,7 @@ private:
 
     hwc_context_t *mHwcContext;
     const android::sp<android::IMediaDeathNotifier> mMPDeathNotifier;
+    virtual void inValidate();
 };
 }; // namespace qClient
 #endif // ANDROID_QCLIENT_H

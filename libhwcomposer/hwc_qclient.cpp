@@ -80,11 +80,50 @@ status_t QClient::notifyCallback(uint32_t msg, uint32_t value) {
 
 status_t QClient::getStdFrameratePixclock(
         ConfigChangeParams *params) {
+    int num_channels = 1;
+    if(isPanelLVDS(0)){
+        num_channels = 2;
+    }
+    params->param1 = mHwcContext->default_framerate * num_channels;
+    params->param2 = mHwcContext->default_pixclock * num_channels;
+    ALOGE_IF(QCLIENT_DEBUG,"%s: Std framerate is %f and "
+            "Std pixclock is %f",__FUNCTION__,params->param1,
+            params->param2);
+
     return NO_ERROR;
 }
 
 status_t QClient::getCurrentFrameratePixclock(
         ConfigChangeParams *params) {
+    struct fb_var_screeninfo info;
+    int num_channels = 1;
+    int fb_fd = -1;
+    const char *devtmpl = "/dev/graphics/fb%u";
+    char name[64] = {0};
+    snprintf(name, 64, devtmpl, HWC_DISPLAY_PRIMARY);
+    fb_fd = open(name, O_RDWR);
+
+    if(fb_fd < 0) {
+        ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
+        return -errno;
+    }
+
+    if(isPanelLVDS(0)){
+        num_channels = 2;
+    }
+
+    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        ALOGE("%s:Error in ioctl FBIOGET_VSCREENINFO: %s", __FUNCTION__,
+                strerror(errno));
+        close(fb_fd);
+        return -errno;
+    }
+    params->param1 = info.reserved[3] * num_channels;
+    params->param2 = info.pixclock * num_channels;
+    ALOGE_IF(QCLIENT_DEBUG,"%s: Current framerate is %f and"
+            "Current pixclock is %f",__FUNCTION__,params->param1,
+            params->param2);
+
     return NO_ERROR;
 }
 
@@ -112,17 +151,137 @@ status_t QClient::setOverScanCompensationParams(
 
 status_t QClient::startConfigChange(
         CONFIG_CHANGE_TYPE configChangeType){
+
+    ALOGE_IF(QCLIENT_DEBUG," %s configChangeType %s",__FUNCTION__,
+            getConfigTypeString(configChangeType));
+
+        switch(mHwcContext->mConfigChangeType) {
+        case NO_CORRECTION:
+            /* No ConfigChanges are in progress. Start new ConfigChange */
+            switch(configChangeType) {
+                case PIXEL_CLOCK_CORRECTION:
+                case PICTURE_QUALITY_CORRECTION:
+                    ALOGE_IF(QCLIENT_DEBUG,"%s: %s start", __FUNCTION__,
+                            getConfigTypeString(configChangeType));
+                    mHwcContext->mConfigChangeType = configChangeType;
+                    mHwcContext->mConfigChangeState->setState(
+                            CONFIG_CHANGE_START_BEGIN);
+                    inValidate();
+            pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+            while(mHwcContext->mConfigChangeState->getState() !=
+                    CONFIG_CHANGE_START_FINISH) {
+                pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                        &(mHwcContext->mConfigChangeLock));
+            }
+            pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+                    break;
+                default:
+                    ALOGE("%s: InValid configChangeType %s",__FUNCTION__,
+                            getConfigTypeString(configChangeType));
+                    return BAD_VALUE;
+            }
+            break;
+        case PIXEL_CLOCK_CORRECTION:
+        case PICTURE_QUALITY_CORRECTION:
+            ALOGE("%s: ConfigChange %s in progress."
+                " Aborting new ConfigChange %s",__FUNCTION__,
+                getConfigTypeString(mHwcContext->mConfigChangeType),
+                getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
     return NO_ERROR;
 }
 
 status_t QClient::doConfigChange(
         CONFIG_CHANGE_TYPE configChangeType,
         ConfigChangeParams params) {
+
+    ALOGE_IF(QCLIENT_DEBUG," %s configChangeType %s params are %f %f",
+            __FUNCTION__, getConfigTypeString(configChangeType),
+            params.param1,params.param2);
+        switch(mHwcContext->mConfigChangeType) {
+        case NO_CORRECTION:
+            ALOGE("%s: No configChange in progress. Cannot do %s",
+                    __FUNCTION__,getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        case PIXEL_CLOCK_CORRECTION:
+        case PICTURE_QUALITY_CORRECTION:
+            if(mHwcContext->mConfigChangeType == configChangeType){
+                ALOGE_IF(QCLIENT_DEBUG,"%s: %s do", __FUNCTION__,
+                        getConfigTypeString(configChangeType));
+                mHwcContext->mConfigChangeParams = params;
+                mHwcContext->mConfigChangeState->setState(
+                        CONFIG_CHANGE_DO_BEGIN);
+                inValidate();
+        pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+        while(mHwcContext->mConfigChangeState->getState() !=
+                CONFIG_CHANGE_DO_FINISH) {
+            pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                    &(mHwcContext->mConfigChangeLock));
+        }
+        pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+            } else {
+                ALOGE("%s: ConfigChange %s in progress."
+                        " Aborting new ConfigChange %s",__FUNCTION__,
+                        getConfigTypeString(mHwcContext->mConfigChangeType),
+                        getConfigTypeString(configChangeType));
+                return BAD_VALUE;
+            }
+            break;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
     return NO_ERROR;
 }
 
 status_t QClient::stopConfigChange(
         CONFIG_CHANGE_TYPE configChangeType) {
+
+    ALOGE_IF(QCLIENT_DEBUG," %s configChangeType %s",__FUNCTION__,
+            getConfigTypeString(configChangeType));
+
+    switch(mHwcContext->mConfigChangeType) {
+        case NO_CORRECTION:
+            ALOGE("%s: No configChange in progress. Cannot stop %s",
+                    __FUNCTION__,getConfigTypeString(configChangeType));
+            return BAD_VALUE;
+        case PIXEL_CLOCK_CORRECTION:
+        case PICTURE_QUALITY_CORRECTION:
+            switch(configChangeType) {
+                case PIXEL_CLOCK_CORRECTION:
+                case PICTURE_QUALITY_CORRECTION:
+                    ALOGE_IF(QCLIENT_DEBUG,"%s: %s stop", __FUNCTION__,
+                            getConfigTypeString(configChangeType));
+                    mHwcContext->mConfigChangeType = NO_CORRECTION;
+                    mHwcContext->mConfigChangeState->setState(
+                             CONFIG_CHANGE_STOP_BEGIN);
+                    inValidate();
+            pthread_mutex_lock(&(mHwcContext->mConfigChangeLock));
+            while(mHwcContext->mConfigChangeState->getState() !=
+                    CONFIG_CHANGE_STOP_FINISH) {
+                pthread_cond_wait(&(mHwcContext->mConfigChangeCond),
+                        &(mHwcContext->mConfigChangeLock));
+            }
+            pthread_mutex_unlock(&(mHwcContext->mConfigChangeLock));
+                    break;
+                default:
+                    ALOGE("%s: InValid configChangeType %s",__FUNCTION__,
+                            getConfigTypeString(configChangeType));
+                    return BAD_VALUE;
+            }
+            break;
+        default:
+            ALOGE("%s: unknown mconfigChangeType %s", __FUNCTION__,
+                    getConfigTypeString(mHwcContext->mConfigChangeType));
+            return BAD_VALUE;
+    }
+
     return NO_ERROR;
 }
 
@@ -140,7 +299,37 @@ status_t QClient::setPPParams(VideoPPData pParams,
 }
 
 status_t QClient::setPQCState(int value) {
+    if((value == PQC_START) || (value == qhwc::PQC_STOP)) {
+        mHwcContext->mPQCState = value;
+        //Invalidate
+        hwc_procs* proc = (hwc_procs*)mHwcContext->proc;
+        if(!proc) {
+            ALOGE("%s: HWC proc not registered", __FUNCTION__);
+            return false;
+        } else {
+            /* Trigger redraw */
+            ALOGE("%s: HWC Invalidate!!", __FUNCTION__);
+            proc->invalidate(proc);
+            return true;
+        }
+    }
+    else{
+        ALOGE("invalid Value : %d",value);
+        return BAD_VALUE;
+    }
     return NO_ERROR;
+}
+
+void QClient::inValidate() {
+    //Invalidate
+    hwc_procs* proc = (hwc_procs*)mHwcContext->proc;
+    if(!proc) {
+        ALOGE("%s: HWC proc not registered", __FUNCTION__);
+    } else {
+        /* Trigger redraw */
+        ALOGD_IF(QCLIENT_DEBUG, "%s: Invalidate !!", __FUNCTION__);
+        proc->invalidate(proc);
+    }
 }
 
 void QClient::securing(uint32_t startEnd) {

@@ -26,6 +26,10 @@ endif
 common_flags += -DDEBUG_CALC_FPS -Wno-missing-field-initializers
 common_flags += -Werror
 
+ifeq ($(TARGET_USES_PLL_CALCULATION),true)
+    common_flags  += -DUSES_PLL_CALCULATION
+endif
+
 ifeq ($(ARCH_ARM_HAVE_NEON),true)
     common_flags += -D__ARM_HAVE_NEON
 endif
