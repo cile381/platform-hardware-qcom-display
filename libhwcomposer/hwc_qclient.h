@@ -70,6 +70,8 @@ public:
     virtual android::status_t stopConfigChange(
         CONFIG_CHANGE_TYPE configChangeType);
     virtual android::status_t setPQCState(int value);
+    virtual  android::status_t ConfigChange(CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params);
 
 private:
     //Notifies of Media Player death

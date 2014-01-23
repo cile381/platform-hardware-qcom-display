@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -27,42 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-//#define LOG_NDEBUG 0
-#define LOG_TAG "hwc_pllchange"
-
-#include <utils/Log.h>
-#include <utils/Trace.h>
-#include <binder/IServiceManager.h>
-#include "hwc_ppmetadata.h"
-#include <IQService.h>
-#include <hwc_utils.h>
-#include <fb_priv.h>
-#include <cutils/properties.h>
-#include <hwc_pllchange.h>
-
-using namespace android;
-using namespace qService;
-
-
-int hwc_setoutputPLL(float mFps,float Drift)
-{
-    sp<IServiceManager> gServiceManager = NULL;
-    sp<IQService> gBinder = NULL;
-    qhwc::ConfigChangeParams params;
-    int ret = 0;
-    gServiceManager = defaultServiceManager();
-    if(gServiceManager != NULL)
-    {
-        gBinder = interface_cast<IQService>(gServiceManager->getService(String16("display.hwcservice")));
-        if(gBinder != NULL)
-        {
-            params.param2 = Drift;
-            params.param1 = mFps;
-            ret = gBinder->ConfigChange(qhwc::PIXEL_CLOCK_CORRECTION,params);
-            if(ret < 0 ) {
-                ALOGE("failed gBinder->ConfigChange");
-            }
-        }
-    }
-    return 0;
-}
+#ifndef HWC_PLLCHANGE_H
+#define HWC_PLLCHANGE_H
+int hwc_setoutputPLL(float mFps,float Drift);
+#endif

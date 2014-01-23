@@ -57,6 +57,9 @@ public:
     virtual android::status_t stopConfigChange(
             CONFIG_CHANGE_TYPE configChangeType) = 0;
     virtual android::status_t setPQCState(int value) = 0;
+    virtual android::status_t ConfigChange(CONFIG_CHANGE_TYPE configChangeType,
+            ConfigChangeParams params) = 0;
+
 };
 
 // ----------------------------------------------------------------------------

@@ -70,6 +70,8 @@ public:
     virtual android::status_t setPPParams(VideoPPData pParams,
         PP_Video_Layer_Type numVideoLayer);
     virtual android::status_t setPQCState(int value);
+    virtual android::status_t ConfigChange(CONFIG_CHANGE_TYPE configChangeType,
+        ConfigChangeParams params);
     virtual void setExtOrientation(uint32_t orientation);
     virtual void setBufferMirrorMode(uint32_t enable);
     virtual android::status_t setMode(int32_t mode);
