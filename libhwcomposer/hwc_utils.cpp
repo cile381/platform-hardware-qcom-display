@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation All rights reserved.
+ * Copyright (C) 2012-2014, The Linux Foundation All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -1091,6 +1091,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     memset(&data, 0, sizeof(data));
     data.acq_fen_fd = acquireFd;
     data.rel_fen_fd = &releaseFd;
+    data.flags = MDP_BUF_SYNC_FLAG_WAIT;
 
     char property[PROPERTY_VALUE_MAX];
     if(property_get("debug.egl.swapinterval", property, "1") > 0) {
