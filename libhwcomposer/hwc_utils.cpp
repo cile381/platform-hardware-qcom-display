@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation All rights reserved.
+ * Copyright (C) 2012-2014, The Linux Foundation All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -1488,6 +1488,10 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         return -1;
     }
 
+    if (layer->flags & HWC_VPU_PIPE) {
+        ovutils::setMdpFlags(mdpFlags, ovutils::OV_MDP_VPU_PIPE);
+    }
+
     MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
 
     hwc_rect_t crop = integerizeSourceCrop(layer->sourceCropf);
@@ -1591,6 +1595,10 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(!hnd) {
         ALOGE("%s: layer handle is NULL", __FUNCTION__);
         return -1;
+    }
+
+    if (layer->flags & HWC_VPU_PIPE) {
+        ovutils::setMdpFlags(mdpFlagsL, ovutils::OV_MDP_VPU_PIPE);
     }
 
     MetaData_t *metadata = (MetaData_t *)hnd->base_metadata;
