@@ -485,9 +485,6 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ret = -1;
         }
 
-        if(ctx->mVPUClient != NULL)
-            ctx->mVPUClient->draw(ctx, dpy, list);
-
         //TODO We dont check for SKIP flag on this layer because we need PAN
         //always. Last layer is always FB
         private_handle_t *hnd = (private_handle_t *)fbLayer->handle;
@@ -507,6 +504,9 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ALOGE("%s: display commit fail for %d dpy!", __FUNCTION__, dpy);
             ret = -1;
         }
+
+        if(ctx->mVPUClient != NULL)
+            ctx->mVPUClient->draw(ctx, dpy, list);
     }
 
     closeAcquireFds(list);

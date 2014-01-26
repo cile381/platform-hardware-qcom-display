@@ -302,8 +302,10 @@ bool MDPVersion::is8084() {
 }
 
 bool MDPVersion::is8092() {
-    return (mMdpRev >= MDSS_MDP_HW_REV_200 and
-            mMdpRev < MDSS_MDP_HW_REV_206);
+    // TODO: verify
+    return true;
+    /* return (mMdpRev >= MDSS_MDP_HW_REV_200 and */
+    /*         mMdpRev < MDSS_MDP_HW_REV_206); */
 }
 
 }; //namespace qdutils

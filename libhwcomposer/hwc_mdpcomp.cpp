@@ -1726,6 +1726,15 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         if(mCurrentFrame.isFBComposed[i]) continue;
 
         hwc_layer_1_t *layer = &list->hwLayers[i];
+
+        // use the dummy buffer for the first video frame (vpu)
+        private_handle_t *hnd2 = (private_handle_t *)layer->handle;
+        if(ctx->mVPUClient != NULL && ctx->mVPUClient->isFirstBuffer(mDpy, i)) {
+            layer->handle = ctx->mVPUClient->mHnd;
+            layerProp[i].mFlags |= HWC_MDPCOMP;
+            ctx->mVPUClient->firstBufferDisplayed(mDpy, i);
+        }
+
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         if(!hnd) {
             if (!(layer->flags & HWC_COLOR_FILL)) {
@@ -1808,6 +1817,7 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                         __FUNCTION__, mDpy);
                 return false;
             }
+            layer->handle = hnd2;
         }
 
         layerProp[i].mFlags &= ~HWC_MDPCOMP;
@@ -2137,6 +2147,15 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         if(mCurrentFrame.isFBComposed[i]) continue;
 
         hwc_layer_1_t *layer = &list->hwLayers[i];
+
+        // TEMP change: use the dummy buffer for the first video frame (vpu)
+        private_handle_t *hnd2 = (private_handle_t *)layer->handle;
+        if(ctx->mVPUClient != NULL && ctx->mVPUClient->isFirstBuffer(mDpy, i)) {
+            layer->handle = ctx->mVPUClient->mHnd;
+            layerProp[i].mFlags |= HWC_MDPCOMP;
+            ctx->mVPUClient->firstBufferDisplayed(mDpy, i);
+        }
+
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         if(!hnd) {
             ALOGE("%s handle null", __FUNCTION__);
@@ -2232,6 +2251,7 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                     return false;
                 }
             }
+            layer->handle = hnd2;
         }
 
         layerProp[i].mFlags &= ~HWC_MDPCOMP;

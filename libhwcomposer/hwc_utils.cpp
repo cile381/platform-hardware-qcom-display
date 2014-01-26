@@ -1312,7 +1312,8 @@ void setMdpFlags(hwc_layer_1_t *layer,
                     ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
         }
         if(metadata && (metadata->operation & PP_PARAM_INTERLACED) &&
-                metadata->interlaced) {
+                metadata->interlaced &&
+                (!qdutils::MDPVersion::getInstance().is8092())) {
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_DEINTERLACE);
         }
