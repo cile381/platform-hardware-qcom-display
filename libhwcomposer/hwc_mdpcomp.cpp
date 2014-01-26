@@ -18,6 +18,7 @@
 
 #include <math.h>
 #include "hwc_mdpcomp.h"
+#include "hwc_vpuclient.h"
 #include <sys/ioctl.h>
 #include "external.h"
 #include "virtual.h"
@@ -188,7 +189,8 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
     for(int index = 0; index < ctx->listStats[mDpy].numAppLayers; index++) {
         hwc_layer_1_t* layer = &(list->hwLayers[index]);
         if(!mCurrentFrame.isFBComposed[index]) {
-            layerProp[index].mFlags |= HWC_MDPCOMP;
+            if(!(layerProp[index].mFlags & HWC_VPUCOMP))
+                layerProp[index].mFlags |= HWC_MDPCOMP;
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
         } else {
@@ -288,6 +290,12 @@ bool MDPComp::LayerCache::isSameFrame(const FrameInfo& curFrame,
     return true;
 }
 
+bool MDPComp::supportedVPULayer(hwc_context_t* ctx, hwc_layer_1_t* layer,
+                                                            int dpy, int idx) {
+    return (ctx->mVPUClient &&
+                    ctx->mVPUClient->supportedVPULayer(ctx, layer,mDpy, idx));
+}
+
 bool MDPComp::isSupportedForMDPComp(hwc_context_t *ctx, hwc_layer_1_t* layer) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
     if((not isYuvBuffer(hnd) and has90Transform(layer)) or
@@ -375,7 +383,7 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
 }
 
 ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type,
-        int mixer) {
+                                   int mixer) {
     overlay::Overlay& ov = *ctx->mOverlay;
     ovutils::eDest mdp_pipe = ovutils::OV_INVALID;
 
@@ -396,7 +404,11 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type,
             //Requested only for RGB pipe
             break;
         }
-    case  MDPCOMP_OV_VG:
+    case MDPCOMP_OV_VG:
+        // dont allocate VID pipes for other layers for mpq8092
+        if(qdutils::MDPVersion::getInstance().is8092() && type!=MDPCOMP_OV_VG)
+            break;
+
         return ov.nextPipe(ovutils::OV_MDP_PIPE_VG, mDpy, mixer);
     default:
         ALOGE("%s: Invalid pipe type",__FUNCTION__);
@@ -1080,9 +1092,9 @@ bool  MDPComp::markLayersForCaching(hwc_context_t* ctx,
             if(!mCurrentFrame.drop[i]){
                 //If an unsupported layer is being attempted to
                 //be pulled out we should fail
-                if(not isSupportedForMDPComp(ctx, layer)) {
+                if(not isSupportedForMDPComp(ctx, layer))
                     return false;
-                }
+
                 mCurrentFrame.isFBComposed[i] = false;
             }
         }
@@ -1107,6 +1119,7 @@ void MDPComp::updateLayerCache(hwc_context_t* ctx,
 
     for(int i = 0; i < numAppLayers; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
+
         if (mCachedFrame.hnd[i] == list->hwLayers[i].handle) {
             if(!mCurrentFrame.drop[i])
                 fbCount++;
@@ -1212,7 +1225,9 @@ bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
                 }
                 continue;
             }
-            if(configure(ctx, layer, mCurrentFrame.mdpToLayer[mdpIndex]) != 0 ){
+
+            if(configure(ctx, layer, mCurrentFrame.mdpToLayer[mdpIndex],
+                                                                index) != 0 ) {
                 ALOGD_IF(isDebug(), "%s: Failed to configure overlay for \
                         layer %d",__FUNCTION__, index);
                 return false;
@@ -1475,6 +1490,11 @@ void MDPCompNonSplit::adjustForSourceSplit(hwc_context_t *ctx,
  */
 int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                              PipeLayerPair& PipeLayerPair) {
+    return configure(ctx, layer, PipeLayerPair, -1);
+}
+
+int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+                             PipeLayerPair& PipeLayerPair, int index) {
     MdpPipeInfoNonSplit& mdp_info =
         *(static_cast<MdpPipeInfoNonSplit*>(PipeLayerPair.pipeInfo));
     eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
@@ -1485,8 +1505,17 @@ int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipe: %d",
              __FUNCTION__, layer, zOrder, dest);
 
-    return configureNonSplit(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
-                           &PipeLayerPair.rot);
+    int ret = configureNonSplit(ctx, layer, mDpy, mdpFlags, zOrder, isFg, dest,
+                        &PipeLayerPair.rot, index);
+
+    if(index != -1 && ctx->mVPUClient != NULL) {
+        // setting the pipes structure
+        ctx->mVPUClient->setPipeId(mDpy, index,
+                                   ctx->mOverlay->getPipeId(mdp_info.index));
+    }
+    return ret;
+
+
 }
 
 bool MDPCompNonSplit::arePipesAvailable(hwc_context_t *ctx,
@@ -1541,8 +1570,38 @@ bool MDPCompNonSplit::areVGPipesAvailable(hwc_context_t *ctx,
     return true;
 }
 
+bool MDPCompNonSplit::allocReservedLayerPipes(hwc_context_t* ctx,
+                                         hwc_display_contents_1_t* list) {
+    overlay::Overlay& ov = *ctx->mOverlay;
+    for(int index = 0; index < mCurrentFrame.layerCount; index++) {
+        int pipeid = -1;
+        int mdpIndex = mCurrentFrame.layerToMDP[index];
+        PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
+        info.pipeInfo = new MdpPipeInfoNonSplit;
+        MdpPipeInfoNonSplit& pipe_info = *(MdpPipeInfoNonSplit*)info.pipeInfo;
+
+        if(ctx->mVPUClient != NULL)
+            pipeid = ctx->mVPUClient->getPipeId(mDpy, index, 0);
+        if(pipeid != -1) {
+            // there is a reserved pipe for this layer.
+            pipe_info.index = ov.reservePipe(pipeid);
+            if(pipe_info.index == ovutils::OV_INVALID) {
+                ALOGD_IF(isDebug(), "%s: Unable to get reserved pipe: layer#%d",
+                    __FUNCTION__, index);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
+                                            hwc_display_contents_1_t* list) {
+    // checking if the pipes are reserved for any layer,
+    // if yes, then updating the index of the pipes
+    if(!allocReservedLayerPipes(ctx, list))
+        return false;
+
     for(int index = 0; index < mCurrentFrame.layerCount; index++) {
 
         if(mCurrentFrame.isFBComposed[index]) continue;
@@ -1557,10 +1616,14 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
 
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoNonSplit;
         info.rot = NULL;
         MdpPipeInfoNonSplit& pipe_info = *(MdpPipeInfoNonSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
+
+        // pipe already reserved; no need to allocate
+        if(ctx->mVPUClient != NULL &&
+                ctx->mVPUClient->getPipeId(mDpy, index, 0) != -1)
+            continue;
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
@@ -1835,8 +1898,7 @@ bool MDPCompSplit::areVGPipesAvailable(hwc_context_t *ctx,
 }
 
 bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-        MdpPipeInfoSplit& pipe_info,
-        ePipeType type) {
+                                MdpPipeInfoSplit& pipe_info, ePipeType type) {
     const int xres = ctx->dpyAttr[mDpy].xres;
     const int lSplit = getLeftSplit(ctx, mDpy);
 
@@ -1859,8 +1921,54 @@ bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
     return true;
 }
 
+bool MDPCompSplit::allocReservedLayerPipes(hwc_context_t* ctx,
+                                         hwc_display_contents_1_t* list) {
+    overlay::Overlay& ov = *ctx->mOverlay;
+    for(int index = 0; index < mCurrentFrame.layerCount; index++) {
+        int lpipeid = -1;
+        int rpipeid = -1;
+        int mdpIndex = mCurrentFrame.layerToMDP[index];
+        PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
+        info.pipeInfo = new MdpPipeInfoSplit;
+        MdpPipeInfoSplit& pipe_info = *(MdpPipeInfoSplit*)info.pipeInfo;
+
+        if(ctx->mVPUClient != NULL) {
+            lpipeid = ctx->mVPUClient->getPipeId(mDpy, index, 0);
+            rpipeid = ctx->mVPUClient->getPipeId(mDpy, index, 1);
+        }
+
+        if(lpipeid != -1 && rpipeid != -1) {
+            pipe_info.lIndex = ov.reservePipe(lpipeid);
+            if(pipe_info.lIndex == ovutils::OV_INVALID) {
+                ALOGD_IF(isDebug(), "%s: Unable to get reserved pipe-lsplit:\
+                         layer#%d", __FUNCTION__, index);
+                return false;
+            }
+
+            pipe_info.rIndex = ov.reservePipe(rpipeid);
+            if(pipe_info.rIndex == ovutils::OV_INVALID) {
+                ALOGD_IF(isDebug(), "%s: Unable to get reserved pipe-rsplit:\
+                         layer#%d", __FUNCTION__, index);
+                return false;
+            }
+        }
+        else if(lpipeid != -1 || rpipeid != -1) {
+            ALOGD_IF(isDebug(), "%s: Bug: only one pipe reserved!",
+                     __FUNCTION__);
+            return false;
+        }
+    }
+    return true;
+}
+
 bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
+
+    // checking if the pipes are reserved for any layer,
+    // if yes, then updating the index of the pipes
+    if(!allocReservedLayerPipes(ctx, list))
+        return false;
+
     for(int index = 0 ; index < mCurrentFrame.layerCount; index++) {
 
         if(mCurrentFrame.isFBComposed[index]) continue;
@@ -1878,10 +1986,15 @@ bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
         }
         int mdpIndex = mCurrentFrame.layerToMDP[index];
         PipeLayerPair& info = mCurrentFrame.mdpToLayer[mdpIndex];
-        info.pipeInfo = new MdpPipeInfoSplit;
         info.rot = NULL;
         MdpPipeInfoSplit& pipe_info = *(MdpPipeInfoSplit*)info.pipeInfo;
         ePipeType type = MDPCOMP_OV_ANY;
+
+        // the reserved pipes are already allocated; not allocating again
+        if( ctx->mVPUClient != NULL &&
+                (ctx->mVPUClient->getPipeId(mDpy, index, 0) != -1) &&
+                    (ctx->mVPUClient->getPipeId(mDpy, index, 1) != -1))
+            continue;
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
@@ -1925,7 +2038,13 @@ int MDPCompSplit::configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
  * Configures pipe(s) for MDP composition
  */
 int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
-        PipeLayerPair& PipeLayerPair) {
+                             PipeLayerPair& PipeLayerPair) {
+    return configure(ctx, layer, PipeLayerPair, -1);
+}
+
+
+int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
+        PipeLayerPair& PipeLayerPair, int index) {
     MdpPipeInfoSplit& mdp_info =
         *(static_cast<MdpPipeInfoSplit*>(PipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
@@ -1937,8 +2056,16 @@ int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     ALOGD_IF(isDebug(),"%s: configuring: layer: %p z_order: %d dest_pipeL: %d"
              "dest_pipeR: %d",__FUNCTION__, layer, zOrder, lDest, rDest);
 
-    return configureSplit(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
-                            rDest, &PipeLayerPair.rot);
+    int ret = configureSplit(ctx, layer, mDpy, mdpFlagsL, zOrder, isFg, lDest,
+                            rDest, &PipeLayerPair.rot, index);
+
+    if(ctx->mVPUClient != NULL) {
+        // setting the pipes structure
+        ctx->mVPUClient->setPipeId(mDpy, index,
+                                   ctx->mOverlay->getPipeId(mdp_info.lIndex),
+                                   ctx->mOverlay->getPipeId(mdp_info.rIndex));
+    }
+    return ret;
 }
 
 bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {

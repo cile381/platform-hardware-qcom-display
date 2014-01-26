@@ -31,6 +31,7 @@
 #include <IQService.h>
 #include <hwc_utils.h>
 #include <hwc_vpuclient.h>
+#include <mdp_version.h>
 
 #define QCLIENT_DEBUG 0
 
@@ -99,8 +100,9 @@ static android::status_t vpuCommand(hwc_context_t *ctx,
         const Parcel* inParcel,
         Parcel* outParcel) {
     status_t result = NO_INIT;
-#ifdef VPU_TARGET
-    result = ctx->mVPUClient->processCommand(command, inParcel, outParcel);
+#ifdef QCOM_BSP
+    if(qdutils::MDPVersion::getInstance().is8092())
+        result = ctx->mVPUClient->processCommand(command, inParcel, outParcel);
 #endif
     return result;
 }
