@@ -413,13 +413,13 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
         ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
         ret = false;
     } else if(qdutils::MDPVersion::getInstance().is8x26() &&
-            ctx->mVideoTransFlag && ctx->mVirtualDisplay->isConnected()) {
+            ctx->mVideoTransFlag &&
+            isSecondaryConnected(ctx)) {
         //1 Padding round to shift pipes across mixers
         ALOGD_IF(isDebug(),"%s: MDP Comp. video transition padding round",
                 __FUNCTION__);
         ret = false;
-    } else if(ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isConfiguring ||
-              ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isConfiguring) {
+    } else if(isSecondaryConfiguring(ctx)) {
         ALOGD_IF( isDebug(),"%s: External Display connection is pending",
                   __FUNCTION__);
         ret = false;
@@ -541,6 +541,7 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
                                 hwc_display_contents_1_t* list){
 
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+    int priDispW = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
 
     if(sIdleFallBack && !ctx->listStats[mDpy].secureUI) {
         ALOGD_IF(isDebug(), "%s: Idle fallback dpy %d",__FUNCTION__, mDpy);
@@ -551,6 +552,17 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         ALOGD_IF(isDebug(),"%s: SKIP present: %d",
                 __FUNCTION__,
                 isSkipPresent(ctx, mDpy));
+        return false;
+    }
+
+    if(mDpy > HWC_DISPLAY_PRIMARY && (priDispW > MAX_DISPLAY_DIM) &&
+                              (ctx->dpyAttr[mDpy].xres < MAX_DISPLAY_DIM)) {
+        // Disable MDP comp on Secondary when the primary is highres panel and
+        // the secondary is a normal 1080p, because, MDP comp on secondary under
+        // in such usecase, decimation gets used for downscale and there will be
+        // a quality mismatch when there will be a fallback to GPU comp
+        ALOGD_IF(isDebug(), "%s: Disable MDP Compositon for Secondary Disp",
+              __FUNCTION__);
         return false;
     }
 
@@ -975,11 +987,13 @@ int MDPComp::getBatch(hwc_display_contents_1_t* list,
         int& maxBatchCount) {
     int i = 0;
     int fbZOrder =-1;
+    int droppedLayerCt = 0;
     while (i < mCurrentFrame.layerCount) {
         int batchCount = 0;
         int batchStart = i;
         int batchEnd = i;
-        int fbZ = batchStart;
+        /* Adjust batch Z order with the dropped layers so far */
+        int fbZ = batchStart - droppedLayerCt;
         int firstZReverseIndex = -1;
         int updatingLayersAbove = 0;//Updating layer count in middle of batch
         while(i < mCurrentFrame.layerCount) {
@@ -994,6 +1008,7 @@ int MDPComp::getBatch(hwc_display_contents_1_t* list,
             } else {
                 if(mCurrentFrame.drop[i]) {
                     i++;
+                    droppedLayerCt++;
                     continue;
                 } else if(updatingLayersAbove <= 0) {
                     batchCount++;
