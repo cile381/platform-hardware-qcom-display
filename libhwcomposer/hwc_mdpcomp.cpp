@@ -369,7 +369,7 @@ ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type) {
 bool MDPComp::isFrameDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list)
 {
     bool ret = true;
-    bool isSecureYUVLayer = false;
+    bool isYuvLayer = false;
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
 
     if(!isEnabled()) {
@@ -380,14 +380,14 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list)
     for(int i = 0; i < numAppLayers; ++i) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
-        if(isYuvBuffer(hnd) && isSecureBuffer(hnd)){
-            isSecureYUVLayer = true;
+        if(isYuvBuffer(hnd)){
+            isYuvLayer = true;
         }
     }
 
     /* Need a check for secureYUVlayers to avoid composing them
        through FB during pause/resume events */
-    if(!isSecureYUVLayer &&
+    if(!isYuvLayer &&
        (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isConfiguring ||
         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isConfiguring ||
         ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause ||
@@ -444,7 +444,7 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
             if((isSecureBuffer(hnd)) &&
               (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isConfiguring ||
                ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isConfiguring ||
-               ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause ||
+               ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause||
                ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause)) {
                 ALOGD_IF(isDebug(), "%s: Fall back to VideoOnlyComposition for"
                          "secure YUV layers during external isConfiguring",
