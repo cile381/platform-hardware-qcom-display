@@ -67,9 +67,7 @@ void HWCVirtualVDS::destroy(hwc_context_t *ctx, size_t numDisplays,
     int dpy = HWC_DISPLAY_VIRTUAL;
 
     //Cleanup virtual display objs, since there is no explicit disconnect
-    if(ctx->dpyAttr[dpy].connected &&
-        (numDisplays <= HWC_NUM_PHYSICAL_DISPLAY_TYPES ||
-        displays[dpy] == NULL)) {
+    if(ctx->dpyAttr[dpy].connected && (displays[dpy] == NULL)) {
         ctx->dpyAttr[dpy].connected = false;
 
         if(ctx->mFBUpdate[dpy]) {
@@ -132,8 +130,11 @@ int HWCVirtualVDS::set(hwc_context_t *ctx, hwc_display_contents_1_t *list) {
         if(fbLayer->handle && !isSecondaryConfiguring(ctx) &&
                 !ctx->mMDPComp[dpy]->isGLESOnlyComp()) {
             private_handle_t *ohnd = (private_handle_t *)list->outbuf;
+            int format = ohnd->format;
+            if (format == HAL_PIXEL_FORMAT_RGBA_8888)
+                format = HAL_PIXEL_FORMAT_RGBX_8888;
             Writeback::getInstance()->setOutputFormat(
-                                    utils::getMdpFormat(ohnd->format));
+                                    utils::getMdpFormat(format));
 
             int fd = -1; //FenceFD from the Copybit
             hwc_sync(ctx, list, dpy, fd);
@@ -180,7 +181,8 @@ int HWCVirtualV4L2::prepare(hwc_composer_device_1 *dev,
 
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive &&
-            ctx->dpyAttr[dpy].connected) {
+            ctx->dpyAttr[dpy].connected &&
+            canUseMDPforVirtualDisplay(ctx,list)) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
         if(!ctx->dpyAttr[dpy].isPause) {
             ctx->dpyAttr[dpy].isConfiguring = false;
@@ -211,7 +213,8 @@ int HWCVirtualV4L2::set(hwc_context_t *ctx, hwc_display_contents_1_t *list) {
 
     if (LIKELY(list) && ctx->dpyAttr[dpy].isActive &&
             ctx->dpyAttr[dpy].connected &&
-            !ctx->dpyAttr[dpy].isPause) {
+            (!ctx->dpyAttr[dpy].isPause) &&
+            canUseMDPforVirtualDisplay(ctx,list)) {
         uint32_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
         int fd = -1; //FenceFD from the Copybit(valid in async mode)
