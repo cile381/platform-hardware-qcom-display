@@ -54,6 +54,34 @@ namespace ovutils = overlay::utils;
 
 namespace qhwc {
 
+bool isValidResolution(hwc_context_t *ctx, uint32_t xres, uint32_t yres)
+{
+    return !((xres > qdutils::MAX_DISPLAY_DIM &&
+                !isDisplaySplit(ctx, HWC_DISPLAY_PRIMARY)) ||
+            (xres < MIN_DISPLAY_XRES || yres < MIN_DISPLAY_YRES));
+}
+
+void changeResolution(hwc_context_t *ctx, int xres_orig, int yres_orig) {
+    //Store original display resolution.
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_orig = xres_orig;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_orig = yres_orig;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].customFBSize = false;
+
+    char property[PROPERTY_VALUE_MAX] = {'\0'};
+    char *yptr = NULL;
+    if (property_get("debug.hwc.fbsize", property, NULL) > 0) {
+        yptr = strcasestr(property,"x");
+        int xres = atoi(property);
+        int yres = atoi(yptr + 1);
+        if (isValidResolution(ctx,xres,yres) &&
+                 xres != xres_orig && yres != yres_orig) {
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = xres;
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres = yres;
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].customFBSize = true;
+        }
+    }
+}
+
 static int openFramebufferDevice(hwc_context_t *ctx)
 {
     struct fb_fix_screeninfo finfo;
@@ -116,6 +144,9 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xdpi = xdpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
+
+    //To change resolution of primary display
+    changeResolution(ctx, info.xres, info.yres);
 
     //Unblank primary on first boot
     if(ioctl(fb_fd, FBIOBLANK,FB_BLANK_UNBLANK) < 0) {
@@ -201,8 +232,11 @@ void initContext(hwc_context_t *ctx)
     // Initialize device orientation to its default orientation
     ctx->deviceOrientation = 0;
     ctx->mBufferMirrorMode = false;
+    ctx->mVPUClient = NULL;
+
 #ifdef VPU_TARGET
-    ctx->mVPUClient = new VPUClient();
+    if(qdutils::MDPVersion::getInstance().is8092())
+        ctx->mVPUClient = new VPUClient(ctx);
 #endif
 
     ALOGI("Initializing Qualcomm Hardware Composer");
@@ -239,9 +273,8 @@ void closeContext(hwc_context_t *ctx)
     }
 
 #ifdef VPU_TARGET
-    if(ctx->mVPUClient) {
+    if(ctx->mVPUClient != NULL)
         delete ctx->mVPUClient;
-    }
 #endif
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
@@ -1271,6 +1304,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
               dpy, list->numHwLayers);
     }
 
+    LayerProp *layerProp = ctx->layerProp[dpy];
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
         if(list->hwLayers[i].compositionType == HWC_OVERLAY ||
            list->hwLayers[i].compositionType == HWC_BLIT ||
@@ -1282,8 +1316,10 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                 // Release all the app layer fds immediately,
                 // if animation is in progress.
                 list->hwLayers[i].releaseFenceFd = -1;
-            } else if(list->hwLayers[i].releaseFenceFd < 0) {
-                //If rotator has not already populated this field.
+            } else if(list->hwLayers[i].releaseFenceFd < 0 &&
+                    !(layerProp[i].mFlags & HWC_VPUCOMP)) {
+                //If rotator has not already populated this field
+                // & if it's a not VPU layer
                 list->hwLayers[i].releaseFenceFd = dup(releaseFd);
             }
         }
@@ -1330,8 +1366,10 @@ void setMdpFlags(hwc_layer_1_t *layer,
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
         }
+        // in mpq, deinterlacing is done in vpu
         if(metadata && (metadata->operation & PP_PARAM_INTERLACED) &&
-                metadata->interlaced) {
+                metadata->interlaced &&
+                (!qdutils::MDPVersion::getInstance().is8092())) {
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_DEINTERLACE);
         }
@@ -1518,6 +1556,17 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     int rotFlags = ovutils::ROT_FLAGS_NONE;
     uint32_t format = ovutils::getMdpFormat(hnd->format, isTileRendered(hnd));
     Whf whf(getWidth(hnd), getHeight(hnd), format, hnd->size);
+    LayerProp *layerProp = ctx->layerProp[dpy];
+
+#ifdef VPU_TARGET
+    if(ctx->mVPUClient != NULL &&
+            ctx->mVPUClient->supportedVPULayer(dpy, layer)) {
+        whf.format = getMdpFormat(
+                ctx->mVPUClient->getLayerFormat(dpy, layer));
+        whf.w = ctx->mVPUClient->getWidth(dpy, layer);
+        whf.h = ctx->mVPUClient->getHeight(dpy, layer);
+    }
+#endif
 
     // Handle R/B swap
     if (layer->flags & HWC_FORMAT_RB_SWAP) {
@@ -1625,6 +1674,17 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     int rotFlags = ROT_FLAGS_NONE;
     uint32_t format = ovutils::getMdpFormat(hnd->format, isTileRendered(hnd));
     Whf whf(getWidth(hnd), getHeight(hnd), format, hnd->size);
+    LayerProp *layerProp = ctx->layerProp[dpy];
+
+#ifdef VPU_TARGET
+    if(ctx->mVPUClient != NULL &&
+            ctx->mVPUClient->supportedVPULayer(dpy, layer)) {
+        whf.format = getMdpFormat(
+                ctx->mVPUClient->getLayerFormat(dpy, layer));
+        whf.w = ctx->mVPUClient->getWidth(dpy, layer);
+        whf.h = ctx->mVPUClient->getHeight(dpy, layer);
+    }
+#endif
 
     // Handle R/B swap
     if (layer->flags & HWC_FORMAT_RB_SWAP) {
