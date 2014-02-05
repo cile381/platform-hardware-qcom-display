@@ -129,6 +129,12 @@ bool MDPComp::init(hwc_context_t *ctx) {
             sMaxPipesPerMixer = min(val, MAX_PIPES_PER_MIXER);
     }
 
+    if(qdutils::MDPVersion::getInstance().is8x26() &&
+            (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024)) {
+        int value = qdutils::MDPVersion::getInstance().getRecommendedPipeCnt();
+        sMaxPipesPerMixer = min(value, sMaxPipesPerMixer);
+    }
+
     if(property_get("debug.mdpcomp.bw", property, "0") > 0) {
         float val = atof(property);
         if(val > 0.0f) {
@@ -229,6 +235,7 @@ void MDPComp::FrameInfo::reset(const int& numLayers) {
     fbCount = numLayers;
     mdpCount = 0;
     needsRedraw = true;
+    mForceFBRedraw = false;
     fbZ = 0;
 }
 
@@ -548,7 +555,13 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
     bool ret = false;
     if(fullMDPComp(ctx, list)) {
         ret = true;
+    } else if((list->flags & HWC_GEOMETRY_CHANGED) &&
+            loadBasedCompPreferGPU(ctx, list)) {
+        ret = true;
     } else if(partialMDPComp(ctx, list)) {
+        ret = true;
+    } else if(!(list->flags & HWC_GEOMETRY_CHANGED) &&
+                loadBasedCompPreferGPU(ctx, list)) {
         ret = true;
     }
     return ret;
@@ -585,6 +598,85 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
         return false;
     }
+
+    if(!arePipesAvailable(ctx, list)) {
+        return false;
+    }
+
+    uint32_t size = calcMDPBytesRead(ctx, list);
+    if(!bandwidthCheck(ctx, size)) {
+        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
+        return false;
+    }
+
+    return true;
+}
+
+bool MDPComp::loadBasedCompPreferGPU(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list) {
+    if(isYuvPresent(ctx, mDpy)) {
+        return false;
+    }
+
+    int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+    mCurrentFrame.reset(numAppLayers);
+
+    int stagesForMDP = min(sMaxPipesPerMixer, ctx->mOverlay->availablePipes(
+                mDpy, Overlay::MIXER_DEFAULT));
+    stagesForMDP = min(stagesForMDP, sMaxPipesPerMixer);
+    int availablePipes = stagesForMDP - 1; //1 for FB
+
+    //If MDP has X possible stages, it can take X layers.
+    const int batchSize = numAppLayers - availablePipes;
+
+    if(batchSize <= 0 || (availablePipes <= 0)) {
+        ALOGD_IF(isDebug(), "%s: Not attempting", __FUNCTION__);
+        return false;
+    }
+
+    int minBatchStart = -1;
+    size_t minBatchPixelCount = SIZE_MAX;
+
+    for(int i = 0; i <= numAppLayers - batchSize; i++) {
+        uint32_t batchPixelCount = 0;
+        for(int j = i; j < i + batchSize; j++) {
+            hwc_layer_1_t* layer = &list->hwLayers[j];
+            hwc_rect_t crop = layer->sourceCrop;
+            batchPixelCount += (crop.right - crop.left) *
+                    (crop.bottom - crop.top);
+        }
+
+        if(batchPixelCount < minBatchPixelCount) {
+            minBatchPixelCount = batchPixelCount;
+            minBatchStart = i;
+        }
+    }
+
+    if(minBatchStart < 0) {
+        ALOGD_IF(isDebug(), "%s: No batch found batchSize %d numAppLayers %d",
+                __FUNCTION__, batchSize, numAppLayers);
+        return false;
+    }
+
+    for(int i = 0; i < numAppLayers; i++) {
+        if(i < minBatchStart || i >= minBatchStart + batchSize) {
+            hwc_layer_1_t* layer = &list->hwLayers[i];
+            if(not isSupportedForMDPComp(ctx, layer)) {
+                ALOGD_IF(isDebug(), "%s: MDP unsupported layer found at %d",
+                        __FUNCTION__, i);
+                return false;
+            }
+            mCurrentFrame.isFBComposed[i] = false;
+        }
+    }
+
+    mCurrentFrame.fbZ = minBatchStart;
+    mCurrentFrame.fbCount = batchSize;
+    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - batchSize;
+    mCurrentFrame.mForceFBRedraw = true;
+
+    ALOGD_IF(isDebug(), "%s: fbZ %d batchSize %d",
+            __FUNCTION__, mCurrentFrame.fbZ, batchSize);
 
     if(!arePipesAvailable(ctx, list)) {
         return false;
@@ -1044,8 +1136,10 @@ uint32_t MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     uint32_t size = 0;
 
-    if(!qdutils::MDPVersion::getInstance().is8x74v2())
+    if((!qdutils::MDPVersion::getInstance().is8x74v2()) &&
+            (!qdutils::MDPVersion::getInstance().is8x26())) {
         return 0;
+    }
 
     for (uint32_t i = 0; i < list->numHwLayers - 1; i++) {
         if(!mCurrentFrame.isFBComposed[i]) {
@@ -1076,7 +1170,8 @@ uint32_t MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
 bool MDPComp::bandwidthCheck(hwc_context_t *ctx, const uint32_t& size) {
     //Will be added for other targets if we run into bandwidth issues and when
     //we have profiling data to set an upper limit.
-    if(qdutils::MDPVersion::getInstance().is8x74v2()) {
+    if(qdutils::MDPVersion::getInstance().is8x74v2() ||
+            qdutils::MDPVersion::getInstance().is8x26()) {
         const uint32_t ONE_GIG = 1024 * 1024 * 1024;
         double panelRefRate =
                 1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
@@ -1156,7 +1251,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             mCurrentFrame.needsRedraw = false;
             if(!mCachedFrame.isSameFrame(mCurrentFrame) ||
                      (list->flags & HWC_GEOMETRY_CHANGED) ||
-                     isSkipPresent(ctx, mDpy)) {
+                     isSkipPresent(ctx, mDpy)||
+                     mCurrentFrame.mForceFBRedraw) {
                 mCurrentFrame.needsRedraw = true;
             }
         }
@@ -1350,6 +1446,10 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
+        } else if(qdutils::MDPVersion::getInstance().is8x26() &&
+                (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024)) {
+            if(qhwc::needsScaling(ctx, layer, mDpy))
+                type = MDPCOMP_OV_RGB;
         } else if(!qhwc::needsScaling(ctx, layer, mDpy)
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
