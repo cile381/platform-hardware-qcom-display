@@ -105,9 +105,8 @@ static void hwc_registerProcs(struct hwc_composer_device_1* dev,
 //Helper
 static void reset(hwc_context_t *ctx, int numDisplays,
                   hwc_display_contents_1_t** displays) {
-
     ctx->numActiveDisplays = 0;
-    for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+    for(int i = 0; i < numDisplays; i++) {
         hwc_display_contents_1_t *list = displays[i];
         // XXX:SurfaceFlinger no longer guarantees that this
         // value is reset on every prepare. However, for the layer
@@ -199,7 +198,7 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
 
         if (fbComp) {
             const int fbZ = 0;
-            ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZ);
+            ctx->mFBUpdate[dpy]->prepareAndValidate(ctx, list, fbZ);
         }
 
         if (ctx->mMDP.version < qdutils::MDP_V4_0) {
@@ -225,7 +224,7 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
             setListStats(ctx, list, dpy);
             if(ctx->mMDPComp[dpy]->prepare(ctx, list) < 0) {
                 const int fbZ = 0;
-                ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZ);
+                ctx->mFBUpdate[dpy]->prepareAndValidate(ctx, list, fbZ);
             }
         } else {
             /* External Display is in Pause state.
@@ -660,7 +659,7 @@ int hwc_getDisplayConfigs(struct hwc_composer_device_1* dev, int disp,
 }
 
 int hwc_getDisplayAttributes(struct hwc_composer_device_1* dev, int disp,
-        uint32_t config, const uint32_t* attributes, int32_t* values) {
+        uint32_t /*config*/, const uint32_t* attributes, int32_t* values) {
 
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     disp = getDpyforExternalDisplay(ctx, disp);
