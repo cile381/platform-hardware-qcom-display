@@ -427,8 +427,8 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
     xRatio = (inPos.x - viewFrame.left)/actualWidth;
     yRatio = (inPos.y - viewFrame.top)/actualHeight;
     // Use viewframe width and height to compute wRatio and hRatio.
-    wRatio = inPos.w/(viewFrame.right - viewFrame.left);
-    hRatio = inPos.h/(viewFrame.bottom - viewFrame.top);
+    wRatio = (float)inPos.w/(float)(viewFrame.right - viewFrame.left);
+    hRatio = (float)inPos.h/(float)(viewFrame.bottom - viewFrame.top);
 
 
     //Calculate the position...
@@ -1093,7 +1093,8 @@ void optimizeLayerRects(hwc_context_t *ctx,
                if(!needsScaling(&list->hwLayers[j])) {
                   hwc_layer_1_t* layer = (hwc_layer_1_t*)&list->hwLayers[j];
                   hwc_rect_t& bottomframe = layer->displayFrame;
-                  hwc_rect_t& bottomCrop = layer->sourceCrop;
+                  hwc_rect_t bottomCrop =
+                      integerizeSourceCrop(layer->sourceCropf);
                   int transform =layer->transform;
 
                   hwc_rect_t irect = getIntersection(bottomframe, topframe);
@@ -1103,7 +1104,11 @@ void optimizeLayerRects(hwc_context_t *ctx,
                      dest_rect  = deductRect(bottomframe, irect);
                      qhwc::calculate_crop_rects(bottomCrop, bottomframe,
                                                 dest_rect, transform);
-
+                     //Update layer sourceCropf
+                     layer->sourceCropf.left = bottomCrop.left;
+                     layer->sourceCropf.top = bottomCrop.top;
+                     layer->sourceCropf.right = bottomCrop.right;
+                     layer->sourceCropf.bottom = bottomCrop.bottom;
                   }
                }
                j--;
@@ -1155,6 +1160,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     int acquireFd[MAX_NUM_APP_LAYERS];
     int count = 0;
     int releaseFd = -1;
+    int retireFd = -1;
     int fbFd = -1;
     bool swapzero = false;
     int mdpVersion = qdutils::MDPVersion::getInstance().getMDPVersion();
@@ -1163,6 +1169,8 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     memset(&data, 0, sizeof(data));
     data.acq_fen_fd = acquireFd;
     data.rel_fen_fd = &releaseFd;
+    data.retire_fen_fd = &retireFd;
+    data.flags = MDP_BUF_SYNC_FLAG_RETIRE_FENCE;
 
     char property[PROPERTY_VALUE_MAX];
     if(property_get("debug.egl.swapinterval", property, "1") > 0) {
@@ -1272,20 +1280,14 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 
     //Signals when MDP finishes reading rotator buffers.
     ctx->mLayerRotMap[dpy]->setReleaseFd(releaseFd);
+    close(releaseFd);
+    releaseFd = -1;
 
-    // if external is animating, close the relaseFd
-    if(isExtAnimating) {
-        close(releaseFd);
-        releaseFd = -1;
-    }
-
-    if(UNLIKELY(swapzero)){
+    if(UNLIKELY(swapzero)) {
         list->retireFenceFd = -1;
-        close(releaseFd);
     } else {
-        list->retireFenceFd = releaseFd;
+        list->retireFenceFd = retireFd;
     }
-
     return ret;
 }
 
