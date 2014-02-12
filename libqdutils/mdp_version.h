@@ -103,6 +103,7 @@ public:
     bool supportsBWC();
     bool is8x26();
     bool is8x74v2();
+    int getRecommendedPipeCnt();
     int getLeftSplit() { return mSplit.left(); }
     int getRightSplit() { return mSplit.right(); }
 private:
@@ -116,6 +117,8 @@ private:
     uint8_t mDMAPipes;
     uint32_t mFeatures;
     uint32_t mMDPDownscale;
+    uint8_t mSMPTotalCount;
+    uint8_t mSMPLimitPerPipe;
     Split mSplit;
 };
 }; //namespace qdutils

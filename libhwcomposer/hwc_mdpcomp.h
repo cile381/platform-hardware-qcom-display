@@ -102,6 +102,7 @@ protected:
         bool drop[MAX_NUM_APP_LAYERS];
 
         bool needsRedraw;
+        bool mForceFBRedraw;
         int fbZ;
 
         /* c'tor */
@@ -155,6 +156,11 @@ protected:
     bool fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list);
     /* check if we can use layer cache to do at least partial MDP comp */
     bool partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list);
+
+    /* Load based mixed mode composition */
+    bool loadBasedCompPreferGPU(hwc_context_t *ctx,
+            hwc_display_contents_1_t* list);
+
     /* checks for conditions where only video can be bypassed */
     bool isOnlyVideoDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list,
             bool secureOnly);
