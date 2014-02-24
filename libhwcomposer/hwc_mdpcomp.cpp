@@ -114,7 +114,7 @@ bool MDPComp::init(hwc_context_t *ctx) {
             sDebugLogs = true;
     }
 
-    if(property_get("persist.hwc.partialupdate.enable", property, NULL) > 0) {
+    if(property_get("persist.hwc.partialupdate", property, NULL) > 0) {
         if((atoi(property) != 0) && ctx->mMDP.panel == MIPI_CMD_PANEL &&
            qdutils::MDPVersion::getInstance().is8x74v2())
             sEnablePartialFrameUpdate = true;
@@ -1212,6 +1212,22 @@ void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
              mCurrentFrame.fbCount);
 }
 
+hwc_rect_t MDPComp::getUpdatingFBRect(hwc_context_t *ctx,
+        hwc_display_contents_1_t* list){
+    hwc_rect_t fbRect = (struct hwc_rect){0, 0, 0, 0};
+    hwc_layer_1_t *fbLayer = &list->hwLayers[mCurrentFrame.layerCount];
+
+    /* Update only the region of FB needed for composition */
+    for(int i = 0; i < mCurrentFrame.layerCount; i++ ) {
+        if(mCurrentFrame.isFBComposed[i] && !mCurrentFrame.drop[i]) {
+            hwc_layer_1_t* layer = &list->hwLayers[i];
+            hwc_rect_t dst = layer->displayFrame;
+            fbRect = getUnion(fbRect, dst);
+        }
+    }
+    return fbRect;
+}
+
 bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
 
@@ -1229,7 +1245,9 @@ bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
 
     //Configure framebuffer first if applicable
     if(mCurrentFrame.fbZ >= 0) {
-        if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list, mCurrentFrame.fbZ)) {
+        hwc_rect_t fbRect = getUpdatingFBRect(ctx, list);
+        if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list, fbRect, mCurrentFrame.fbZ))
+        {
             ALOGD_IF(isDebug(), "%s configure framebuffer failed",
                     __FUNCTION__);
             return false;
@@ -1295,13 +1313,6 @@ bool MDPComp::resourceCheck(hwc_context_t *ctx,
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
         return false;
     }
-
-    double size = calcMDPBytesRead(ctx, list);
-    if(!bandwidthCheck(ctx, size)) {
-        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
-        return false;
-    }
-
     return true;
 }
 
@@ -1342,20 +1353,6 @@ double MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
     }
 
     return size;
-}
-
-bool MDPComp::bandwidthCheck(hwc_context_t *ctx, const double& size) {
-    //Skip for targets where no device tree value for bw is supplied
-    if(sMaxBw <= 0.0) {
-        return true;
-    }
-
-    double panelRefRate =
-            1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
-    if((size * panelRefRate) > (sMaxBw - sBwClaimed)) {
-        return false;
-    }
-    return true;
 }
 
 bool MDPComp::hwLimitationsCheck(hwc_context_t* ctx,
