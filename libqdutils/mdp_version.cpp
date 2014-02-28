@@ -48,6 +48,8 @@ MDPVersion::MDPVersion()
     mVGPipes = 0;
     mDMAPipes = 0;
     mFeatures = 0;
+    mSMPTotalCount = 0;
+    mSMPLimitPerPipe = 0;
     //TODO get this from driver, default for A-fam to 8
     mMDPDownscale = 8;
     mFd = fb_fd;
@@ -86,6 +88,8 @@ MDPVersion::MDPVersion()
                 mVGPipes = metadata.data.caps.vig_pipes;
                 mDMAPipes = metadata.data.caps.dma_pipes;
                 mFeatures = metadata.data.caps.features;
+                mSMPTotalCount = metadata.data.caps.max_smp_cnt;
+                mSMPLimitPerPipe = metadata.data.caps.smp_per_pipe;
                 if (metadata.data.caps.mdp_rev == MDP_V3_0_4){
                     mdp_version = MDP_V3_0_4;
                 }
@@ -145,6 +149,10 @@ bool MDPVersion::supportsDecimation() {
 
 uint32_t MDPVersion::getMaxMDPDownscale() {
     return mMDPDownscale;
+}
+
+int MDPVersion::getRecommendedPipeCnt() {
+    return (mSMPTotalCount/mSMPLimitPerPipe);
 }
 
 bool MDPVersion::supportsBWC() {
