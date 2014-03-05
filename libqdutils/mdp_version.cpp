@@ -70,6 +70,7 @@ MDPVersion::MDPVersion()
     mPanelType = NO_PANEL;
     mLowBw = 0;
     mHighBw = 0;
+    mSourceSplit = false;
 
     if(!updatePanelInfo()) {
         ALOGE("Unable to read Primary Panel Information");
@@ -184,13 +185,13 @@ bool MDPVersion::updateSysFsInfo() {
                     mMdpRev = atoi(tokens[1]);
                 }
                 else if(!strncmp(tokens[0], "rgb_pipes", strlen("rgb_pipes"))) {
-                    mRGBPipes = atoi(tokens[1]);
+                    mRGBPipes = (uint8_t)atoi(tokens[1]);
                 }
                 else if(!strncmp(tokens[0], "vig_pipes", strlen("vig_pipes"))) {
-                    mVGPipes = atoi(tokens[1]);
+                    mVGPipes = (uint8_t)atoi(tokens[1]);
                 }
                 else if(!strncmp(tokens[0], "dma_pipes", strlen("dma_pipes"))) {
-                    mDMAPipes = atoi(tokens[1]);
+                    mDMAPipes = (uint8_t)atoi(tokens[1]);
                 }
                 else if(!strncmp(tokens[0], "max_downscale_ratio",
                                 strlen("max_downscale_ratio"))) {
@@ -218,6 +219,9 @@ bool MDPVersion::updateSysFsInfo() {
                                     strlen("tile_format"))) {
                            if(enableMacroTile)
                                mMacroTileEnabled = true;
+                        } else if(!strncmp(tokens[i], "src_split",
+                                    strlen("src_split"))) {
+                            mSourceSplit = true;
                         }
                     }
                 }
@@ -285,6 +289,10 @@ bool MDPVersion::supportsBWC() {
 bool MDPVersion::supportsMacroTile() {
     // MACRO TILE support
     return mMacroTileEnabled;
+}
+
+bool MDPVersion::isSrcSplit() const {
+    return mSourceSplit;
 }
 
 bool MDPVersion::is8x26() {
