@@ -1063,8 +1063,9 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 
     //Accumulate acquireFenceFds for MDP
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
-        if(list->hwLayers[i].compositionType == HWC_OVERLAY &&
-                        (layerProp[i].mFlags & HWC_MDPCOMP) &&
+        if(((list->hwLayers[i].compositionType == HWC_OVERLAY &&
+                        (layerProp[i].mFlags & HWC_MDPCOMP)) ||
+                        list->hwLayers[i].compositionType == HWC_BLIT) &&
                         list->hwLayers[i].acquireFenceFd >= 0) {
             if(UNLIKELY(swapzero))
                 acquireFd[count++] = -1;
@@ -1107,6 +1108,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
         if(((list->hwLayers[i].compositionType == HWC_OVERLAY) &&
                 (layerProp[i].mFlags & HWC_MDPCOMP)) ||
+                list->hwLayers[i].compositionType == HWC_BLIT ||
                 list->hwLayers[i].compositionType == HWC_FRAMEBUFFER_TARGET) {
             //Populate releaseFenceFds.
             if(UNLIKELY(swapzero)) {
@@ -1324,6 +1326,26 @@ inline void updateSource(eTransform& orient, Whf& whf,
     crop.bottom = srcCrop.y + srcCrop.h;
 }
 
+bool needToForceRotator(hwc_context_t *ctx, const int& dpy,
+         uint32_t w, uint32_t h) {
+    int nYuvCount = ctx->listStats[dpy].yuvCount;
+    bool forceRot = false;
+    //Force rotator for resolution change only if 1 yuv layer on primary
+    if(!dpy && (nYuvCount == 1)) {
+        uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
+        uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
+        if((prevWidth != w) || (prevHeight != h)) {
+            uint32_t prevBufArea = prevWidth * prevHeight;
+            if(prevBufArea) {
+                forceRot = true;
+            }
+            prevWidth = w;
+            prevHeight = h;
+        }
+    }
+    return forceRot;
+}
+
 int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
         const int& dpy, eMdpFlags& mdpFlags, eZorder& z,
         eIsFg& isFg, const eDest& dest, Rotator **rot) {
@@ -1382,17 +1404,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             rotFlags = ROT_DOWNSCALE_ENABLED;
         }
 
-        uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
-        uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
-        if(prevWidth != (uint32_t)getWidth(hnd) ||
-                prevHeight != (uint32_t)getHeight(hnd)) {
-            uint32_t prevBufArea = prevWidth * prevHeight;
-            if(prevBufArea) {
-                forceRot = true;
-            }
-            prevWidth = (uint32_t)getWidth(hnd);
-            prevHeight = (uint32_t)getHeight(hnd);
-        }
+        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd), (uint32_t)getHeight(hnd));
     }
 
     setMdpFlags(layer, mdpFlags, downscale, transform);
@@ -1477,17 +1489,7 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     bool forceRot = false;
     if(isYuvBuffer(hnd)) {
-        uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
-        uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
-        if(prevWidth != (uint32_t)getWidth(hnd) ||
-                prevHeight != (uint32_t)getHeight(hnd)) {
-            uint32_t prevBufArea = (prevWidth * prevHeight);
-            if(prevBufArea) {
-                forceRot = true;
-            }
-            prevWidth = (uint32_t)getWidth(hnd);
-            prevHeight = (uint32_t)getHeight(hnd);
-        }
+        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd), (uint32_t)getHeight(hnd));
     }
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
