@@ -684,7 +684,14 @@ void ExternalDisplay::getAttrForMode(int& width, int& height, int& fps) {
             height = 2160;
             fps = 24;
             break;
-
+        case HDMI_VFRMT_1280x800p60_16_9:
+            width = 1280;
+            height = 800;
+            fps = 60;
+            break;
+        default:
+            ALOGE("missing mode details.. check..:mode:%d", mCurrentMode);
+            break;
     }
 }
 
