@@ -71,6 +71,7 @@ private:
     void resetInfo();
     void setAttributes();
     void getAttrForMode(int& width, int& height, int& fps);
+    bool waitForConnectEvent();
 
     int mFd;
     int mFbNum;

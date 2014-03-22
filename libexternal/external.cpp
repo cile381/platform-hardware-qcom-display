@@ -34,7 +34,10 @@
 #include "external.h"
 #include "overlayUtils.h"
 #include "overlay.h"
+#include <poll.h>
 #include "mdp_version.h"
+
+#define HDMI_CONNECTION_PATH "/sys/devices/virtual/graphics/fb1/connected"
 
 using namespace android;
 
@@ -44,6 +47,10 @@ namespace qhwc {
 #define SPD_NAME_LENGTH                 16
 
 int ExternalDisplay::configure() {
+    if(mHwcContext->mAutomotiveModeOn && !waitForConnectEvent()) {
+        return -1;
+    }
+
     if(!openFrameBuffer()) {
         ALOGE("%s: Failed to open FB: %d", __FUNCTION__, mFbNum);
         return -1;
@@ -85,10 +92,15 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     mFbNum = overlay::Overlay::getInstance()->getFbForDpy(HWC_DISPLAY_EXTERNAL);
-    // disable HPD at start, it will be enabled later
-    // when the display powers on
-    // This helps for framework reboot or adb shell stop/start
-    writeHPDOption(0);
+    if(ctx->mAutomotiveModeOn) {
+        // Enable HPD for automotive because HDMI is connected by default
+        writeHPDOption(1);
+    } else {
+        // disable HPD at start, it will be enabled later
+        // when the display powers on
+        // This helps for framework reboot or adb shell stop/start
+        writeHPDOption(0);
+    }
 
     // for HDMI - retreive all the modes supported by the driver
     if(mFbNum != -1) {
@@ -332,6 +344,49 @@ bool ExternalDisplay::readResolution()
     }
 
     return (len > 0);
+}
+
+bool ExternalDisplay::waitForConnectEvent() {
+    // Open a sysfs node to receive the timeout notification from driver.
+    int fd = open(HDMI_CONNECTION_PATH, O_RDONLY);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, HDMI_CONNECTION_PATH, strerror(errno));
+        return false;
+    }
+    struct pollfd pFd;
+    pFd.fd = fd;
+    if (pFd.fd >= 0)
+        pFd.events = POLLPRI | POLLERR;
+    do {
+        // Poll for an HDMI connect event from driver
+        int err = poll(&pFd, 1, 1000);
+        if(err > 0) {
+            if (pFd.revents & POLLPRI) {
+                char status[64];
+                // Consume the node by reading it
+                ssize_t len = pread(pFd.fd, status, 64, 0);
+                if (UNLIKELY(len < 0)) {
+                    // If the read was just interrupted - it is not a
+                    // fatal error. Just continue in this case
+                    ALOGE ("%s: Unable to read connect event for external : %s",
+                            __FUNCTION__, strerror(errno));
+                    continue;
+                }
+                // extract connection status
+                if (!strncmp(status, "1", strlen("1"))) {
+                    close(fd);
+                    return true;
+                } else {
+                    close(fd);
+                    return false;
+                }
+            }
+        }else {
+            close(fd);
+            return false;
+        }
+    }while(true);
 }
 
 bool ExternalDisplay::openFrameBuffer()

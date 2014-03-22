@@ -46,37 +46,6 @@ enum {
     EXTERNAL_RESUME
 };
 
-static void setup(hwc_context_t* ctx, int dpy)
-{
-    ctx->mFBUpdate[dpy] =
-        IFBUpdate::getObject(ctx, ctx->dpyAttr[dpy].xres, dpy);
-    ctx->mMDPComp[dpy] =
-        MDPComp::getObject(ctx->dpyAttr[dpy].xres, dpy);
-    int compositionType =
-                qdutils::QCCompositionType::getInstance().getCompositionType();
-    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
-                           qdutils::COMPOSITION_TYPE_MDP |
-                           qdutils::COMPOSITION_TYPE_C2D)) {
-        ctx->mCopyBit[dpy] = new CopyBit(ctx, dpy);
-    }
-}
-
-static void clear(hwc_context_t* ctx, int dpy)
-{
-    if(ctx->mFBUpdate[dpy]) {
-        delete ctx->mFBUpdate[dpy];
-        ctx->mFBUpdate[dpy] = NULL;
-    }
-    if(ctx->mCopyBit[dpy]){
-        delete ctx->mCopyBit[dpy];
-        ctx->mCopyBit[dpy] = NULL;
-    }
-    if(ctx->mMDPComp[dpy]) {
-        delete ctx->mMDPComp[dpy];
-        ctx->mMDPComp[dpy] = NULL;
-    }
-}
-
 /* Parse uevent data for devices which we are interested */
 static int getConnectedDisplay(const char* strUdata)
 {
@@ -121,6 +90,10 @@ static int getConnectedState(const char* strUdata, int len)
 
 static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
+    // do not handle uevent of hdmi or wfd, if automotive mode is on
+    if(ctx->mAutomotiveModeOn)
+        return;
+
     bool bpanelReset = getPanelResetStatus(ctx, udata, len);
     if (bpanelReset) {
         ctx->proc->invalidate(ctx->proc);
@@ -149,7 +122,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             ctx->mDrawLock.lock();
-            clear(ctx, dpy);
+            clearObject(ctx, dpy);
             ctx->dpyAttr[dpy].connected = false;
             ctx->dpyAttr[dpy].isActive = false;
 
@@ -212,7 +185,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                              "when WFD is active");
 
                     ctx->mDrawLock.lock();
-                    clear(ctx, HWC_DISPLAY_VIRTUAL);
+                    clearObject(ctx, HWC_DISPLAY_VIRTUAL);
+                    clearObject(ctx, HWC_DISPLAY_VIRTUAL);
                     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
                     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
 
@@ -258,7 +232,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             Locker::Autolock _l(ctx->mDrawLock);
-            setup(ctx, dpy);
+            setupObject(ctx, dpy);
             ctx->dpyAttr[dpy].isPause = false;
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;

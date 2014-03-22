@@ -369,6 +369,9 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
         }
 
         ctx->dpyAttr[dpy].isActive = !blank;
+        if(ctx->mAutomotiveModeOn)
+            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = !blank;
+
 
         if(ctx->mVirtualonExtActive) {
             /* if mVirtualonExtActive is true, display hal will
