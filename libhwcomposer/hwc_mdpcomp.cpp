@@ -44,8 +44,6 @@ bool MDPComp::sEnabled = false;
 bool MDPComp::sEnableMixedMode = true;
 bool MDPComp::sEnablePartialFrameUpdate = false;
 int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
-double MDPComp::sMaxBw = 0.0;
-double MDPComp::sBwClaimed = 0.0;
 bool MDPComp::sEnable4k2kYUVSplit = false;
 
 MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
@@ -645,13 +643,11 @@ bool MDPComp::partialMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list)
 
     bool ret = false;
     if(list->flags & HWC_GEOMETRY_CHANGED) { //Try load based first
-        ret =   loadBasedCompPreferGPU(ctx, list) or
-                loadBasedCompPreferMDP(ctx, list) or
+        ret =   loadBasedComp(ctx, list) or
                 cacheBasedComp(ctx, list);
     } else {
         ret =   cacheBasedComp(ctx, list) or
-                loadBasedCompPreferGPU(ctx, list) or
-                loadBasedCompPreferMDP(ctx, list);
+                loadBasedComp(ctx, list);
     }
 
     return ret;
@@ -707,196 +703,89 @@ bool MDPComp::cacheBasedComp(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPComp::loadBasedCompPreferGPU(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    if(not isLoadBasedCompDoable(ctx, list)) {
-        return false;
-    }
-
-    int numAppLayers = ctx->listStats[mDpy].numAppLayers;
-    mCurrentFrame.reset(numAppLayers);
-
-    int stagesForMDP = min(sMaxPipesPerMixer, ctx->mOverlay->availablePipes(
-            mDpy, Overlay::MIXER_DEFAULT));
-    //If MDP has X possible stages, it can take X layers.
-    const int batchSize = (numAppLayers - mCurrentFrame.dropCount) -
-                                               (stagesForMDP - 1); //1 for FB
-
-    if(batchSize <= 0) {
-        ALOGD_IF(isDebug(), "%s: Not attempting", __FUNCTION__);
-        return false;
-    }
-
-    int minBatchStart = -1;
-    int minBatchEnd = -1;
-    size_t minBatchPixelCount = SIZE_MAX;
-
-    /* Iterate through the layer list to find out a contigous batch of batchSize
-     * non-dropped layers with loweest pixel count */
-    for(int i = 0; i <= (numAppLayers - batchSize); i++) {
-        if(mCurrentFrame.drop[i])
-            continue;
-
-        int batchCount = batchSize;
-        uint32_t batchPixelCount = 0;
-        int j = i;
-        for(; j < numAppLayers && batchCount; j++){
-            if(!mCurrentFrame.drop[j]) {
-                hwc_layer_1_t* layer = &list->hwLayers[j];
-                hwc_rect_t crop = integerizeSourceCrop(layer->sourceCropf);
-                hwc_rect_t dst = layer->displayFrame;
-
-                /* If we have a valid ROI, count pixels only for the MDP fetched
-                 * region of the buffer */
-                if((ctx->listStats[mDpy].roi.w != ctx->dpyAttr[mDpy].xres) ||
-                   (ctx->listStats[mDpy].roi.h != ctx->dpyAttr[mDpy].yres)) {
-                    hwc_rect_t roi;
-                    roi.left = ctx->listStats[mDpy].roi.x;
-                    roi.top = ctx->listStats[mDpy].roi.y;
-                    roi.right = roi.left + ctx->listStats[mDpy].roi.w;
-                    roi.bottom = roi.top + ctx->listStats[mDpy].roi.h;
-
-                    /* valid ROI means no scaling layer is composed. So check
-                     * only intersection to find actual fetched pixels */
-                    crop  = getIntersection(roi, dst);
-                }
-
-                batchPixelCount += (crop.right - crop.left) *
-                    (crop.bottom - crop.top);
-                batchCount--;
-            }
-        }
-
-        /* we dont want to program any batch of size lesser than batchSize */
-        if(!batchCount && (batchPixelCount < minBatchPixelCount)) {
-            minBatchPixelCount = batchPixelCount;
-            minBatchStart = i;
-            minBatchEnd = j-1;
-        }
-    }
-
-    if(minBatchStart < 0) {
-        ALOGD_IF(isDebug(), "%s: No batch found batchSize %d numAppLayers %d",
-                __FUNCTION__, batchSize, numAppLayers);
-        return false;
-    }
-
-    /* non-dropped layers falling ouside the selected batch will be marked for
-     * MDP */
-    for(int i = 0; i < numAppLayers; i++) {
-        if((i < minBatchStart || i > minBatchEnd) && !mCurrentFrame.drop[i] ) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            if(not isSupportedForMDPComp(ctx, layer)) {
-                ALOGD_IF(isDebug(), "%s: MDP unsupported layer found at %d",
-                        __FUNCTION__, i);
-                reset(ctx);
-                return false;
-            }
-            mCurrentFrame.isFBComposed[i] = false;
-        }
-    }
-
-    mCurrentFrame.fbZ = minBatchStart;
-    mCurrentFrame.fbCount = batchSize;
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount -
-             mCurrentFrame.dropCount;
-
-    ALOGD_IF(isDebug(), "%s: fbZ %d batchSize %d fbStart: %d fbEnd: %d",
-             __FUNCTION__, mCurrentFrame.fbZ, batchSize, minBatchStart,
-             minBatchEnd);
-
-    if(sEnable4k2kYUVSplit){
-        adjustForSourceSplit(ctx, list);
-    }
-
-    if(!postHeuristicsHandling(ctx, list)) {
-        ALOGD_IF(isDebug(), "post heuristic handling failed");
-        reset(ctx);
-        return false;
-    }
-
-    return true;
-}
-
-bool MDPComp::loadBasedCompPreferMDP(hwc_context_t *ctx,
+bool MDPComp::loadBasedComp(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     if(not isLoadBasedCompDoable(ctx, list)) {
         return false;
     }
 
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
-    mCurrentFrame.reset(numAppLayers);
+    const int numNonDroppedLayers = numAppLayers - mCurrentFrame.dropCount;
+    const int stagesForMDP = min(sMaxPipesPerMixer,
+            ctx->mOverlay->availablePipes(mDpy, Overlay::MIXER_DEFAULT));
 
-    //Full screen is from ib perspective, not actual full screen
-    const int bpp = 4;
-    double panelRefRate =
-                1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
+    int mdpBatchSize = stagesForMDP - 1; //1 stage for FB
+    int fbBatchSize = numNonDroppedLayers - mdpBatchSize;
+    int lastMDPSupportedIndex = numAppLayers;
+    int dropCount = 0;
 
-    double bwLeft = sMaxBw - sBwClaimed;
-
-    const int fullScreenLayers = bwLeft * 1000000000 / (ctx->dpyAttr[mDpy].xres
-            * ctx->dpyAttr[mDpy].yres * bpp * panelRefRate);
-
-    const int fbBatchSize = (numAppLayers - mCurrentFrame.dropCount)
-            - (fullScreenLayers - 1);
-
-    //If batch size is not at least 2, we aren't really preferring MDP, since
-    //only 1 layer going to GPU could actually translate into an entire FB
-    //needed to be fetched by MDP, thus needing more b/w rather than less.
-    if(fbBatchSize < 2 || fbBatchSize > numAppLayers) {
-        ALOGD_IF(isDebug(), "%s: Not attempting", __FUNCTION__);
-        return false;
-    }
-
-    //Find top fbBatchSize non-dropped layers to get your batch
-    int fbStart = -1, fbEnd = -1, batchCount = fbBatchSize;
-    for(int i = numAppLayers - 1; i >= 0; i--) {
-        if(mCurrentFrame.drop[i])
+    //Find the minimum MDP batch size
+    for(int i = 0; i < numAppLayers;i++) {
+        if(mCurrentFrame.drop[i]) {
+            dropCount++;
             continue;
-
-        if(fbEnd < 0)
-            fbEnd = i;
-
-        if(!(--batchCount)) {
-            fbStart = i;
+        }
+        hwc_layer_1_t* layer = &list->hwLayers[i];
+        if(not isSupportedForMDPComp(ctx, layer)) {
+            lastMDPSupportedIndex = i;
+            mdpBatchSize = min(i - dropCount, stagesForMDP - 1);
+            fbBatchSize = numNonDroppedLayers - mdpBatchSize;
             break;
         }
     }
 
-    //Bottom layers constitute MDP batch
-    for(int i = 0; i < fbStart; i++) {
-        if((i < fbStart || i > fbEnd) && !mCurrentFrame.drop[i] ) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            if(not isSupportedForMDPComp(ctx, layer)) {
-                ALOGD_IF(isDebug(), "%s: MDP unsupported layer found at %d",
-                         __FUNCTION__, i);
-                reset(ctx);
-                return false;
-            }
-            mCurrentFrame.isFBComposed[i] = false;
-        }
+    ALOGD_IF(isDebug(), "%s:Before optimizing fbBatch, mdpbatch %d, fbbatch %d "
+            "dropped %d", __FUNCTION__, mdpBatchSize, fbBatchSize,
+            mCurrentFrame.dropCount);
+
+    //Start at a point where the fb batch should at least have 2 layers, for
+    //this mode to be justified.
+    while(fbBatchSize < 2) {
+        ++fbBatchSize;
+        --mdpBatchSize;
     }
 
-    mCurrentFrame.fbZ = fbStart;
-    mCurrentFrame.fbCount = fbBatchSize;
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount
-                                                      - mCurrentFrame.dropCount;
-
-    ALOGD_IF(isDebug(), "%s: FB Z %d, app layers %d, non-dropped layers: %d, "
-             "MDP Batch Size %d",__FUNCTION__, mCurrentFrame.fbZ, numAppLayers,
-             numAppLayers - mCurrentFrame.dropCount, mCurrentFrame.mdpCount);
-
-    if(sEnable4k2kYUVSplit){
-        adjustForSourceSplit(ctx, list);
-    }
-
-    if(!postHeuristicsHandling(ctx, list)) {
-        ALOGD_IF(isDebug(), "post heuristic handling failed");
-        reset(ctx);
+    //If there are no layers for MDP, this mode doesnt make sense.
+    if(mdpBatchSize < 1) {
+        ALOGD_IF(isDebug(), "%s: No MDP layers after optimizing for fbBatch",
+                __FUNCTION__);
         return false;
     }
 
-    return true;
+    mCurrentFrame.reset(numAppLayers);
+
+    //Try with successively smaller mdp batch sizes until we succeed or reach 1
+    while(mdpBatchSize > 0) {
+        //Mark layers for MDP comp
+        int mdpBatchLeft = mdpBatchSize;
+        for(int i = 0; i < lastMDPSupportedIndex and mdpBatchLeft; i++) {
+            if(mCurrentFrame.drop[i]) {
+                continue;
+            }
+            mCurrentFrame.isFBComposed[i] = false;
+            --mdpBatchLeft;
+        }
+
+        mCurrentFrame.fbZ = mdpBatchSize;
+        mCurrentFrame.fbCount = fbBatchSize;
+        mCurrentFrame.mdpCount = mdpBatchSize;
+
+        ALOGD_IF(isDebug(), "%s:Trying with: mdpbatch %d fbbatch %d dropped %d",
+                __FUNCTION__, mdpBatchSize, fbBatchSize,
+                mCurrentFrame.dropCount);
+
+        if(postHeuristicsHandling(ctx, list)) {
+            ALOGD_IF(isDebug(), "%s: Postheuristics handling succeeded",
+                    __FUNCTION__);
+            return true;
+        }
+
+        reset(ctx);
+        --mdpBatchSize;
+        ++fbBatchSize;
+    }
+
+    return false;
 }
 
 bool MDPComp::isLoadBasedCompDoable(hwc_context_t *ctx,
@@ -1020,11 +909,13 @@ int MDPComp::getBatch(hwc_display_contents_1_t* list,
         int& maxBatchCount) {
     int i = 0;
     int fbZOrder =-1;
+    int droppedLayerCt = 0;
     while (i < mCurrentFrame.layerCount) {
         int batchCount = 0;
         int batchStart = i;
         int batchEnd = i;
-        int fbZ = batchStart;
+        /* Adjust batch Z order with the dropped layers so far */
+        int fbZ = batchStart - droppedLayerCt;
         int firstZReverseIndex = -1;
         int updatingLayersAbove = 0;//Updating layer count in middle of batch
         while(i < mCurrentFrame.layerCount) {
@@ -1039,6 +930,7 @@ int MDPComp::getBatch(hwc_display_contents_1_t* list,
             } else {
                 if(mCurrentFrame.drop[i]) {
                     i++;
+                    droppedLayerCt++;
                     continue;
                 } else if(updatingLayersAbove <= 0) {
                     batchCount++;
@@ -1282,70 +1174,6 @@ bool MDPComp::resourceCheck(hwc_context_t *ctx,
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
         return false;
     }
-
-    if(!arePipesAvailable(ctx, list)) {
-        return false;
-    }
-
-    double size = calcMDPBytesRead(ctx, list);
-    if(!bandwidthCheck(ctx, size)) {
-        ALOGD_IF(isDebug(), "%s: Exceeds bandwidth",__FUNCTION__);
-        return false;
-    }
-
-    return true;
-}
-
-double MDPComp::calcMDPBytesRead(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    double size = 0;
-    const double GIG = 1000000000.0;
-
-    //Skip for targets where no device tree value for bw is supplied
-    if(sMaxBw <= 0.0) {
-        return 0.0;
-    }
-
-    for (uint32_t i = 0; i < list->numHwLayers - 1; i++) {
-        if(!mCurrentFrame.isFBComposed[i]) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            private_handle_t *hnd = (private_handle_t *)layer->handle;
-            if (hnd) {
-                hwc_rect_t crop = integerizeSourceCrop(layer->sourceCropf);
-                hwc_rect_t dst = layer->displayFrame;
-                float bpp = ((float)hnd->size) / (hnd->width * hnd->height);
-                size += (bpp * (crop.right - crop.left) *
-                        (crop.bottom - crop.top) *
-                        ctx->dpyAttr[mDpy].yres / (dst.bottom - dst.top)) /
-                        GIG;
-            }
-        }
-    }
-
-    if(mCurrentFrame.fbCount) {
-        hwc_layer_1_t* layer = &list->hwLayers[list->numHwLayers - 1];
-        int tempw, temph;
-        size += (getBufferSizeAndDimensions(
-                    layer->displayFrame.right - layer->displayFrame.left,
-                    layer->displayFrame.bottom - layer->displayFrame.top,
-                    HAL_PIXEL_FORMAT_RGBA_8888,
-                    tempw, temph)) / GIG;
-    }
-
-    return size;
-}
-
-bool MDPComp::bandwidthCheck(hwc_context_t *ctx, const double& size) {
-    //Skip for targets where no device tree value for bw is supplied
-    if(sMaxBw <= 0.0) {
-        return true;
-    }
-
-    double panelRefRate =
-            1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
-    if((size * panelRefRate) > (sMaxBw - sBwClaimed)) {
-        return false;
-    }
     return true;
 }
 
@@ -1430,13 +1258,6 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(isFrameDoable(ctx)) {
         generateROI(ctx, list);
 
-        //Convert from kbps to gbps
-        sMaxBw = mdpVersion.getHighBw() / 1000000.0;
-        if (ctx->mExtDisplay->isConnected() ||
-                    ctx->mMDP.panel != MIPI_CMD_PANEL) {
-            sMaxBw = mdpVersion.getLowBw() / 1000000.0;
-        }
-
         if(tryFullFrame(ctx, list) || tryVideoOnly(ctx, list)) {
             setMDPCompLayerFlags(ctx, list);
         } else {
@@ -1461,9 +1282,6 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     mCachedFrame.cacheAll(list);
     mCachedFrame.updateCounts(mCurrentFrame);
-    double panelRefRate =
-            1000000000.0 / ctx->dpyAttr[mDpy].vsync_period;
-    sBwClaimed += calcMDPBytesRead(ctx, list) * panelRefRate;
     return ret;
 }
 
@@ -1540,58 +1358,6 @@ int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                            &PipeLayerPair.rot);
 }
 
-bool MDPCompNonSplit::arePipesAvailable(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    overlay::Overlay& ov = *ctx->mOverlay;
-    int numPipesNeeded = mCurrentFrame.mdpCount;
-    int availPipes = ov.availablePipes(mDpy, Overlay::MIXER_DEFAULT);
-
-    //Reserve pipe for FB
-    if(mCurrentFrame.fbCount)
-        availPipes -= 1;
-
-    if(numPipesNeeded > availPipes) {
-        ALOGD_IF(isDebug(), "%s: Insufficient pipes, dpy %d needed %d, avail %d",
-                __FUNCTION__, mDpy, numPipesNeeded, availPipes);
-        return false;
-    }
-
-    if(not areVGPipesAvailable(ctx, list)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool MDPCompNonSplit::areVGPipesAvailable(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    overlay::Overlay& ov = *ctx->mOverlay;
-    int pipesNeeded = 0;
-    for(int i = 0; i < mCurrentFrame.layerCount; ++i) {
-        if(!mCurrentFrame.isFBComposed[i]) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            hwc_rect_t dst = layer->displayFrame;
-            private_handle_t *hnd = (private_handle_t *)layer->handle;
-            if(is4kx2kYuvBuffer(hnd) && sEnable4k2kYUVSplit){
-                pipesNeeded = pipesNeeded + 2;
-            }
-            else if(isYuvBuffer(hnd)) {
-                pipesNeeded++;
-            }
-        }
-    }
-
-    int availableVGPipes = ov.availablePipes(mDpy, ovutils::OV_MDP_PIPE_VG);
-    if(pipesNeeded > availableVGPipes) {
-        ALOGD_IF(isDebug(), "%s: Insufficient VG pipes for video layers"
-                "dpy %d needed %d, avail %d",
-                __FUNCTION__, mDpy, pipesNeeded, availableVGPipes);
-        return false;
-    }
-
-    return true;
-}
-
 bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     for(int index = 0; index < mCurrentFrame.layerCount; index++) {
@@ -1615,6 +1381,10 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
 
         if(isYuvBuffer(hnd)) {
             type = MDPCOMP_OV_VG;
+        } else if(qdutils::MDPVersion::getInstance().is8x26() &&
+                (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024)) {
+            if(qhwc::needsScaling(layer))
+                type = MDPCOMP_OV_RGB;
         } else if(!qhwc::needsScaling(layer)
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
@@ -1784,106 +1554,6 @@ void MDPCompSplit::adjustForSourceSplit(hwc_context_t *ctx,
             mCurrentFrame.fbZ += 1;
         }
     }
-}
-
-int MDPCompSplit::pipesNeeded(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list,
-        int mixer) {
-    int pipesNeeded = 0;
-    const int xres = ctx->dpyAttr[mDpy].xres;
-
-    const int lSplit = getLeftSplit(ctx, mDpy);
-
-    for(int i = 0; i < mCurrentFrame.layerCount; ++i) {
-        if(!mCurrentFrame.isFBComposed[i]) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            hwc_rect_t dst = layer->displayFrame;
-            if(mixer == Overlay::MIXER_LEFT && dst.left < lSplit) {
-                pipesNeeded++;
-            } else if(mixer == Overlay::MIXER_RIGHT && dst.right > lSplit) {
-                pipesNeeded++;
-            }
-        }
-    }
-    return pipesNeeded;
-}
-
-bool MDPCompSplit::arePipesAvailable(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    overlay::Overlay& ov = *ctx->mOverlay;
-    int totalPipesNeeded = 0;
-
-    for(int i = 0; i < Overlay::MIXER_MAX; i++) {
-        int numPipesNeeded = pipesNeeded(ctx, list, i);
-        int availPipes = ov.availablePipes(mDpy, i);
-
-        //Reserve pipe(s)for FB
-        if(mCurrentFrame.fbCount)
-            numPipesNeeded += 1;
-
-        totalPipesNeeded += numPipesNeeded;
-
-        //Per mixer check.
-        if(numPipesNeeded > availPipes) {
-            ALOGD_IF(isDebug(), "%s: Insufficient pipes for "
-                     "dpy %d mixer %d needed %d, avail %d",
-                     __FUNCTION__, mDpy, i, numPipesNeeded, availPipes);
-            return false;
-        }
-    }
-
-    //Per display check, since unused pipes can get counted twice.
-    int totalPipesAvailable = ov.availablePipes(mDpy);
-    if(totalPipesNeeded > totalPipesAvailable) {
-        ALOGD_IF(isDebug(), "%s: Insufficient pipes for "
-                "dpy %d needed %d, avail %d",
-                __FUNCTION__, mDpy, totalPipesNeeded, totalPipesAvailable);
-        return false;
-    }
-
-    if(not areVGPipesAvailable(ctx, list)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool MDPCompSplit::areVGPipesAvailable(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list) {
-    overlay::Overlay& ov = *ctx->mOverlay;
-    int pipesNeeded = 0;
-    const int lSplit = getLeftSplit(ctx, mDpy);
-    for(int i = 0; i < mCurrentFrame.layerCount; ++i) {
-        if(!mCurrentFrame.isFBComposed[i]) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
-            hwc_rect_t dst = layer->displayFrame;
-            private_handle_t *hnd = (private_handle_t *)layer->handle;
-            if(is4kx2kYuvBuffer(hnd) && sEnable4k2kYUVSplit){
-                if((dst.left > lSplit)||(dst.right < lSplit)){
-                    pipesNeeded = pipesNeeded + 2;
-                    continue;
-                }
-            }
-            if(isYuvBuffer(hnd)) {
-                if(dst.left < lSplit) {
-                    pipesNeeded++;
-                }
-                if(dst.right > lSplit) {
-                    pipesNeeded++;
-                }
-            }
-        }
-    }
-
-    int availableVGPipes = ov.availablePipes(mDpy, ovutils::OV_MDP_PIPE_VG);
-    if(pipesNeeded > availableVGPipes) {
-        ALOGD_IF(isDebug(), "%s: Insufficient VG pipes for video layers"
-                "dpy %d needed %d, avail %d",
-                __FUNCTION__, mDpy, pipesNeeded, availableVGPipes);
-        return false;
-    }
-
-    return true;
 }
 
 bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
