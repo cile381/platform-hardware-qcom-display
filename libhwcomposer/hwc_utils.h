@@ -30,6 +30,8 @@
 #include <utils/String8.h>
 #include "qdMetaData.h"
 #include <overlayUtils.h>
+#include <EGL/egl.h>
+
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
@@ -60,7 +62,6 @@ class MDPComp;
 class CopyBit;
 class HwcDebug;
 class AssertiveDisplay;
-class VPUClient;
 class HWCVirtualBase;
 
 
@@ -145,14 +146,12 @@ struct BwcPM {
 enum {
     HWC_MDPCOMP = 0x00000001,
     HWC_COPYBIT = 0x00000002,
-    HWC_VPUCOMP = 0x00000004,
 };
 
 // HAL specific features
 enum {
     HWC_COLOR_FILL = 0x00000008,
     HWC_FORMAT_RB_SWAP = 0x00000040,
-    HWC_VPU_PIPE = 0x00000200,
 };
 
 class LayerRotMap {
@@ -344,6 +343,12 @@ int getLeftSplit(hwc_context_t *ctx, const int& dpy);
 
 bool isDisplaySplit(hwc_context_t* ctx, int dpy);
 
+// Set the GPU hint flag to high for MIXED/GPU composition only for
+// first frame after MDP to GPU/MIXED mode transition.
+// Set the GPU hint to default if the current composition type is GPU
+// due to idle fallback or MDP composition.
+void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
@@ -442,6 +447,20 @@ enum eAnimationState{
     ANIMATION_STARTED,
 };
 
+// Structure holds the information about the GPU hint.
+struct gpu_hint_info {
+    // system level flag to enable gpu_perf_mode
+    bool mGpuPerfModeEnable;
+    // Stores the current GPU performance mode DEFAULT/HIGH
+    bool mCurrGPUPerfMode;
+    // true if previous composition used GPU
+    bool mPrevCompositionGLES;
+    // Stores the EGLContext of current process
+    EGLContext mEGLContext;
+    // Stores the EGLDisplay of current process
+    EGLDisplay mEGLDisplay;
+};
+
 // -----------------------------------------------------------------------------
 // HWC context
 // This structure contains overall state
@@ -471,7 +490,6 @@ struct hwc_context_t {
     qhwc::HwcDebug *mHwcDebug[HWC_NUM_DISPLAY_TYPES];
     hwc_rect_t mViewFrame[HWC_NUM_DISPLAY_TYPES];
     qhwc::AssertiveDisplay *mAD;
-    qhwc::VPUClient *mVPUClient;
     eAnimationState mAnimationState[HWC_NUM_DISPLAY_TYPES];
     qhwc::HWCVirtualBase *mHWCVirtual;
 
@@ -506,6 +524,7 @@ struct hwc_context_t {
     // Downscale feature switch, set via system the property
     // sys.hwc.mdp_downscale_enabled
     bool mMDPDownscaleEnabled;
+    struct gpu_hint_info mGPUHintInfo;
 };
 
 namespace qhwc {
