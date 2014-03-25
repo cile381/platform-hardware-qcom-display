@@ -420,6 +420,14 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
 
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
 
+    //Disable mixed mode MDPComp for sendoary display, if automotive mode is on
+    if(ctx->mAutomotiveModeOn && mDpy) {
+        ALOGD_IF(isDebug(), "%s: Disable mixed mode for automotive dpy %d",
+            __FUNCTION__, mDpy);
+        return false;
+    }
+
+
     if(sIdleFallBack && !ctx->listStats[mDpy].secureUI) {
         ALOGD_IF(isDebug(), "%s: Idle fallback dpy %d",__FUNCTION__, mDpy);
         return false;

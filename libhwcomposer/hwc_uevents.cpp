@@ -37,6 +37,7 @@ using namespace overlay;
 namespace qhwc {
 #define HWC_UEVENT_SWITCH_STR  "change@/devices/virtual/switch/"
 #define HWC_UEVENT_THREAD_NAME "hwcUeventThread"
+#define REVERSE_CAMERA_ACK "/sys/class/switch/reverse/ack"
 
 /* External Display states */
 enum {
@@ -88,11 +89,95 @@ static int getConnectedState(const char* strUdata, int len)
     return -1;
 }
 
+static void signalReverseCameraToStart() {
+    // Open a switch node to send notification to reverse camera .
+    int fd = open(REVERSE_CAMERA_ACK, O_RDWR, 0);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_ACK, strerror(errno));
+        return;
+    }
+    // write to the node to send ack for reverse camera
+    ssize_t len = pwrite(fd, "1", strlen("1"), 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to write reverse camera ack node : %s",
+                __FUNCTION__, strerror(errno));
+    }
+    close(fd);
+    return;
+}
+
+static void handleReverseCameraState(hwc_context_t* ctx,
+                                           const eReverseCameraState state) {
+    ctx->mDrawLock.lock();
+    int dpy = HWC_DISPLAY_PRIMARY;
+    switch(state) {
+        case REVERSE_CAMERA_OFF:
+            /* TODO: need to implement synchronization mechanism to wait for
+               camera to release all the pipes. sleep for camera to release
+               all the pipes for time being */
+            usleep(500*1000);
+            ctx->dpyAttr[dpy].isPause = false;
+            ctx->proc->invalidate(ctx->proc);
+            break;
+        case REVERSE_CAMERA_ON:
+            // Change the primary display state to pause not to configure
+            // the overlay from next draw cycle and trigger new draw cycle
+            ctx->dpyAttr[dpy].isPause = true;
+            ctx->proc->invalidate(ctx->proc);
+            //Wait for draw thread to signal the completion of overlay unset
+            ctx->mDrawLock.wait();
+            // Call display commit to release the layer's fence and the pipes
+            //assoiciated with the layers
+            if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd, 1)) {
+                ALOGE("%s: display commit fail for primary!", __FUNCTION__);
+            }
+            // Acknowledge the reverse camera driver to acquire the pipes
+            signalReverseCameraToStart();
+            break;
+        default:
+            ALOGE("%s: Invalid reverse camera state %d", __FUNCTION__, state);
+            break;
+    }
+    ctx->mDrawLock.unlock();
+}
+
+/* Parse uevent data for action requested for the display */
+static bool getReverseCameraState(const char* strUdata,
+                                       int len,
+                                       eReverseCameraState& reverseCameraState)
+{
+    const char* iter_str = strUdata;
+    if (strcasestr("change@/devices/virtual/switch/reverse", strUdata)) {
+        while(((iter_str - strUdata) <= len) && (*iter_str)) {
+            char* pstr = strstr(iter_str, "SWITCH_STATE=");
+            if (pstr != NULL) {
+                reverseCameraState =
+                    (eReverseCameraState)(atoi(pstr + strlen("SWITCH_STATE=")));
+                ALOGE_IF(UEVENT_DEBUG, "%s: reverse camera switch state %d",
+                    __FUNCTION__, reverseCameraState);
+                // send an update to the screen, so that when user switches from
+                // rear view camera to UI, the UI will be shown immediately.
+                return true;
+            }
+            iter_str += strlen(iter_str)+1;
+        }
+    }
+    return false;
+}
+
 static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
     // do not handle uevent of hdmi or wfd, if automotive mode is on
-    if(ctx->mAutomotiveModeOn)
+    if(ctx->mAutomotiveModeOn) {
+        eReverseCameraState reverseCameraState;
+        bool state_update = getReverseCameraState(udata, len,
+                                                  reverseCameraState);
+        // Handle the state transition, if there is any state update
+        if(state_update)
+            handleReverseCameraState(ctx, reverseCameraState);
         return;
+    }
 
     bool bpanelReset = getPanelResetStatus(ctx, udata, len);
     if (bpanelReset) {
