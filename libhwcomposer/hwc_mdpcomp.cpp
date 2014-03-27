@@ -38,13 +38,13 @@ namespace qhwc {
 
 IdleInvalidator *MDPComp::idleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
-bool MDPComp::sHandleTimeout = false;
 bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
 bool MDPComp::sEnableMixedMode = true;
 bool MDPComp::sEnablePartialFrameUpdate = false;
 int MDPComp::sMaxPipesPerMixer = MAX_PIPES_PER_MIXER;
 bool MDPComp::sEnable4k2kYUVSplit = false;
+double MDPComp::sBwClaimed = 0.0;
 
 MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
     if(isDisplaySplit(ctx, dpy)) {
@@ -170,12 +170,7 @@ void MDPComp::timeout_handler(void *udata) {
         ALOGE("%s: received empty data in timer callback", __FUNCTION__);
         return;
     }
-    Locker::Autolock _l(ctx->mDrawLock);
-    // Handle timeout event only if the previous composition is MDP or MIXED.
-    if(!sHandleTimeout) {
-        ALOGD_IF(isDebug(), "%s:Do not handle this timeout", __FUNCTION__);
-        return;
-    }
+
     if(!ctx->proc) {
         ALOGE("%s: HWC proc not registered", __FUNCTION__);
         return;
@@ -1432,10 +1427,9 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return true;
     }
 
-    // Set the Handle timeout to true for MDP or MIXED composition.
-    if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount) {
-        sHandleTimeout = true;
-    }
+    /* reset Invalidator */
+    if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount)
+        idleInvalidator->handleUpdateEvent();
 
     overlay::Overlay& ov = *ctx->mOverlay;
     LayerProp *layerProp = ctx->layerProp[mDpy];
@@ -1680,10 +1674,9 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return true;
     }
 
-    // Set the Handle timeout to true for MDP or MIXED composition.
-    if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount) {
-        sHandleTimeout = true;
-    }
+    /* reset Invalidator */
+    if(idleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount)
+        idleInvalidator->handleUpdateEvent();
 
     overlay::Overlay& ov = *ctx->mOverlay;
     LayerProp *layerProp = ctx->layerProp[mDpy];

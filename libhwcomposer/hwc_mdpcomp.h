@@ -52,7 +52,7 @@ public:
     /* Initialize MDP comp*/
     static bool init(hwc_context_t *ctx);
     static void resetIdleFallBack() { sIdleFallBack = false; }
-    static void reset() { sHandleTimeout = false; };
+    static void reset() { sBwClaimed = 0.0; };
 
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
@@ -222,9 +222,8 @@ protected:
     static bool sEnablePartialFrameUpdate;
     static bool sDebugLogs;
     static bool sIdleFallBack;
-    /* Handles the timeout event from kernel, if the value is set to true */
-    static bool sHandleTimeout;
     static int sMaxPipesPerMixer;
+    static double sBwClaimed;
     static IdleInvalidator *idleInvalidator;
     struct FrameInfo mCurrentFrame;
     struct LayerCache mCachedFrame;
