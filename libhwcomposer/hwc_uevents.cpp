@@ -137,7 +137,6 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
         case EXTERNAL_ONLINE:
             {   // connect case
-                ctx->mExtDispConfiguring = true;
                 const char *s1 = udata + strlen(HWC_UEVENT_SWITCH_STR);
                 if (hdmi_as_primary) {
                     int newMode = ctx->mExtDisplay->getNewMode();
@@ -147,6 +146,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     if ((curMode != -1) && (newMode != curMode)) {
                         if (ctx->mExtDisplay->isValidMode(newMode) &&
                             !ctx->mExtDisplay->isInterlacedMode(newMode)) {
+                            ctx->mExtDispConfiguring = true;
                             ctx->mResChanged = true;
                             ctx->mExtDisplay->setNewMode(newMode);
                             ctx->proc->invalidate(ctx->proc);
@@ -154,6 +154,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     }
                     break;
                 } else if(!strncmp(s1,"hdmi",strlen(s1))) {
+                    ctx->mExtDispConfiguring = true;
                     // hdmi online event..!
                     // check if WFD is configured
                     if(ctx->mExtDisplay->isWFDActive()) {
@@ -179,6 +180,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     }
                     ctx->mExtDisplay->configureHDMIDisplay();
                 } else if(!strncmp(s1,"wfd",strlen(s1))) {
+                    ctx->mExtDispConfiguring = true;
                     // wfd online event..!
                     ctx->mExtDisplay->configureWFDDisplay();
                 }
