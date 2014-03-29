@@ -32,6 +32,10 @@ endif
 common_deps  :=
 kernel_includes :=
 
+ifeq ($(BOARD_USES_QCOM_HARDWARE),true)
+    common_flags += -DQCOM_OSS_BSP
+endif
+
 # Executed only on QCOM BSPs
 ifeq ($(call is-vendor-board-platform,QCOM),true)
     common_flags += -DQCOM_BSP
