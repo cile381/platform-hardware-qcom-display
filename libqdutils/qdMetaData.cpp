@@ -123,12 +123,18 @@ int getMetaData(private_handle_t *handle, DispParamType paramType,
 
 mpd_handle display_perf_boost_on()
 {
+#ifdef QCOM_OSS_BSP
     int params[1] = { CPUS_ONLINE_3 };
     return perf_lock_acq(0, 0, params, sizeof(params) / sizeof(int));
+#else
+    return -1;
+#endif
 }
 
 void display_perf_boost_off(mpd_handle mpDecisionHandle)
 {
+#ifdef QCOM_OSS_BSP
     perf_lock_rel(mpDecisionHandle);
+#endif
     return;
 }

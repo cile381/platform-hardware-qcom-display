@@ -46,6 +46,10 @@ endif
 common_deps  :=
 kernel_includes :=
 
+ifeq ($(BOARD_USES_QCOM_HARDWARE),true)
+    common_flags += -DQCOM_OSS_BSP
+endif
+
 # Executed only on QCOM BSPs
 ifeq ($(TARGET_USES_QCOM_BSP),true)
 # This flag is used to compile out any features that depend on framework changes
