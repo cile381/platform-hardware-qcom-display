@@ -37,8 +37,6 @@
 #include <poll.h>
 #include "mdp_version.h"
 
-#define HDMI_CONNECTION_PATH "/sys/devices/virtual/graphics/fb1/connected"
-
 using namespace android;
 
 namespace qhwc {
@@ -46,7 +44,76 @@ namespace qhwc {
 #define UNKNOWN_STRING                  "unknown"
 #define SPD_NAME_LENGTH                 16
 
-int ExternalDisplay::configure() {
+ExternalDisplay::ExternalDisplay(hwc_context_t* ctx, int dpy):mFd(-1),
+       mHwcContext(ctx), mDpy(dpy)
+{
+    memset(&mVInfo, 0, sizeof(mVInfo));
+    mFbNum = overlay::Overlay::getInstance()->getFbForDpy(mDpy);
+}
+
+bool ExternalDisplay::openFrameBuffer()
+{
+    if (mFd == -1) {
+        char strDevPath[MAX_SYSFS_FILE_PATH];
+        snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d", mFbNum);
+        mFd = open(strDevPath, O_RDWR);
+        if (mFd < 0)
+            ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
+        mHwcContext->dpyAttr[mDpy].fd = mFd;
+    }
+    return (mFd > 0);
+}
+
+bool ExternalDisplay::closeFrameBuffer()
+{
+    int ret = 0;
+    if(mFd >= 0) {
+        ret = close(mFd);
+        mFd = -1;
+    }
+    mHwcContext->dpyAttr[mDpy].fd = mFd;
+    return (ret == 0);
+}
+
+// ---------------- SecondaryDisplay Implementation ----------------------------
+SecondaryDisplay::SecondaryDisplay(hwc_context_t* ctx, int dpy):
+    ExternalDisplay(ctx, dpy),
+    mCurrentMode(-1), mModeCount(0),
+    mUnderscanSupported(false)
+{
+    if(ctx->mAutomotiveModeOn) {
+        // Enable HPD for automotive because HDMI is connected by default
+        writeHPDOption(1);
+    } else {
+        // disable HPD at start, it will be enabled later
+        // when the display powers on
+        // This helps for framework reboot or adb shell stop/start
+        writeHPDOption(0);
+    }
+
+    // for HDMI - retreive all the modes supported by the driver
+    if(mFbNum != -1) {
+        supported_video_mode_lut =
+                        new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
+        // Populate the mode table for supported modes
+        MSM_HDMI_MODES_INIT_TIMINGS(supported_video_mode_lut);
+        MSM_HDMI_MODES_SET_SUPP_TIMINGS(supported_video_mode_lut,
+                                        MSM_HDMI_MODES_ALL);
+        // Update the Source Product Information
+        // Vendor Name
+        setSPDInfo("vendor_name", "ro.product.manufacturer");
+        // Product Description
+        setSPDInfo("product_description", "ro.product.name");
+    }
+}
+
+SecondaryDisplay::~SecondaryDisplay()
+{
+    delete [] supported_video_mode_lut;
+    closeFrameBuffer();
+}
+
+int SecondaryDisplay::configure() {
     if(mHwcContext->mAutomotiveModeOn && !waitForConnectEvent()) {
         return -1;
     }
@@ -73,12 +140,12 @@ int ExternalDisplay::configure() {
     return 0;
 }
 
-void ExternalDisplay::getAttributes(int& width, int& height) {
+void SecondaryDisplay::getAttributes(int& width, int& height) {
     int fps = 0;
     getAttrForMode(width, height, fps);
 }
 
-int ExternalDisplay::teardown() {
+int SecondaryDisplay::teardown() {
     closeFrameBuffer();
     resetInfo();
     // unset system property
@@ -86,42 +153,11 @@ int ExternalDisplay::teardown() {
     return 0;
 }
 
-ExternalDisplay::ExternalDisplay(hwc_context_t* ctx):mFd(-1),
-    mCurrentMode(-1), mModeCount(0),
-    mUnderscanSupported(false), mHwcContext(ctx)
-{
-    memset(&mVInfo, 0, sizeof(mVInfo));
-    mFbNum = overlay::Overlay::getInstance()->getFbForDpy(HWC_DISPLAY_EXTERNAL);
-    if(ctx->mAutomotiveModeOn) {
-        // Enable HPD for automotive because HDMI is connected by default
-        writeHPDOption(1);
-    } else {
-        // disable HPD at start, it will be enabled later
-        // when the display powers on
-        // This helps for framework reboot or adb shell stop/start
-        writeHPDOption(0);
-    }
-
-    // for HDMI - retreive all the modes supported by the driver
-    if(mFbNum != -1) {
-        supported_video_mode_lut =
-                        new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
-        // Populate the mode table for supported modes
-        MSM_HDMI_MODES_INIT_TIMINGS(supported_video_mode_lut);
-        MSM_HDMI_MODES_SET_SUPP_TIMINGS(supported_video_mode_lut,
-                                        MSM_HDMI_MODES_ALL);
-        // Update the Source Product Information
-        // Vendor Name
-        setSPDInfo("vendor_name", "ro.product.manufacturer");
-        // Product Description
-        setSPDInfo("product_description", "ro.product.name");
-    }
-}
 /* gets the product manufacturer and product name and writes it
  * to the sysfs node, so that the driver can get that information
  * Used to show QCOM 8974 instead of Input 1 for example
  */
-void ExternalDisplay::setSPDInfo(const char* node, const char* property) {
+void SecondaryDisplay::setSPDInfo(const char* node, const char* property) {
     int err = -1;
     char info[PROPERTY_VALUE_MAX];
     char sysFsSPDFilePath[MAX_SYSFS_FILE_PATH];
@@ -152,12 +188,12 @@ void ExternalDisplay::setSPDInfo(const char* node, const char* property) {
     }
 }
 
-void ExternalDisplay::setHPD(uint32_t startEnd) {
+void SecondaryDisplay::setHPD(uint32_t startEnd) {
     ALOGD_IF(DEBUG,"HPD enabled=%d", startEnd);
     writeHPDOption(startEnd);
 }
 
-void ExternalDisplay::setActionSafeDimension(int w, int h) {
+void SecondaryDisplay::setActionSafeDimension(int w, int h) {
     ALOGD_IF(DEBUG,"ActionSafe w=%d h=%d", w, h);
     char actionsafeWidth[PROPERTY_VALUE_MAX];
     char actionsafeHeight[PROPERTY_VALUE_MAX];
@@ -167,18 +203,18 @@ void ExternalDisplay::setActionSafeDimension(int w, int h) {
     property_set("persist.sys.actionsafe.height", actionsafeHeight);
 }
 
-int ExternalDisplay::getModeCount() const {
+int SecondaryDisplay::getModeCount() const {
     ALOGD_IF(DEBUG,"HPD mModeCount=%d", mModeCount);
     return mModeCount;
 }
 
-void ExternalDisplay::getEDIDModes(int *out) const {
+void SecondaryDisplay::getEDIDModes(int *out) const {
     for(int i = 0;i < mModeCount;i++) {
         out[i] = mEDIDModes[i];
     }
 }
 
-void ExternalDisplay::readCEUnderscanInfo()
+void SecondaryDisplay::readCEUnderscanInfo()
 {
     int hdmiScanInfoFile = -1;
     int len = -1;
@@ -248,12 +284,6 @@ void ExternalDisplay::readCEUnderscanInfo()
     return;
 }
 
-ExternalDisplay::~ExternalDisplay()
-{
-    delete [] supported_video_mode_lut;
-    closeFrameBuffer();
-}
-
 /*
  * sets the fb_var_screeninfo from the hdmi_mode_timing_info
  */
@@ -284,7 +314,7 @@ void setDisplayTiming(struct fb_var_screeninfo &info,
     info.upper_margin = mode->back_porch_v;
 }
 
-int ExternalDisplay::parseResolution(char* edidStr, int* edidModes)
+int SecondaryDisplay::parseResolution(char* edidStr, int* edidModes)
 {
     char delim = ',';
     int count = 0;
@@ -305,7 +335,7 @@ int ExternalDisplay::parseResolution(char* edidStr, int* edidModes)
     return count;
 }
 
-bool ExternalDisplay::readResolution()
+bool SecondaryDisplay::readResolution()
 {
     char sysFsEDIDFilePath[MAX_SYSFS_FILE_PATH];
     snprintf(sysFsEDIDFilePath , sizeof(sysFsEDIDFilePath),
@@ -346,12 +376,15 @@ bool ExternalDisplay::readResolution()
     return (len > 0);
 }
 
-bool ExternalDisplay::waitForConnectEvent() {
+bool SecondaryDisplay::waitForConnectEvent() {
     // Open a sysfs node to receive the timeout notification from driver.
-    int fd = open(HDMI_CONNECTION_PATH, O_RDONLY);
+    char sysFsExtConnectionPath[MAX_SYSFS_FILE_PATH];
+    snprintf(sysFsExtConnectionPath , sizeof(sysFsExtConnectionPath),
+                 "/sys/devices/virtual/graphics/fb%d/connected", mFbNum);
+    int fd = open(sysFsExtConnectionPath, O_RDONLY);
     if (fd < 0) {
         ALOGE ("%s:not able to open %s node %s",
-                __FUNCTION__, HDMI_CONNECTION_PATH, strerror(errno));
+                __FUNCTION__, sysFsExtConnectionPath, strerror(errno));
         return false;
     }
     struct pollfd pFd;
@@ -369,7 +402,7 @@ bool ExternalDisplay::waitForConnectEvent() {
                 if (UNLIKELY(len < 0)) {
                     // If the read was just interrupted - it is not a
                     // fatal error. Just continue in this case
-                    ALOGE ("%s: Unable to read connect event for external : %s",
+                    ALOGE ("%s: Unable to read connect event for secondary: %s",
                             __FUNCTION__, strerror(errno));
                     continue;
                 }
@@ -389,32 +422,8 @@ bool ExternalDisplay::waitForConnectEvent() {
     }while(true);
 }
 
-bool ExternalDisplay::openFrameBuffer()
-{
-    if (mFd == -1) {
-        char strDevPath[MAX_SYSFS_FILE_PATH];
-        snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d", mFbNum);
-        mFd = open(strDevPath, O_RDWR);
-        if (mFd < 0)
-            ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].fd = mFd;
-    }
-    return (mFd > 0);
-}
-
-bool ExternalDisplay::closeFrameBuffer()
-{
-    int ret = 0;
-    if(mFd >= 0) {
-        ret = close(mFd);
-        mFd = -1;
-    }
-    mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].fd = mFd;
-    return (ret == 0);
-}
-
 // clears the vinfo, edid, best modes
-void ExternalDisplay::resetInfo()
+void SecondaryDisplay::resetInfo()
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
     memset(mEDIDModes, 0, sizeof(mEDIDModes));
@@ -426,7 +435,7 @@ void ExternalDisplay::resetInfo()
     property_set("hw.underscan_supported", prop);
 }
 
-int ExternalDisplay::getModeOrder(int mode)
+int SecondaryDisplay::getModeOrder(int mode)
 {
     // XXX: We dont support interlaced modes but having
     // it here for future
@@ -482,7 +491,7 @@ int ExternalDisplay::getModeOrder(int mode)
 }
 
 /// Returns the user mode set(if any) using adb shell
-int ExternalDisplay::getUserMode() {
+int SecondaryDisplay::getUserMode() {
     /* Based on the property set the resolution */
     char property_value[PROPERTY_VALUE_MAX];
     property_get("hw.hdmi.resolution", property_value, "-1");
@@ -496,7 +505,7 @@ int ExternalDisplay::getUserMode() {
 }
 
 // Get the best mode for the current HD TV
-int ExternalDisplay::getBestMode() {
+int SecondaryDisplay::getBestMode() {
     int bestOrder = 0;
     int bestMode = HDMI_VFRMT_640x480p60_4_3;
     // for all the edid read, get the best mode
@@ -511,7 +520,7 @@ int ExternalDisplay::getBestMode() {
     return bestMode;
 }
 
-inline bool ExternalDisplay::isValidMode(int ID)
+inline bool SecondaryDisplay::isValidMode(int ID)
 {
     bool valid = false;
     for (int i = 0; i < mModeCount; i++) {
@@ -524,7 +533,7 @@ inline bool ExternalDisplay::isValidMode(int ID)
 }
 
 // returns true if the mode(ID) is interlaced mode format
-bool ExternalDisplay::isInterlacedMode(int ID) {
+bool SecondaryDisplay::isInterlacedMode(int ID) {
     bool interlaced = false;
     switch(ID) {
         case HDMI_VFRMT_1440x480i60_4_3:
@@ -539,7 +548,37 @@ bool ExternalDisplay::isInterlacedMode(int ID) {
     return interlaced;
 }
 
-void ExternalDisplay::setResolution(int ID)
+bool SecondaryDisplay::writeHPDOption(int userOption) const
+{
+    bool ret = true;
+    if(mFbNum != -1) {
+        char sysFsHPDFilePath[MAX_SYSFS_FILE_PATH];
+        snprintf(sysFsHPDFilePath ,sizeof(sysFsHPDFilePath),
+                "/sys/devices/virtual/graphics/fb%d/hpd", mFbNum);
+        int hdmiHPDFile = open(sysFsHPDFilePath,O_RDWR, 0);
+        if (hdmiHPDFile < 0) {
+            ALOGE("%s: state file '%s' not found : ret%d err str: %s",
+                  __FUNCTION__, sysFsHPDFilePath, hdmiHPDFile, strerror(errno));
+            ret = false;
+        } else {
+            int err = -1;
+            ALOGD_IF(DEBUG, "%s: option = %d", __FUNCTION__, userOption);
+            if(userOption)
+                err = write(hdmiHPDFile, "1", 2);
+            else
+                err = write(hdmiHPDFile, "0" , 2);
+            if (err <= 0) {
+                ALOGE("%s: file write failed '%s'", __FUNCTION__,
+                        sysFsHPDFilePath);
+                ret = false;
+            }
+            close(hdmiHPDFile);
+        }
+    }
+    return ret;
+}
+
+void SecondaryDisplay::setResolution(int ID)
 {
     struct fb_var_screeninfo info;
     int ret = 0;
@@ -593,46 +632,15 @@ void ExternalDisplay::setResolution(int ID)
     }
 }
 
-bool ExternalDisplay::writeHPDOption(int userOption) const
-{
-    bool ret = true;
-    if(mFbNum != -1) {
-        char sysFsHPDFilePath[MAX_SYSFS_FILE_PATH];
-        snprintf(sysFsHPDFilePath ,sizeof(sysFsHPDFilePath),
-                "/sys/devices/virtual/graphics/fb%d/hpd", mFbNum);
-        int hdmiHPDFile = open(sysFsHPDFilePath,O_RDWR, 0);
-        if (hdmiHPDFile < 0) {
-            ALOGE("%s: state file '%s' not found : ret%d err str: %s",
-                    __FUNCTION__, sysFsHPDFilePath, hdmiHPDFile, strerror(errno));
-            ret = false;
-        } else {
-            int err = -1;
-            ALOGD_IF(DEBUG, "%s: option = %d", __FUNCTION__, userOption);
-            if(userOption)
-                err = write(hdmiHPDFile, "1", 2);
-            else
-                err = write(hdmiHPDFile, "0" , 2);
-            if (err <= 0) {
-                ALOGE("%s: file write failed '%s'", __FUNCTION__,
-                        sysFsHPDFilePath);
-                ret = false;
-            }
-            close(hdmiHPDFile);
-        }
-    }
-    return ret;
-}
-
-
-void ExternalDisplay::setAttributes() {
+void SecondaryDisplay::setAttributes() {
     int width = 0, height = 0, fps = 0;
     getAttrForMode(width, height, fps);
-    ALOGD("ExtDisplay setting xres = %d, yres = %d", width, height);
+    ALOGD("SecondaryDisplay setting xres = %d, yres = %d", width, height);
     if(mHwcContext) {
         // Always set dpyAttr res to mVInfo res
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = width;
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = height;
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
+        mHwcContext->dpyAttr[mDpy].xres = width;
+        mHwcContext->dpyAttr[mDpy].yres = height;
+        mHwcContext->dpyAttr[mDpy].mDownScaleMode = false;
         int priW = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
         int priH = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
         // if primary resolution is more than HDMI resolution and
@@ -641,26 +649,27 @@ void ExternalDisplay::setAttributes() {
         // resolution and set downscale mode.
         if(((priW * priH) > (width * height)) &&
             (priW <= MAX_DISPLAY_DIM )) {
-            int downscale_factor = overlay::utils::getDownscaleFactor(priW, priH, width, height);
+            int downscale_factor =
+                overlay::utils::getDownscaleFactor(priW, priH, width, height);
             if(!downscale_factor) {
-                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priW;
-                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priH;
+                mHwcContext->dpyAttr[mDpy].xres = priW;
+                mHwcContext->dpyAttr[mDpy].yres = priH;
                 // HDMI is always in landscape, so always assign the higher
                 // dimension to hdmi's xres
                 if(priH > priW) {
-                    mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].xres = priH;
-                    mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].yres = priW;
+                    mHwcContext->dpyAttr[mDpy].xres = priH;
+                    mHwcContext->dpyAttr[mDpy].yres = priW;
                 }
-                // Set External Display MDP Downscale mode indicator
-                mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode =true;
+                // Set Secondary Display MDP Downscale mode indicator
+                mHwcContext->dpyAttr[mDpy].mDownScaleMode =true;
             }
         }
-        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].vsync_period =
+        mHwcContext->dpyAttr[mDpy].vsync_period =
                 1000000000l / fps;
     }
 }
 
-void ExternalDisplay::getAttrForMode(int& width, int& height, int& fps) {
+void SecondaryDisplay::getAttrForMode(int& width, int& height, int& fps) {
     switch (mCurrentMode) {
         case HDMI_VFRMT_640x480p60_4_3:
             width = 640;
@@ -749,5 +758,66 @@ void ExternalDisplay::getAttrForMode(int& width, int& height, int& fps) {
             break;
     }
 }
+
+// ---------------- TertiaryDisplay Implementation ----------------------------
+TertiaryDisplay::TertiaryDisplay(hwc_context_t* ctx, int dpy):
+    ExternalDisplay(ctx, dpy)
+{
+}
+
+TertiaryDisplay::~TertiaryDisplay()
+{
+    closeFrameBuffer();
+}
+
+int TertiaryDisplay::configure() {
+    if(!openFrameBuffer()) {
+        ALOGE("%s: Failed to open FB: %d", __FUNCTION__, mFbNum);
+        return -1;
+    }
+    // Get the fb_var_screeninfo and initialize mVInfo of tertiary display
+    struct fb_var_screeninfo info;
+    int ret = 0;
+    ret = ioctl(mFd, FBIOGET_VSCREENINFO, &mVInfo);
+    if(ret < 0) {
+        ALOGD("In %s: FBIOGET_VSCREENINFO failed Err Str = %s", __FUNCTION__,
+                                                            strerror(errno));
+    }
+    ALOGD_IF(DEBUG, "%s: GET Info<ID=%d %dx%d (%d,%d,%d),"
+            "(%d,%d,%d) %dMHz>", __FUNCTION__,
+            mVInfo.reserved[3], mVInfo.xres, mVInfo.yres,
+            mVInfo.right_margin, mVInfo.hsync_len, mVInfo.left_margin,
+            mVInfo.lower_margin, mVInfo.vsync_len, mVInfo.upper_margin,
+            mVInfo.pixclock/1000/1000);
+    // For third display, set the attributes
+    setAttributes();
+    return 0;
+}
+
+void TertiaryDisplay::getAttributes(int& width, int& height) {
+    // derive the width and height values from fb_var_screeninfo
+    width = mVInfo.xres;
+    height = mVInfo.yres;
+}
+
+int TertiaryDisplay::teardown() {
+    closeFrameBuffer();
+    return 0;
+}
+
+void TertiaryDisplay::setAttributes() {
+    int width = 0, height = 0, fps = 60;
+    getAttributes(width, height);
+    ALOGD("TertiaryDisplay setting xres = %d, yres = %d", width, height);
+    if(mHwcContext) {
+        // Always set dpyAttr res to mVInfo res
+        mHwcContext->dpyAttr[mDpy].xres = width;
+        mHwcContext->dpyAttr[mDpy].yres = height;
+        mHwcContext->dpyAttr[mDpy].mDownScaleMode = false;
+        mHwcContext->dpyAttr[mDpy].vsync_period =
+                1000000000l / fps;
+    }
+}
+
 
 };

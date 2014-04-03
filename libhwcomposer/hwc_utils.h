@@ -52,7 +52,8 @@ class RotMgr;
 namespace qhwc {
 //fwrd decl
 class QueuedBufferStore;
-class ExternalDisplay;
+class SecondaryDisplay;
+class TertiaryDisplay;
 class VirtualDisplay;
 class IFBUpdate;
 class IVideoOverlay;
@@ -402,7 +403,8 @@ struct hwc_context_t {
     //Primary and external FB updater
     qhwc::IFBUpdate *mFBUpdate[HWC_NUM_DISPLAY_TYPES];
     // External display related information
-    qhwc::ExternalDisplay *mExtDisplay;
+    qhwc::SecondaryDisplay *mSecondaryDisplay;
+    qhwc::TertiaryDisplay *mTertiaryDisplay;
     qhwc::VirtualDisplay *mVirtualDisplay;
     qhwc::MDPInfo mMDP;
     qhwc::VsyncState vstate;

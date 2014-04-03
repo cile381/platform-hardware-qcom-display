@@ -39,19 +39,43 @@ enum external_scansupport_type {
 class ExternalDisplay
 {
 public:
-    ExternalDisplay(hwc_context_t* ctx);
-    ~ExternalDisplay();
-    void setHPD(uint32_t startEnd);
-    void setActionSafeDimension(int w, int h);
-    bool isCEUnderscanSupported() { return mUnderscanSupported; }
-    int configure();
-    void getAttributes(int& width, int& height);
-    int teardown();
+    explicit ExternalDisplay(hwc_context_t* ctx, int dpy);
+    virtual ~ExternalDisplay() {};
+    virtual int configure() = 0;
+    virtual int teardown() = 0;
+    virtual void getAttributes(int& width, int& height) = 0;
     bool isConnected() {
-        return  mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].connected;
+        return  mHwcContext->dpyAttr[mDpy].connected;
     }
 
+protected:
+    virtual void setAttributes() = 0;
+    bool openFrameBuffer();
+    bool closeFrameBuffer();
+
+    int mFd;
+    int mFbNum;
+    hwc_context_t *mHwcContext;
+    int mDpy;
+    fb_var_screeninfo mVInfo;
+};
+
+class SecondaryDisplay : public ExternalDisplay
+{
+public:
+    explicit SecondaryDisplay(hwc_context_t* ctx, int dpy);
+    virtual ~SecondaryDisplay();
+    int configure();
+    int teardown();
+    void setHPD(uint32_t startEnd);
+    void getAttributes(int& width, int& height);
+    void setActionSafeDimension(int w, int h);
+    bool isCEUnderscanSupported() { return mUnderscanSupported; }
+
 private:
+    void setResolution(int ID);
+    void setAttributes();
+    void getAttrForMode(int& width, int& height, int& fps);
     int getModeCount() const;
     void getEDIDModes(int *out) const;
     void setEDIDMode(int resMode);
@@ -59,9 +83,6 @@ private:
     void readCEUnderscanInfo();
     bool readResolution();
     int  parseResolution(char* edidStr, int* edidModes);
-    void setResolution(int ID);
-    bool openFrameBuffer();
-    bool closeFrameBuffer();
     bool writeHPDOption(int userOption) const;
     bool isValidMode(int ID);
     int  getModeOrder(int mode);
@@ -69,20 +90,27 @@ private:
     int  getBestMode();
     bool isInterlacedMode(int mode);
     void resetInfo();
-    void setAttributes();
-    void getAttrForMode(int& width, int& height, int& fps);
     bool waitForConnectEvent();
 
-    int mFd;
-    int mFbNum;
     int mCurrentMode;
     int mEDIDModes[64];
     int mModeCount;
     bool mUnderscanSupported;
-    hwc_context_t *mHwcContext;
-    fb_var_screeninfo mVInfo;
     // Holds all the HDMI modes and timing info supported by driver
     msm_hdmi_mode_timing_info* supported_video_mode_lut;
+};
+
+class TertiaryDisplay : public ExternalDisplay
+{
+public:
+    explicit TertiaryDisplay(hwc_context_t* ctx, int dpy);
+    virtual ~TertiaryDisplay();
+    int configure();
+    int teardown();
+    void getAttributes(int& width, int& height);
+
+private:
+    void setAttributes();
 };
 
 }; //qhwc

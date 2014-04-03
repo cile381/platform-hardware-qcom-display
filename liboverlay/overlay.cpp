@@ -246,12 +246,42 @@ int Overlay::initOverlay() {
         }
     }
 
+    FILE *displayDeviceFP = NULL;
+    const int MAX_FRAME_BUFFER_NAME_SIZE = 128;
+    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
+    char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
+    const char *strDtvPanel = "dtv panel";
+    const char *strWbPanel = "writeback panel";
+
+    for(int num = 1; num < MAX_FB_DEVICES; num++) {
+        snprintf (msmFbTypePath, sizeof(msmFbTypePath),
+                "/sys/class/graphics/fb%d/msm_fb_type", num);
+        displayDeviceFP = fopen(msmFbTypePath, "r");
+
+        if(displayDeviceFP){
+            fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
+                    displayDeviceFP);
+
+            if(strncmp(fbType, strDtvPanel, strlen(strDtvPanel)) == 0) {
+                sDpyFbMap[DPY_EXTERNAL] = num;
+            } else if(strncmp(fbType, strWbPanel, strlen(strWbPanel)) == 0) {
+                sDpyFbMap[DPY_WRITEBACK] = num;
+            } else {
+                // if it comes here assume third display is available
+                sDpyFbMap[DPY_TERTIARY] = num;
+            }
+
+            fclose(displayDeviceFP);
+        }
+    }
     if (mdpVersion < qdutils::MDSS_V5) {
         msmfb_mixer_info_req  req;
         mdp_mixer_info *minfo = NULL;
         char name[64];
         int fd = -1;
-        for(int i = 0; i < MAX_FB_DEVICES; i++) {
+        // detach the pipes from mixer0, mixer1 and mixer2, if any pipes are
+        // attached to any mixer.
+        for(int i = 0; i < (MAX_FB_DEVICES - 1); i++) {
             snprintf(name, 64, FB_DEVICE_TEMPLATE, i);
             ALOGD("initoverlay:: opening the device:: %s", name);
             fd = ::open(name, O_RDWR, 0);
@@ -282,32 +312,6 @@ int Overlay::initOverlay() {
             }
             close(fd);
             fd = -1;
-        }
-    }
-
-    FILE *displayDeviceFP = NULL;
-    const int MAX_FRAME_BUFFER_NAME_SIZE = 128;
-    char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
-    char msmFbTypePath[MAX_FRAME_BUFFER_NAME_SIZE];
-    const char *strDtvPanel = "dtv panel";
-    const char *strWbPanel = "writeback panel";
-
-    for(int num = 1; num < MAX_FB_DEVICES; num++) {
-        snprintf (msmFbTypePath, sizeof(msmFbTypePath),
-                "/sys/class/graphics/fb%d/msm_fb_type", num);
-        displayDeviceFP = fopen(msmFbTypePath, "r");
-
-        if(displayDeviceFP){
-            fread(fbType, sizeof(char), MAX_FRAME_BUFFER_NAME_SIZE,
-                    displayDeviceFP);
-
-            if(strncmp(fbType, strDtvPanel, strlen(strDtvPanel)) == 0) {
-                sDpyFbMap[DPY_EXTERNAL] = num;
-            } else if(strncmp(fbType, strWbPanel, strlen(strWbPanel)) == 0) {
-                sDpyFbMap[DPY_WRITEBACK] = num;
-            }
-
-            fclose(displayDeviceFP);
         }
     }
 
@@ -378,7 +382,7 @@ void Overlay::PipeBook::destroy() {
 }
 
 Overlay* Overlay::sInstance = 0;
-int Overlay::sDpyFbMap[DPY_MAX] = {0, -1,-1};
+int Overlay::sDpyFbMap[DPY_MAX] = {0, -1, -1, -1};
 int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
 int Overlay::PipeBook::sLastUsageBitmap = 0;

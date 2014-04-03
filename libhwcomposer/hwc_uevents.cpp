@@ -50,7 +50,7 @@ enum {
 static int getConnectedDisplay(const char* strUdata)
 {
     if(strcasestr("change@/devices/virtual/switch/hdmi", strUdata))
-        return HWC_DISPLAY_EXTERNAL;
+        return HWC_DISPLAY_SECONDARY;
     if(strcasestr("change@/devices/virtual/switch/wfd", strUdata))
         return HWC_DISPLAY_VIRTUAL;
     return -1;
@@ -128,11 +128,11 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
             /* We need to send hotplug to SF only when we are disconnecting
              * (1) HDMI OR (2) proprietary WFD session */
-            if(dpy == HWC_DISPLAY_EXTERNAL ||
+            if(dpy == HWC_DISPLAY_SECONDARY ||
                     ctx->mVirtualonExtActive) {
                 ALOGE_IF(UEVENT_DEBUG,"%s:Sending EXTERNAL OFFLINE hotplug"
                         "event", __FUNCTION__);
-                ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL,
+                ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_SECONDARY,
                         EXTERNAL_OFFLINE);
                 ctx->mVirtualonExtActive = false;
             }
@@ -147,8 +147,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                         __FUNCTION__, dpy);
             }
 
-            if(dpy == HWC_DISPLAY_EXTERNAL) {
-                ctx->mExtDisplay->teardown();
+            if(dpy == HWC_DISPLAY_SECONDARY) {
+                ctx->mSecondaryDisplay->teardown();
             } else {
                 ctx->mVirtualDisplay->teardown();
             }
@@ -179,7 +179,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
             ctx->mDrawLock.wait();
             ctx->mDrawLock.unlock();
-            if(dpy == HWC_DISPLAY_EXTERNAL) {
+            if(dpy == HWC_DISPLAY_SECONDARY) {
                 if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected) {
                     ALOGD_IF(UEVENT_DEBUG,"Received HDMI connection request"
                              "when WFD is active");
@@ -195,7 +195,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     if(ctx->mVirtualonExtActive) {
                         ALOGE_IF(UEVENT_DEBUG,"%s: Sending EXTERNAL OFFLINE"
                                 "hotplug event", __FUNCTION__);
-                        ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL,
+                        ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_SECONDARY,
                                 EXTERNAL_OFFLINE);
                         ctx->mVirtualonExtActive = false;
                     }
@@ -213,7 +213,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
                     ctx->mVirtualDisplay->teardown();
                 }
-                ctx->mExtDisplay->configure();
+                ctx->mSecondaryDisplay->configure();
             } else {
                 {
                     Locker::Autolock _l(ctx->mDrawLock);
@@ -237,12 +237,12 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;
 
-            if(dpy == HWC_DISPLAY_EXTERNAL ||
+            if(dpy == HWC_DISPLAY_SECONDARY ||
                ctx->mVirtualonExtActive) {
                 /* External display is HDMI or non-hybrid WFD solution */
                 ALOGE_IF(UEVENT_DEBUG, "%s: Sending EXTERNAL_OFFLINE ONLINE"
                          "hotplug event", __FUNCTION__);
-                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_EXTERNAL,
+                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_SECONDARY,
                                    EXTERNAL_ONLINE);
             } else {
                 /* We wont be getting unblank for VIRTUAL DISPLAY and its

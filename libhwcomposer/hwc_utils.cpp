@@ -156,14 +156,20 @@ void initContext(hwc_context_t *ctx)
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = RotMgr::getInstance();
 
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = false;
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].mDownScaleMode = false;
+
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].mDownScaleMode = false;
+
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].mDownScaleMode = false;
 
+
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
@@ -199,17 +205,25 @@ void initContext(hwc_context_t *ctx)
         ctx->mAutomotiveModeOn = true;
     }
     // create objects for external and virtual displays
-    ctx->mExtDisplay = new ExternalDisplay(ctx);
+    ctx->mSecondaryDisplay = new SecondaryDisplay(ctx, HWC_DISPLAY_SECONDARY);
+    ctx->mTertiaryDisplay = new TertiaryDisplay(ctx, HWC_DISPLAY_TERTIARY);
     ctx->mVirtualDisplay = new VirtualDisplay(ctx);
     ctx->mVirtualonExtActive = false;
 
     if(ctx->mAutomotiveModeOn) {
-        //configure second display
-        if(!ctx->mExtDisplay->configure()) {
-            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = true;
-            ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause = false;
+        // configure secondary display
+        if(!ctx->mSecondaryDisplay->configure()) {
+            ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = true;
+            ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause = false;
         } else {
             ALOGE("%s: Error!! Configuraion failed for external", __FUNCTION__);
+        }
+        if(!ctx->mTertiaryDisplay->configure()) {
+            ctx->dpyAttr[HWC_DISPLAY_TERTIARY].connected = true;
+            ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isPause = false;
+        } else {
+            ALOGE("%s: Error!! Configuraion failed for third display",
+                __FUNCTION__);
         }
     }
     for(int dpy = 0; dpy < HWC_NUM_PHYSICAL_DISPLAY_TYPES; dpy++) {
@@ -243,10 +257,16 @@ void closeContext(hwc_context_t *ctx)
         ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = -1;
     }
 
-    if(ctx->mExtDisplay) {
-        ctx->mExtDisplay->teardown();
-        delete ctx->mExtDisplay;
-        ctx->mExtDisplay = NULL;
+    if(ctx->mSecondaryDisplay) {
+        ctx->mSecondaryDisplay->teardown();
+        delete ctx->mSecondaryDisplay;
+        ctx->mSecondaryDisplay = NULL;
+    }
+
+    if(ctx->mTertiaryDisplay) {
+        ctx->mTertiaryDisplay->teardown();
+        delete ctx->mTertiaryDisplay;
+        ctx->mTertiaryDisplay = NULL;
     }
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
@@ -287,7 +307,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
 
     // if external supports underscan, do nothing
     // it will be taken care in the driver
-    if(ctx->mExtDisplay->isCEUnderscanSupported())
+    if(ctx->mSecondaryDisplay->isCEUnderscanSupported())
         return;
 
     char value[PROPERTY_VALUE_MAX];
@@ -312,7 +332,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         // if downscale Mode is enabled for external, need to query
         // the actual width and height, as that is the physical w & h
-         ctx->mExtDisplay->getAttributes(fbWidth, fbHeight);
+         ctx->mSecondaryDisplay->getAttributes(fbWidth, fbHeight);
     }
 
 
@@ -472,8 +492,8 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
     }
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         int extW, extH;
-        if(dpy == HWC_DISPLAY_EXTERNAL)
-            ctx->mExtDisplay->getAttributes(extW, extH);
+        if(dpy == HWC_DISPLAY_SECONDARY)
+            ctx->mSecondaryDisplay->getAttributes(extW, extH);
         else
             ctx->mVirtualDisplay->getAttributes(extW, extH);
         fbWidth  = ctx->dpyAttr[dpy].xres;
@@ -523,7 +543,7 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                                ovutils::eTransform& orient) {
     // Swap width and height when there is a 90deg transform
     int extOrient = getExtOrientation(ctx);
-    if(dpy) {
+    if(dpy == HWC_DISPLAY_SECONDARY) {
         if(!isYuvBuffer(hnd)) {
             if(extOrient & HWC_TRANSFORM_ROT_90) {
                 int dstWidth = ctx->dpyAttr[dpy].xres;
@@ -553,8 +573,8 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                 float fbWidth  = ctx->dpyAttr[dpy].xres;
                 float fbHeight = ctx->dpyAttr[dpy].yres;
                 // query MDP configured attributes
-                if(dpy == HWC_DISPLAY_EXTERNAL)
-                    ctx->mExtDisplay->getAttributes(extW, extH);
+                if(dpy == HWC_DISPLAY_SECONDARY)
+                    ctx->mSecondaryDisplay->getAttributes(extW, extH);
                 else
                     ctx->mVirtualDisplay->getAttributes(extW, extH);
                 //Calculate the ratio...
@@ -1010,7 +1030,7 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 }
 
 bool isExternalActive(hwc_context_t* ctx) {
-    return ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive;
+    return ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isActive;
 }
 
 void closeAcquireFds(hwc_display_contents_1_t* list) {
