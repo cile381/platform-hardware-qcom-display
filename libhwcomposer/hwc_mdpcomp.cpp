@@ -1378,7 +1378,7 @@ void MDPCompNonSplit::adjustForSourceSplit(hwc_context_t *ctx,
         for(int index = 0; index < n4k2kYuvCount; index++){
             int n4k2kYuvIndex =
                     ctx->listStats[mDpy].yuv4k2kIndices[index];
-            if(mCurrentFrame.fbZ > n4k2kYuvIndex){
+            if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
                 mCurrentFrame.fbZ += 1;
             }
         }
@@ -1600,7 +1600,7 @@ void MDPCompSplit::adjustForSourceSplit(hwc_context_t *ctx,
         if((dst.left > lSplit) || (dst.right < lSplit)) {
             mCurrentFrame.mdpCount += 1;
         }
-        if(mCurrentFrame.fbZ > n4k2kYuvIndex){
+        if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
             mCurrentFrame.fbZ += 1;
         }
     }
@@ -1947,12 +1947,12 @@ int MDPCompSrcSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
+        ctx->mLayerRotMap[mDpy]->add(layer, *rot);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             return -1;
         }
-        ctx->mLayerRotMap[mDpy]->add(layer, *rot);
         whf.format = (*rot)->getDstFormat();
         updateSource(orient, whf, crop);
         rotFlags |= ROT_PREROTATED;
