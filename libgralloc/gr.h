@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012, 2016 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,7 @@ int decideBufferHandlingMechanism(int format, const char *compositionUsed,
 // It is the responsibility of the caller to free the buffer
 int alloc_buffer(private_handle_t **pHnd, int w, int h, int format, int usage);
 void free_buffer(private_handle_t *hnd);
+int getYUVPlaneInfo(private_handle_t* pHnd, struct android_ycbcr* ycbcr);
 
 /*****************************************************************************/
 

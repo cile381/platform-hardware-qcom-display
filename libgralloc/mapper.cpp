@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2011-2013, 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2015-2016 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -252,37 +252,8 @@ int gralloc_lock_ycbcr(gralloc_module_t const* module,
 {
     private_handle_t* hnd = (private_handle_t*)handle;
     int err = gralloc_map_and_invalidate(module, handle, usage, l, t, w, h);
-    int ystride;
-    if(!err) {
-        //hnd->format holds our implementation defined format
-        switch (hnd->format) {
-            case HAL_PIXEL_FORMAT_YCrCb_420_SP:
-                ystride = ALIGN(hnd->width, 16);
-                ycbcr->y  = (void*)hnd->base;
-                ycbcr->cr = (void*)(hnd->base + ystride * hnd->height);
-                ycbcr->cb = (void*)(hnd->base + ystride * hnd->height + 1);
-                ycbcr->ystride = ystride;
-                ycbcr->cstride = ystride;
-                ycbcr->chroma_step = 2;
-                memset(ycbcr->reserved, 0, sizeof(ycbcr->reserved));
-                break;
-            // YCbCr_420_SP
-            case HAL_PIXEL_FORMAT_NV12:
-                ystride = ALIGN(hnd->width, 16);
-                ycbcr->y  = (void*)hnd->base;
-                ycbcr->cb = (void*)(hnd->base + ystride * hnd->height);
-                ycbcr->cr = (void*)(hnd->base + ystride * hnd->height + 1);
-                ycbcr->ystride = ystride;
-                ycbcr->cstride = ystride;
-                ycbcr->chroma_step = 2;
-                break;
-            //Unsupported formats
-            default:
-                ALOGD("%s: Invalid format passed: 0x%x", __FUNCTION__,
-                      hnd->format);
-                err = -EINVAL;
-        }
-    }
+    if(!err)
+        err = getYUVPlaneInfo(hnd, ycbcr);
     return err;
 }
 
@@ -382,6 +353,15 @@ int gralloc_perform(struct gralloc_module_t const* module,
                 }
                 res = 0;
             } break;
+        case GRALLOC_MODULE_PERFORM_GET_YUV_PLANE_INFO:
+            {
+                private_handle_t* hnd =  va_arg(args, private_handle_t*);
+                android_ycbcr* ycbcr = va_arg(args, struct android_ycbcr *);
+                if (!private_handle_t::validate(hnd)) {
+                    res = getYUVPlaneInfo(hnd, ycbcr);
+                }
+            } break;
+
         default:
             break;
     }
