@@ -422,7 +422,6 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
 // based on the position and aspect ratio with orientation
 void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
                             hwc_rect_t& inRect, hwc_rect_t& outRect) {
-    hwc_rect_t viewFrame = ctx->mViewFrame[dpy];
     // Physical display resolution
     float fbWidth  = ctx->dpyAttr[dpy].xres;
     float fbHeight = ctx->dpyAttr[dpy].yres;
@@ -460,17 +459,11 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
         yPos = rect.top;
         width = rect.right - rect.left;
         height = rect.bottom - rect.top;
-        // swap viewframe coordinates for 90 degree rotation.
-        swap(viewFrame.left, viewFrame.top);
-        swap(viewFrame.right, viewFrame.bottom);
     }
-    // if viewframe left and top coordinates are non zero value then exclude it
-    // during the computation of xRatio and yRatio
-    xRatio = (inPos.x - viewFrame.left)/actualWidth;
-    yRatio = (inPos.y - viewFrame.top)/actualHeight;
-    // Use viewframe width and height to compute wRatio and hRatio.
-    wRatio = (float)inPos.w/(float)(viewFrame.right - viewFrame.left);
-    hRatio = (float)inPos.h/(float)(viewFrame.bottom - viewFrame.top);
+    xRatio = inPos.x/actualWidth;
+    yRatio = inPos.y/actualHeight;
+    wRatio = inPos.w/actualWidth;
+    hRatio = inPos.h/actualHeight;
 
 
     //Calculate the position...
@@ -868,12 +861,10 @@ void setListStats(hwc_context_t *ctx,
             }
 
             if((layer->transform & HWC_TRANSFORM_ROT_90) &&
-                    canUseRotator(ctx, dpy)) {
-                if( (dpy == HWC_DISPLAY_PRIMARY) &&
-                        ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
-                    ctx->isPaddingRound = true;
-                }
-                Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
+               canUseRotator(ctx, dpy)) {
+               if(ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA))
+                  ctx->isPaddingRound = true;
+               Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
             }
         }
         if(layer->blending == HWC_BLENDING_PREMULT)
@@ -1065,10 +1056,10 @@ void calculate_crop_rects(hwc_rect_t& crop, hwc_rect_t& dst,
     }
 
     calc_cut(leftCutRatio, topCutRatio, rightCutRatio, bottomCutRatio, orient);
-    crop_l += crop_w * leftCutRatio;
-    crop_t += crop_h * topCutRatio;
-    crop_r -= crop_w * rightCutRatio;
-    crop_b -= crop_h * bottomCutRatio;
+    crop_l += (int)round((double)crop_w * leftCutRatio);
+    crop_t += (int)round((double)crop_h * topCutRatio);
+    crop_r -= (int)round((double)crop_w * rightCutRatio);
+    crop_b -= (int)round((double)crop_h * bottomCutRatio);
 }
 
 bool areLayersIntersecting(const hwc_layer_1_t* layer1,
