@@ -162,11 +162,11 @@ void initContext(hwc_context_t *ctx)
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         ctx->mLayerRotMap[i] = new LayerRotMap();
+        ctx->mAnimationState[i] = ANIMATION_STOPPED;
+        ctx->mHwcDebug[i] = new HwcDebug(i);
+        ctx->mPrevHwLayerCount[i] = 0;
     }
 
-    for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
-        ctx->mHwcDebug[i] = new HwcDebug(i);
-    }
     MDPComp::init(ctx);
 
     ctx->vstate.enable = false;
@@ -182,13 +182,8 @@ void initContext(hwc_context_t *ctx)
             defaultServiceManager()->getService(
             String16("display.qservice")))->connect(client);
 
-    // Initialize "No animation on external display" related  parameters.
+    // Initialize device orientation to its default orientation
     ctx->deviceOrientation = 0;
-    ctx->mPrevCropVideo.left = ctx->mPrevCropVideo.top =
-        ctx->mPrevCropVideo.right = ctx->mPrevCropVideo.bottom = 0;
-    ctx->mPrevDestVideo.left = ctx->mPrevDestVideo.top =
-        ctx->mPrevDestVideo.right = ctx->mPrevDestVideo.bottom = 0;
-    ctx->mPrevTransformVideo = 0;
     ctx->mBufferMirrorMode = false;
     ctx->mSocId = getSocIdFromSystem();
     ALOGI("Initializing Qualcomm Hardware Composer");
@@ -712,6 +707,11 @@ void setListStats(hwc_context_t *ctx,
         }
     }
 
+    if (ctx->listStats[dpy].yuvCount != 1) {
+        ctx->mPrevWHF[dpy].w = 0;
+        ctx->mPrevWHF[dpy].h = 0;
+    }
+
     setYUVProp(ctx->listStats[dpy].yuvCount);
     if(dpy) {
         //uncomment the below code for testing purpose.
@@ -728,6 +728,7 @@ void setListStats(hwc_context_t *ctx,
                      ctx->mExtOrientation, ctx->mBufferMirrorMode);
         }
     }
+
 }
 
 
@@ -1063,9 +1064,8 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 
     //Accumulate acquireFenceFds for MDP
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
-        if(((list->hwLayers[i].compositionType == HWC_OVERLAY &&
-                        (layerProp[i].mFlags & HWC_MDPCOMP)) ||
-                        list->hwLayers[i].compositionType == HWC_BLIT) &&
+        if((list->hwLayers[i].compositionType == HWC_OVERLAY &&
+                        (layerProp[i].mFlags & HWC_MDPCOMP)) &&
                         list->hwLayers[i].acquireFenceFd >= 0) {
             if(UNLIKELY(swapzero))
                 acquireFd[count++] = -1;
@@ -1116,15 +1116,16 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
             } else if(isExtAnimating) {
                 // Release all the app layer fds immediately,
                 // if animation is in progress.
-                hwc_layer_1_t const* layer = &list->hwLayers[i];
-                private_handle_t *hnd = (private_handle_t *)layer->handle;
-                if(isYuvBuffer(hnd)) {
-                    list->hwLayers[i].releaseFenceFd = dup(releaseFd);
-                } else
-                    list->hwLayers[i].releaseFenceFd = -1;
+                list->hwLayers[i].releaseFenceFd = -1;
             } else if(list->hwLayers[i].releaseFenceFd < 0) {
                 //If rotator has not already populated this field.
-                list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+                if(list->hwLayers[i].compositionType == HWC_BLIT) {
+                    //For Blit, the app layers should be released when the Blit is
+                    //complete. This fd was passed from copybit->draw
+                    list->hwLayers[i].releaseFenceFd = dup(fd);
+                } else {
+                    list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+                }
             }
         }
     }
@@ -1327,11 +1328,12 @@ inline void updateSource(eTransform& orient, Whf& whf,
 }
 
 bool needToForceRotator(hwc_context_t *ctx, const int& dpy,
-         uint32_t w, uint32_t h) {
+         uint32_t w, uint32_t h, int transform) {
     int nYuvCount = ctx->listStats[dpy].yuvCount;
     bool forceRot = false;
     //Force rotator for resolution change only if 1 yuv layer on primary
-    if(!dpy && (nYuvCount == 1)) {
+    if(nYuvCount == 1 && (!((transform & HWC_TRANSFORM_FLIP_H) ||
+            (transform & HWC_TRANSFORM_FLIP_V)))) {
         uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
         uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
         if((prevWidth != w) || (prevHeight != h)) {
@@ -1367,30 +1369,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
     Whf whf(getWidth(hnd), getHeight(hnd),
             getMdpFormat(hnd->format), hnd->size);
 
-    if(dpy && isYuvBuffer(hnd)) {
-        if(!ctx->listStats[dpy].isDisplayAnimating) {
-            ctx->mPrevCropVideo = crop;
-            ctx->mPrevDestVideo = dst;
-            ctx->mPrevTransformVideo = transform;
-        } else {
-            // Restore the previous crop, dest rect and transform values, during
-            // animation to avoid displaying videos at random coordinates.
-            crop = ctx->mPrevCropVideo;
-            dst = ctx->mPrevDestVideo;
-            transform = ctx->mPrevTransformVideo;
-            orient = static_cast<eTransform>(transform);
-            //In you tube use case when a device rotated from landscape to
-            // portrait, set the isFg flag and zOrder to avoid displaying UI on
-            // hdmi during animation
-            if(ctx->deviceOrientation) {
-                isFg = ovutils::IS_FG_SET;
-                z = ZORDER_1;
-            }
-        }
-    }
-
-    calcExtDisplayPosition(ctx, hnd, dpy, crop, dst,
-                                           transform, orient);
+    calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
 
     bool forceRot = false;
     if(isYuvBuffer(hnd) && ctx->mMDP.version >= qdutils::MDP_V4_2 &&
@@ -1404,7 +1383,8 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
             rotFlags = ROT_DOWNSCALE_ENABLED;
         }
 
-        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd), (uint32_t)getHeight(hnd));
+        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd),
+                (uint32_t)getHeight(hnd), transform);
     }
 
     setMdpFlags(layer, mdpFlags, downscale, transform);
@@ -1465,31 +1445,11 @@ int configureHighRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     Whf whf(getWidth(hnd), getHeight(hnd),
             getMdpFormat(hnd->format), hnd->size);
-    if(dpy && isYuvBuffer(hnd)) {
-        if(!ctx->listStats[dpy].isDisplayAnimating) {
-            ctx->mPrevCropVideo = crop;
-            ctx->mPrevDestVideo = dst;
-            ctx->mPrevTransformVideo = transform;
-        } else {
-            // Restore the previous crop, dest rect and transform values, during
-            // animation to avoid displaying videos at random coordinates.
-            crop = ctx->mPrevCropVideo;
-            dst = ctx->mPrevDestVideo;
-            transform = ctx->mPrevTransformVideo;
-            orient = static_cast<eTransform>(transform);
-            //In you tube use case when a device rotated from landscape to
-            // portrait, set the isFg flag and zOrder to avoid displaying UI on
-            // hdmi during animation
-            if(ctx->deviceOrientation) {
-                isFg = ovutils::IS_FG_SET;
-                z = ZORDER_1;
-            }
-        }
-    }
 
     bool forceRot = false;
     if(isYuvBuffer(hnd)) {
-        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd), (uint32_t)getHeight(hnd));
+        forceRot = needToForceRotator(ctx, dpy, (uint32_t)getWidth(hnd),
+                (uint32_t)getHeight(hnd), transform);
     }
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
