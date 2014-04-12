@@ -2,8 +2,7 @@
  * Copyright (C) 2010 The Android Open Source Project
  * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
  *
- * Not a Contribution, Apache license notifications and license are retained
- * for attribution purposes only.
+ * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +24,9 @@
 #include "comptype.h"
 #include "mdp_version.h"
 #include "gr.h"
+#include "cb_utils.h"
 
+using namespace qdutils;
 namespace qhwc {
 
 struct range {
@@ -83,14 +84,6 @@ bool CopyBit::canUseCopybitForRGB(hwc_context_t *ctx,
                                         int dpy) {
     int compositionType = qdutils::QCCompositionType::
                                     getInstance().getCompositionType();
-
-    if ((compositionType & qdutils::COMPOSITION_TYPE_C2D) ||
-        (compositionType & qdutils::COMPOSITION_TYPE_DYN)) {
-         if(ctx->listStats[dpy].yuvCount) {
-             //Overlay up & running. Dont use COPYBIT for RGB layers.
-             return false;
-         }
-    }
 
     if (compositionType & qdutils::COMPOSITION_TYPE_DYN) {
         // DYN Composition:
@@ -191,8 +184,13 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     for (int i = ctx->listStats[dpy].numAppLayers-1; i >= 0 ; i--) {
         private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
 
-        if ((hnd->bufferType == BUFFER_TYPE_VIDEO && useCopybitForYUV) ||
-            (hnd->bufferType == BUFFER_TYPE_UI && useCopybitForRGB)) {
+        if((hnd->bufferType == BUFFER_TYPE_VIDEO) && (layerProp[i].mFlags & HWC_MDPCOMP))
+            continue;
+
+        hwc_layer_1_t* layer = &list->hwLayers[i];
+        if (!(layer->planeAlpha < 0xFF) &&
+            ((hnd->bufferType == BUFFER_TYPE_VIDEO && useCopybitForYUV) ||
+            (hnd->bufferType == BUFFER_TYPE_UI && useCopybitForRGB))) {
             layerProp[i].mFlags |= HWC_COPYBIT;
             if (ctx->mMDP.version <= qdutils::MDP_V4_3)
                 list->hwLayers[i].compositionType = HWC_BLIT;
@@ -200,11 +198,17 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
                 list->hwLayers[i].compositionType = HWC_OVERLAY;
             mCopyBitDraw = true;
         } else {
+            ALOGD_IF(DEBUG_COPYBIT,"%s:Can not do copybit, Resetting all the layers marked for it", __FUNCTION__);
             // We currently cannot mix copybit layers with layers marked to
             // be drawn on the framebuffer or that are on the layer cache.
             mCopyBitDraw = false;
-            //There is no need to reset layer properties here as we return in
-            //draw if mCopyBitDraw is false
+            //Layer flag should be reset so that SF can compose it on FrameBuffer
+            for(int j = ctx->listStats[dpy].numAppLayers-1; j > i; j--) {
+                private_handle_t *hnd1 = (private_handle_t *)list->hwLayers[j].handle;
+                if(hnd1->bufferType == BUFFER_TYPE_UI)
+                    list->hwLayers[j].compositionType = HWC_FRAMEBUFFER;
+            }
+            break;
         }
     }
     return true;
@@ -268,11 +272,10 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         }
     }
 
-    //Clear the visible region on the render buffer
-    //XXX: Do this only when needed.
-    hwc_rect_t clearRegion;
-    getNonWormholeRegion(list, clearRegion);
-    clear(renderBuffer, clearRegion);
+    //Clear the transparent or left out region on the render buffer
+    hwc_rect_t clearRegion = {0,0,0,0};
+    if(CBUtils::getuiClearRegion(list, clearRegion, layerProp))
+        clear(renderBuffer, clearRegion);
     // numAppLayers-1, as we iterate from 0th layer index with HWC_COPYBIT flag
     for (int i = 0; i <= (ctx->listStats[dpy].numAppLayers-1); i++) {
         hwc_layer_1_t *layer = &list->hwLayers[i];
