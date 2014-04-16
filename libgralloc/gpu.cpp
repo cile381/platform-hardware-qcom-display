@@ -97,9 +97,12 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
             flags |= private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY;
         }
 
+        ColorSpace_t colorSpace = ITU_R_601;
+        flags |= private_handle_t::PRIV_FLAGS_ITU_R_601;
         if (bufferType == BUFFER_TYPE_VIDEO) {
             if (usage & GRALLOC_USAGE_HW_CAMERA_WRITE) {
 #ifndef MDSS_TARGET
+                colorSpace = ITU_R_601_FR;
                 flags |= private_handle_t::PRIV_FLAGS_ITU_R_601_FR;
 #else
                 // Per the camera spec ITU 709 format should be set only for
@@ -108,14 +111,15 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
                 // camera buffer
                 //
                 if (usage & GRALLOC_USAGE_HW_CAMERA_MASK) {
-                    if (usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
+                    if (usage & GRALLOC_USAGE_HW_VIDEO_ENCODER) {
                         flags |= private_handle_t::PRIV_FLAGS_ITU_R_709;
-                    else
+                        colorSpace = ITU_R_709;
+                    } else {
                         flags |= private_handle_t::PRIV_FLAGS_ITU_R_601_FR;
+                        colorSpace = ITU_R_601_FR;
+                    }
                 }
 #endif
-            } else {
-                flags |= private_handle_t::PRIV_FLAGS_ITU_R_601;
             }
         }
 
@@ -156,6 +160,7 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
         hnd->offset = data.offset;
         hnd->base = (uintptr_t)(data.base) + data.offset;
         hnd->gpuaddr = 0;
+        setMetaData(hnd, UPDATE_COLOR_SPACE, (void*) &colorSpace);
 
         *pHandle = hnd;
     }
@@ -169,9 +174,6 @@ void gpu_context_t::getGrallocInformationFromFormat(int inputFormat,
                                                     int *bufferType)
 {
     *bufferType = BUFFER_TYPE_VIDEO;
-
-    if (inputFormat == HAL_PIXEL_FORMAT_RGB_888)
-        return;
 
     if (inputFormat <= HAL_PIXEL_FORMAT_sRGB_X_8888) {
         // RGB formats
@@ -265,7 +267,8 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
 
     //If input format is HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED then based on
     //the usage bits, gralloc assigns a format.
-    if(format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
+    if(format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED ||
+       format == HAL_PIXEL_FORMAT_YCbCr_420_888) {
         if(usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
             grallocFormat = HAL_PIXEL_FORMAT_NV12_ENCODEABLE; //NV12
         else if((usage & GRALLOC_USAGE_HW_CAMERA_MASK)
