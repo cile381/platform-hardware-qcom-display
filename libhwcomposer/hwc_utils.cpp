@@ -781,12 +781,12 @@ void setListStats(hwc_context_t *ctx,
     ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
     ctx->dpyAttr[dpy].mActionSafePresent = isActionSafePresent(ctx, dpy);
 
-    trimList(ctx, list, dpy);
-    optimizeLayerRects(ctx, list, dpy);
-
     // Calculate view frame of ext display from primary resolution
     // and primary device orientation.
     ctx->mViewFrame[dpy] = calculateDisplayViewFrame(ctx, dpy);
+
+    trimList(ctx, list, dpy);
+    optimizeLayerRects(ctx, list, dpy);
 
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
@@ -942,8 +942,14 @@ bool isSecureModePolicy(int mdpVersion) {
 bool isActionSafePresent(hwc_context_t *ctx, int dpy) {
     // if external supports underscan, do nothing
     // it will be taken care in the driver
-    if(!dpy || ctx->mExtDisplay->isCEUnderscanSupported())
+    // Disable Action safe for 8974 due to HW limitation for downscaling
+    // layers with overlapped region
+    // Disable Actionsafe for non HDMI displays.
+    if(!(dpy == HWC_DISPLAY_EXTERNAL) ||
+        qdutils::MDPVersion::getInstance().is8x74v2() ||
+        ctx->mExtDisplay->isCEUnderscanSupported()) {
         return false;
+    }
 
     char value[PROPERTY_VALUE_MAX];
     // Read action safe properties
@@ -1641,6 +1647,10 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
             whf.format = getMdpFormat(HAL_PIXEL_FORMAT_BGRX_8888);
     }
 
+    /* Calculate the external display position based on MDP downscale,
+       ActionSafe, and extorientation features. */
+    calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
+
     setMdpFlags(layer, mdpFlagsL, 0, transform);
 
     if(lDest != OV_INVALID && rDest != OV_INVALID) {
@@ -1777,6 +1787,10 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     Whf whf(getWidth(hnd), getHeight(hnd),
             getMdpFormat(hnd->format), hnd->size);
+
+    /* Calculate the external display position based on MDP downscale,
+       ActionSafe, and extorientation features. */
+    calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
