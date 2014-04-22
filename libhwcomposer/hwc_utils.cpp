@@ -781,12 +781,12 @@ void setListStats(hwc_context_t *ctx,
     ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
     ctx->dpyAttr[dpy].mActionSafePresent = isActionSafePresent(ctx, dpy);
 
-    trimList(ctx, list, dpy);
-    optimizeLayerRects(ctx, list, dpy);
-
     // Calculate view frame of ext display from primary resolution
     // and primary device orientation.
     ctx->mViewFrame[dpy] = calculateDisplayViewFrame(ctx, dpy);
+
+    trimList(ctx, list, dpy);
+    optimizeLayerRects(ctx, list, dpy);
 
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
@@ -1787,6 +1787,10 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
     Whf whf(getWidth(hnd), getHeight(hnd),
             getMdpFormat(hnd->format), hnd->size);
+
+    /* Calculate the external display position based on MDP downscale,
+       ActionSafe, and extorientation features. */
+    calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
 
     setMdpFlags(layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
