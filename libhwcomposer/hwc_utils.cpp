@@ -129,6 +129,7 @@ static int openFramebufferDevice(hwc_context_t *ctx)
 void initContext(hwc_context_t *ctx)
 {
     openFramebufferDevice(ctx);
+    char value[PROPERTY_VALUE_MAX];
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
@@ -202,7 +203,6 @@ void initContext(hwc_context_t *ctx)
 
     // Read the system property to determine if downscale feature is enabled.
     ctx->mMDPDownscaleEnabled = false;
-    char value[PROPERTY_VALUE_MAX];
     if(property_get("sys.hwc.mdp_downscale_enabled", value, "false")
             && !strcmp(value, "true")) {
         ctx->mMDPDownscaleEnabled = true;
@@ -612,6 +612,21 @@ int getMirrorModeOrientation(hwc_context_t *ctx) {
          extOrientation = HWC_TRANSFORM_FLIP_V | HWC_TRANSFORM_FLIP_H;
 
     return extOrientation;
+}
+
+/* Get External State names */
+const char* getExternalDisplayState(uint32_t external_state) {
+    static const char* externalStates[EXTERNAL_MAXSTATES] = {0};
+    externalStates[EXTERNAL_OFFLINE] = STR(EXTERNAL_OFFLINE);
+    externalStates[EXTERNAL_ONLINE]  = STR(EXTERNAL_ONLINE);
+    externalStates[EXTERNAL_PAUSE]   = STR(EXTERNAL_PAUSE);
+    externalStates[EXTERNAL_RESUME]  = STR(EXTERNAL_RESUME);
+
+    if(external_state >= EXTERNAL_MAXSTATES) {
+        return "EXTERNAL_INVALID";
+    }
+
+    return externalStates[external_state];
 }
 
 bool isDownscaleRequired(hwc_layer_1_t const* layer) {
@@ -1566,6 +1581,7 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
             ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
         *rot = ctx->mRotMgr->getNext();
         if(*rot == NULL) return -1;
+        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         if(!dpy)
             BwcPM::setBwc(ctx, crop, dst, transform, mdpFlags);
         //Configure rotator for pre-rotation
@@ -1573,7 +1589,6 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             return -1;
         }
-        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         whf.format = (*rot)->getDstFormat();
         updateSource(orient, whf, crop);
         rotFlags |= ovutils::ROT_PREROTATED;
@@ -1675,12 +1690,12 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
+        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             return -1;
         }
-        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         whf.format = (*rot)->getDstFormat();
         updateSource(orient, whf, crop);
         rotFlags |= ROT_PREROTATED;
@@ -1805,6 +1820,7 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
     if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
+        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         if(!dpy)
             BwcPM::setBwc(ctx, crop, dst, transform, mdpFlagsL);
         //Configure rotator for pre-rotation
@@ -1812,7 +1828,6 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             return -1;
         }
-        ctx->mLayerRotMap[dpy]->add(layer, *rot);
         whf.format = (*rot)->getDstFormat();
         updateSource(orient, whf, crop);
         rotFlags |= ROT_PREROTATED;
