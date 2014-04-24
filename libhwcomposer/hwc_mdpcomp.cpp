@@ -149,7 +149,8 @@ bool MDPComp::init(hwc_context_t *ctx) {
             ALOGE("%s: failed to instantiate idleInvalidator object",
                   __FUNCTION__);
         } else {
-            idleInvalidator->init(timeout_handler, ctx, idle_timeout);
+            idleInvalidator->init(timeout_handler, ctx,
+                                  (unsigned int)idle_timeout);
         }
     }
 
@@ -268,7 +269,7 @@ void MDPComp::LayerCache::reset() {
 }
 
 void MDPComp::LayerCache::cacheAll(hwc_display_contents_1_t* list) {
-    const int numAppLayers = list->numHwLayers - 1;
+    const int numAppLayers = (int)list->numHwLayers - 1;
     for(int i = 0; i < numAppLayers; i++) {
         hnd[i] = list->hwLayers[i].handle;
     }
@@ -390,37 +391,6 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     }
 
     return true;
-}
-
-ovutils::eDest MDPComp::getMdpPipe(hwc_context_t *ctx, ePipeType type,
-        int mixer) {
-    overlay::Overlay& ov = *ctx->mOverlay;
-    ovutils::eDest mdp_pipe = ovutils::OV_INVALID;
-
-    switch(type) {
-    case MDPCOMP_OV_DMA:
-        mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_DMA, mDpy, mixer);
-        if(mdp_pipe != ovutils::OV_INVALID) {
-            return mdp_pipe;
-        }
-    case MDPCOMP_OV_ANY:
-    case MDPCOMP_OV_RGB:
-        mdp_pipe = ov.nextPipe(ovutils::OV_MDP_PIPE_RGB, mDpy, mixer);
-        if(mdp_pipe != ovutils::OV_INVALID) {
-            return mdp_pipe;
-        }
-
-        if(type == MDPCOMP_OV_RGB) {
-            //Requested only for RGB pipe
-            break;
-        }
-    case  MDPCOMP_OV_VG:
-        return ov.nextPipe(ovutils::OV_MDP_PIPE_VG, mDpy, mixer);
-    default:
-        ALOGE("%s: Invalid pipe type",__FUNCTION__);
-        return ovutils::OV_INVALID;
-    };
-    return ovutils::OV_INVALID;
 }
 
 bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
@@ -1126,10 +1096,8 @@ void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
              mCurrentFrame.fbCount);
 }
 
-hwc_rect_t MDPComp::getUpdatingFBRect(hwc_context_t *ctx,
-        hwc_display_contents_1_t* list){
+hwc_rect_t MDPComp::getUpdatingFBRect(hwc_display_contents_1_t* list){
     hwc_rect_t fbRect = (struct hwc_rect){0, 0, 0, 0};
-    hwc_layer_1_t *fbLayer = &list->hwLayers[mCurrentFrame.layerCount];
 
     /* Update only the region of FB needed for composition */
     for(int i = 0; i < mCurrentFrame.layerCount; i++ ) {
@@ -1146,7 +1114,7 @@ bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
 
     //Capability checks
-    if(!resourceCheck(ctx, list)) {
+    if(!resourceCheck()) {
         ALOGD_IF(isDebug(), "%s: resource check failed", __FUNCTION__);
         return false;
     }
@@ -1159,7 +1127,7 @@ bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
 
     //Configure framebuffer first if applicable
     if(mCurrentFrame.fbZ >= 0) {
-        hwc_rect_t fbRect = getUpdatingFBRect(ctx, list);
+        hwc_rect_t fbRect = getUpdatingFBRect(list);
         if(!ctx->mFBUpdate[mDpy]->prepare(ctx, list, fbRect, mCurrentFrame.fbZ))
         {
             ALOGD_IF(isDebug(), "%s configure framebuffer failed",
@@ -1220,8 +1188,7 @@ bool MDPComp::postHeuristicsHandling(hwc_context_t *ctx,
     return true;
 }
 
-bool MDPComp::resourceCheck(hwc_context_t *ctx,
-        hwc_display_contents_1_t *list) {
+bool MDPComp::resourceCheck() {
     const bool fbUsed = mCurrentFrame.fbCount;
     if(mCurrentFrame.mdpCount > sMaxPipesPerMixer - fbUsed) {
         ALOGD_IF(isDebug(), "%s: Exceeds MAX_PIPES_PER_MIXER",__FUNCTION__);
@@ -1275,7 +1242,6 @@ bool MDPComp::hwLimitationsCheck(hwc_context_t* ctx,
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     int ret = 0;
     const int numLayers = ctx->listStats[mDpy].numAppLayers;
-    MDPVersion& mdpVersion = qdutils::MDPVersion::getInstance();
 
     //Do not cache the information for next draw cycle.
     if(numLayers > MAX_NUM_APP_LAYERS or (!numLayers)) {
@@ -1345,18 +1311,23 @@ bool MDPComp::allocSplitVGPipesfor4k2k(hwc_context_t *ctx, int index) {
     info.pipeInfo = new MdpYUVPipeInfo;
     info.rot = NULL;
     MdpYUVPipeInfo& pipe_info = *(MdpYUVPipeInfo*)info.pipeInfo;
-    ePipeType type =  MDPCOMP_OV_VG;
 
     pipe_info.lIndex = ovutils::OV_INVALID;
     pipe_info.rIndex = ovutils::OV_INVALID;
 
-    pipe_info.lIndex = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
+    Overlay::PipeSpecs pipeSpecs;
+    pipeSpecs.formatClass = Overlay::FORMAT_YUV;
+    pipeSpecs.needsScaling = true;
+    pipeSpecs.dpy = mDpy;
+    pipeSpecs.fb = false;
+
+    pipe_info.lIndex = ctx->mOverlay->getPipe(pipeSpecs);
     if(pipe_info.lIndex == ovutils::OV_INVALID){
         bRet = false;
         ALOGD_IF(isDebug(),"%s: allocating first VG pipe failed",
                 __FUNCTION__);
     }
-    pipe_info.rIndex = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
+    pipe_info.rIndex = ctx->mOverlay->getPipe(pipeSpecs);
     if(pipe_info.rIndex == ovutils::OV_INVALID){
         bRet = false;
         ALOGD_IF(isDebug(),"%s: allocating second VG pipe failed",
@@ -1381,7 +1352,7 @@ void MDPCompNonSplit::adjustForSourceSplit(hwc_context_t *ctx,
         for(int index = 0; index < n4k2kYuvCount; index++){
             int n4k2kYuvIndex =
                     ctx->listStats[mDpy].yuv4k2kIndices[index];
-            if(mCurrentFrame.fbZ > n4k2kYuvIndex){
+            if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
                 mCurrentFrame.fbZ += 1;
             }
         }
@@ -1426,24 +1397,20 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
         info.pipeInfo = new MdpPipeInfoNonSplit;
         info.rot = NULL;
         MdpPipeInfoNonSplit& pipe_info = *(MdpPipeInfoNonSplit*)info.pipeInfo;
-        ePipeType type = MDPCOMP_OV_ANY;
 
-        if(isYuvBuffer(hnd)) {
-            type = MDPCOMP_OV_VG;
-        } else if(qdutils::MDPVersion::getInstance().is8x26() &&
-                (ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024)) {
-            if(qhwc::needsScaling(layer))
-                type = MDPCOMP_OV_RGB;
-        } else if(!qhwc::needsScaling(layer)
-            && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
-            && ctx->mMDP.version >= qdutils::MDSS_V5) {
-            type = MDPCOMP_OV_DMA;
-        }
+        Overlay::PipeSpecs pipeSpecs;
+        pipeSpecs.formatClass = isYuvBuffer(hnd) ?
+                Overlay::FORMAT_YUV : Overlay::FORMAT_RGB;
+        pipeSpecs.needsScaling = qhwc::needsScaling(layer) or
+                (qdutils::MDPVersion::getInstance().is8x26() and
+                ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024);
+        pipeSpecs.dpy = mDpy;
+        pipeSpecs.fb = false;
 
-        pipe_info.index = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
+        pipe_info.index = ctx->mOverlay->getPipe(pipeSpecs);
+
         if(pipe_info.index == ovutils::OV_INVALID) {
-            ALOGD_IF(isDebug(), "%s: Unable to get pipe type = %d",
-                __FUNCTION__, (int) type);
+            ALOGD_IF(isDebug(), "%s: Unable to get pipe", __FUNCTION__);
             return false;
         }
     }
@@ -1516,7 +1483,7 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ovutils::eDest indexL = pipe_info.lIndex;
             ovutils::eDest indexR = pipe_info.rIndex;
             int fd = hnd->fd;
-            uint32_t offset = hnd->offset;
+            uint32_t offset = (uint32_t)hnd->offset;
             if(rot) {
                 rot->queueBuffer(fd, offset);
                 fd = rot->getDstMemId();
@@ -1562,7 +1529,7 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                     hnd, dest );
 
             int fd = hnd->fd;
-            uint32_t offset = hnd->offset;
+            uint32_t offset = (uint32_t)hnd->offset;
 
             Rotator *rot = mCurrentFrame.mdpToLayer[mdpIndex].rot;
             if(rot) {
@@ -1599,29 +1566,38 @@ void MDPCompSplit::adjustForSourceSplit(hwc_context_t *ctx,
         if((dst.left > lSplit) || (dst.right < lSplit)) {
             mCurrentFrame.mdpCount += 1;
         }
-        if(mCurrentFrame.fbZ > n4k2kYuvIndex){
+        if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
             mCurrentFrame.fbZ += 1;
         }
     }
 }
 
 bool MDPCompSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-        MdpPipeInfoSplit& pipe_info,
-        ePipeType type) {
-    const int lSplit = getLeftSplit(ctx, mDpy);
+        MdpPipeInfoSplit& pipe_info) {
 
+    const int lSplit = getLeftSplit(ctx, mDpy);
+    private_handle_t *hnd = (private_handle_t *)layer->handle;
     hwc_rect_t dst = layer->displayFrame;
     pipe_info.lIndex = ovutils::OV_INVALID;
     pipe_info.rIndex = ovutils::OV_INVALID;
 
+    Overlay::PipeSpecs pipeSpecs;
+    pipeSpecs.formatClass = isYuvBuffer(hnd) ?
+            Overlay::FORMAT_YUV : Overlay::FORMAT_RGB;
+    pipeSpecs.needsScaling = qhwc::needsScalingWithSplit(ctx, layer, mDpy);
+    pipeSpecs.dpy = mDpy;
+    pipeSpecs.mixer = Overlay::MIXER_LEFT;
+    pipeSpecs.fb = false;
+
     if (dst.left < lSplit) {
-        pipe_info.lIndex = getMdpPipe(ctx, type, Overlay::MIXER_LEFT);
+        pipe_info.lIndex = ctx->mOverlay->getPipe(pipeSpecs);
         if(pipe_info.lIndex == ovutils::OV_INVALID)
             return false;
     }
 
     if(dst.right > lSplit) {
-        pipe_info.rIndex = getMdpPipe(ctx, type, Overlay::MIXER_RIGHT);
+        pipeSpecs.mixer = Overlay::MIXER_RIGHT;
+        pipe_info.rIndex = ctx->mOverlay->getPipe(pipeSpecs);
         if(pipe_info.rIndex == ovutils::OV_INVALID)
             return false;
     }
@@ -1651,19 +1627,10 @@ bool MDPCompSplit::allocLayerPipes(hwc_context_t *ctx,
         info.pipeInfo = new MdpPipeInfoSplit;
         info.rot = NULL;
         MdpPipeInfoSplit& pipe_info = *(MdpPipeInfoSplit*)info.pipeInfo;
-        ePipeType type = MDPCOMP_OV_ANY;
 
-        if(isYuvBuffer(hnd)) {
-            type = MDPCOMP_OV_VG;
-        } else if(!qhwc::needsScalingWithSplit(ctx, layer, mDpy)
-            && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
-            && ctx->mMDP.version >= qdutils::MDSS_V5) {
-            type = MDPCOMP_OV_DMA;
-        }
-
-        if(!acquireMDPPipes(ctx, layer, pipe_info, type)) {
-            ALOGD_IF(isDebug(), "%s: Unable to get pipe for type = %d",
-                    __FUNCTION__, (int) type);
+        if(!acquireMDPPipes(ctx, layer, pipe_info)) {
+            ALOGD_IF(isDebug(), "%s: Unable to get pipe for type",
+                    __FUNCTION__);
             return false;
         }
     }
@@ -1762,7 +1729,7 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ovutils::eDest indexL = pipe_info.lIndex;
             ovutils::eDest indexR = pipe_info.rIndex;
             int fd = hnd->fd;
-            uint32_t offset = hnd->offset;
+            uint32_t offset = (uint32_t)hnd->offset;
             if(rot) {
                 rot->queueBuffer(fd, offset);
                 fd = rot->getDstMemId();
@@ -1799,7 +1766,7 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ovutils::eDest indexR = pipe_info.rIndex;
 
             int fd = hnd->fd;
-            int offset = hnd->offset;
+            int offset = (uint32_t)hnd->offset;
 
             if(ctx->mAD->isModeOn()) {
                 if(ctx->mAD->draw(ctx, fd, offset)) {
@@ -1847,7 +1814,7 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
 //================MDPCompSrcSplit==============================================
 bool MDPCompSrcSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
-        MdpPipeInfoSplit& pipe_info, ePipeType type) {
+        MdpPipeInfoSplit& pipe_info) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
     hwc_rect_t dst = layer->displayFrame;
     hwc_rect_t crop = integerizeSourceCrop(layer->sourceCropf);
@@ -1858,32 +1825,25 @@ bool MDPCompSrcSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
     //should have a higher priority than the right one. Pipe priorities are
     //starting with VG0, VG1 ... , RGB0 ..., DMA1
 
+    Overlay::PipeSpecs pipeSpecs;
+    pipeSpecs.formatClass = isYuvBuffer(hnd) ?
+            Overlay::FORMAT_YUV : Overlay::FORMAT_RGB;
+    pipeSpecs.needsScaling = qhwc::needsScaling(layer);
+    pipeSpecs.dpy = mDpy;
+    pipeSpecs.fb = false;
+
     //1 pipe by default for a layer
-    pipe_info.lIndex = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
+    pipe_info.lIndex = ctx->mOverlay->getPipe(pipeSpecs);
     if(pipe_info.lIndex == ovutils::OV_INVALID) {
-        if(isYuvBuffer(hnd)) {
-            return false;
-        }
-        pipe_info.lIndex = getMdpPipe(ctx, MDPCOMP_OV_ANY,
-                Overlay::MIXER_DEFAULT);
-        if(pipe_info.lIndex == ovutils::OV_INVALID) {
-            return false;
-        }
+        return false;
     }
 
     //If layer's crop width or dest width > 2048, use 2 pipes
     if((dst.right - dst.left) > qdutils::MAX_DISPLAY_DIM or
             (crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
-        pipe_info.rIndex = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
+        pipe_info.rIndex = ctx->mOverlay->getPipe(pipeSpecs);
         if(pipe_info.rIndex == ovutils::OV_INVALID) {
-            if(isYuvBuffer(hnd)) {
-                return false;
-            }
-            pipe_info.rIndex = getMdpPipe(ctx, MDPCOMP_OV_ANY,
-                    Overlay::MIXER_DEFAULT);
-            if(pipe_info.rIndex == ovutils::OV_INVALID) {
-                return false;
-            }
+            return false;
         }
 
         // Return values
