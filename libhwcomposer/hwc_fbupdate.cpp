@@ -49,8 +49,15 @@ IFBUpdate* IFBUpdate::getObject(hwc_context_t *ctx, const int& dpy) {
 
 IFBUpdate::IFBUpdate(hwc_context_t *ctx, const int& dpy) : mDpy(dpy) {
     size_t size = 0;
-    getBufferAttributes(ctx->dpyAttr[mDpy].xres,
-            ctx->dpyAttr[mDpy].yres,
+    uint32_t xres = ctx->dpyAttr[mDpy].xres;
+    uint32_t yres = ctx->dpyAttr[mDpy].yres;
+    if (ctx->dpyAttr[dpy].customFBSize) {
+        //GPU will render and compose at new resolution
+        //So need to have FB at new resolution
+        xres = ctx->dpyAttr[mDpy].xres_new;
+        yres = ctx->dpyAttr[mDpy].yres_new;
+    }
+    getBufferAttributes((int)xres, (int)yres,
             HAL_PIXEL_FORMAT_RGBA_8888,
             0,
             mAlignedFBWidth,
@@ -192,7 +199,7 @@ bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *lis
                   (mDpy && !extOrient
                   && !ctx->dpyAttr[mDpy].mDownScaleMode))
                   && (extOnlyLayerIndex == -1)) {
-            if(!qdutils::MDPVersion::getInstance().is8x26() &&
+            if(ctx->mOverlay->isUIScalingOnExternalSupported() &&
                 !ctx->dpyAttr[mDpy].customFBSize) {
                 getNonWormholeRegion(list, sourceCrop);
                 displayFrame = sourceCrop;
@@ -208,8 +215,6 @@ bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *lis
                 sourceCrop, mdpFlags, rotFlags);
         if(!ret) {
             ALOGE("%s: preRotate for external Failed!", __FUNCTION__);
-            ctx->mOverlay->clear(mDpy);
-            ctx->mLayerRotMap[mDpy]->clear();
             return false;
         }
         //For the mdp, since either we are pre-rotating or MDP does flips
@@ -224,7 +229,6 @@ bool FBUpdateNonSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *lis
         if(configMdp(ctx->mOverlay, parg, orient, sourceCrop, displayFrame,
                     NULL, mDest) < 0) {
             ALOGE("%s: configMdp failed for dpy %d", __FUNCTION__, mDpy);
-            ctx->mLayerRotMap[mDpy]->clear();
             ret = false;
         }
     }
@@ -387,10 +391,6 @@ bool FBUpdateSplit::configure(hwc_context_t *ctx,
                 ret = false;
             }
         }
-
-        if(ret == false) {
-            ctx->mLayerRotMap[mDpy]->clear();
-        }
     }
     return ret;
 }
@@ -425,7 +425,6 @@ FBSrcSplit::FBSrcSplit(hwc_context_t *ctx, const int& dpy):
 
 bool FBSrcSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         hwc_rect_t fbUpdatingRect, int fbZorder) {
-    bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
     int extOnlyLayerIndex = ctx->listStats[mDpy].extOnlyLayerIndex;
     // ext only layer present..
@@ -502,7 +501,6 @@ bool FBSrcSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         if(configMdp(ctx->mOverlay, parg, orient,
                     cropL, cropL, NULL /*metadata*/, destL) < 0) {
             ALOGE("%s: commit failed for left mixer config", __FUNCTION__);
-            ctx->mLayerRotMap[mDpy]->clear();
             return false;
         }
     }
@@ -512,7 +510,6 @@ bool FBSrcSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         if(configMdp(ctx->mOverlay, parg, orient,
                     cropR, cropR, NULL /*metadata*/, destR) < 0) {
             ALOGE("%s: commit failed for right mixer config", __FUNCTION__);
-            ctx->mLayerRotMap[mDpy]->clear();
             return false;
         }
     }
