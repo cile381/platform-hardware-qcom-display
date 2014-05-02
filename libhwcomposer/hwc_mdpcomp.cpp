@@ -403,7 +403,8 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
     if(!isEnabled()) {
         ALOGD_IF(isDebug(),"%s: MDP Comp. not enabled.", __FUNCTION__);
         ret = false;
-    } else if(qdutils::MDPVersion::getInstance().is8x26() &&
+    } else if((qdutils::MDPVersion::getInstance().is8x26() ||
+               qdutils::MDPVersion::getInstance().is8x16()) &&
             ctx->mVideoTransFlag &&
             isSecondaryConnected(ctx)) {
         //1 Padding round to shift pipes across mixers
@@ -478,43 +479,44 @@ bool MDPComp::validateAndApplyROI(hwc_context_t *ctx,
     return true;
 }
 
+bool MDPComp::canDoPartialUpdate(hwc_context_t *ctx,
+                               hwc_display_contents_1_t* list){
+    if(!qdutils::MDPVersion::getInstance().isPartialUpdateEnabled() || mDpy ||
+       isSkipPresent(ctx, mDpy) || (list->flags & HWC_GEOMETRY_CHANGED)||
+       isDisplaySplit(ctx, mDpy)) {
+        return false;
+    }
+    return true;
+}
+
 void MDPComp::generateROI(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
 
-    if(!sEnablePartialFrameUpdate) {
-        return;
-    }
-
-    if(mDpy || isDisplaySplit(ctx, mDpy)){
-        ALOGE_IF(isDebug(), "%s: ROI not supported for"
-                 "the (1) external / virtual display's (2) dual DSI displays",
-                 __FUNCTION__);
-        return;
-    }
-
-    if(isSkipPresent(ctx, mDpy))
-        return;
-
-    if(list->flags & HWC_GEOMETRY_CHANGED)
+    if(!canDoPartialUpdate(ctx, list))
         return;
 
     struct hwc_rect roi = (struct hwc_rect){0, 0, 0, 0};
     for(int index = 0; index < numAppLayers; index++ ) {
-        if ((mCachedFrame.hnd[index] != list->hwLayers[index].handle) ||
-            isYuvBuffer((private_handle_t *)list->hwLayers[index].handle)) {
-            hwc_rect_t dstRect = list->hwLayers[index].displayFrame;
-            hwc_rect_t srcRect = integerizeSourceCrop(
-                                        list->hwLayers[index].sourceCropf);
-
-            /* Intersect against display boundaries */
-            roi = getUnion(roi, dstRect);
+        hwc_layer_1_t* layer = &list->hwLayers[index];
+        if ((mCachedFrame.hnd[index] != layer->handle) ||
+            isYuvBuffer((private_handle_t *)layer->handle)) {
+            hwc_rect_t updatingRect = layer->displayFrame;
+#ifdef QCOM_BSP
+            if(!needsScaling(layer))
+                updatingRect =  layer->dirtyRect;
+#endif
+            roi = getUnion(roi, updatingRect);
         }
     }
 
-    if(!validateAndApplyROI(ctx, list, roi)){
-        roi = (struct hwc_rect) {0, 0,
-                    (int)ctx->dpyAttr[mDpy].xres, (int)ctx->dpyAttr[mDpy].yres};
-    }
+    hwc_rect fullFrame = (struct hwc_rect) {0, 0,(int)ctx->dpyAttr[mDpy].xres,
+        (int)ctx->dpyAttr[mDpy].yres};
+
+    // Align ROI coordinates to panel restrictions
+    roi = sanitizeROI(roi, fullFrame);
+
+    if(!validateAndApplyROI(ctx, list, roi))
+        roi = fullFrame;
 
     ctx->listStats[mDpy].roi.x = roi.left;
     ctx->listStats[mDpy].roi.y = roi.top;
@@ -611,19 +613,11 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     for(int i = 0; i < numAppLayers; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
-        if(not isSupportedForMDPComp(ctx, layer)) {
+        if(not mCurrentFrame.drop[i] and
+           not isSupportedForMDPComp(ctx, layer)) {
             ALOGD_IF(isDebug(), "%s: Unsupported layer in list",__FUNCTION__);
             return false;
         }
-
-        //For 8x26, if there is only one layer which needs scale for secondary
-        //while no scale for primary display, DMA pipe is occupied by primary.
-        //If need to fall back to GLES composition, virtual display lacks DMA
-        //pipe and error is reported.
-        if(qdutils::MDPVersion::getInstance().is8x26() &&
-                                mDpy >= HWC_DISPLAY_EXTERNAL &&
-                                qhwc::needsScaling(layer))
-            return false;
     }
 
     mCurrentFrame.fbCount = 0;
@@ -1411,6 +1405,7 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
                 ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres > 1024);
         pipeSpecs.dpy = mDpy;
         pipeSpecs.fb = false;
+        pipeSpecs.numActiveDisplays = ctx->numActiveDisplays;
 
         pipe_info.index = ctx->mOverlay->getPipe(pipeSpecs);
 

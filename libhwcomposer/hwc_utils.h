@@ -104,8 +104,8 @@ struct DisplayAttributes {
     //If property fbsize set via adb shell debug.hwc.fbsize = XRESxYRES
     //following fields are used.
     bool customFBSize;
-    uint32_t xres_orig;
-    uint32_t yres_orig;
+    uint32_t xres_new;
+    uint32_t yres_new;
 
 };
 
@@ -294,6 +294,9 @@ int getMirrorModeOrientation(hwc_context_t *ctx);
 
 /* Get External State names */
 const char* getExternalDisplayState(uint32_t external_state);
+
+// Aligns updating ROI to panel restrictions
+hwc_rect_t sanitizeROI(struct hwc_rect roi, hwc_rect boundary);
 
 // Handles wfd Pause and resume events
 void handle_pause(hwc_context_t *ctx, int dpy);

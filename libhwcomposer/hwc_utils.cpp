@@ -85,20 +85,19 @@ bool isValidResolution(hwc_context_t *ctx, uint32_t xres, uint32_t yres)
 
 void changeResolution(hwc_context_t *ctx, int xres_orig, int yres_orig) {
     //Store original display resolution.
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_orig = xres_orig;
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_orig = yres_orig;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_new = xres_orig;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_new = yres_orig;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].customFBSize = false;
-
     char property[PROPERTY_VALUE_MAX] = {'\0'};
     char *yptr = NULL;
     if (property_get("debug.hwc.fbsize", property, NULL) > 0) {
         yptr = strcasestr(property,"x");
-        int xres = atoi(property);
-        int yres = atoi(yptr + 1);
-        if (isValidResolution(ctx,xres,yres) &&
-                 xres != xres_orig && yres != yres_orig) {
-            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = xres;
-            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres = yres;
+        int xres_new = atoi(property);
+        int yres_new = atoi(yptr + 1);
+        if (isValidResolution(ctx,xres_new,yres_new) &&
+                 xres_new != xres_orig && yres_new != yres_orig) {
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_new = xres_new;
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_new = yres_new;
             ctx->dpyAttr[HWC_DISPLAY_PRIMARY].customFBSize = true;
         }
     }
@@ -569,7 +568,7 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                                ovutils::eTransform& orient) {
     // Swap width and height when there is a 90deg transform
     int extOrient = getExtOrientation(ctx);
-    if(dpy && !qdutils::MDPVersion::getInstance().is8x26()) {
+    if(dpy && ctx->mOverlay->isUIScalingOnExternalSupported()) {
         if(!isYuvBuffer(hnd)) {
             if(extOrient & HWC_TRANSFORM_ROT_90) {
                 int dstWidth = ctx->dpyAttr[dpy].xres;
@@ -1177,6 +1176,11 @@ void optimizeLayerRects(const hwc_display_contents_1_t *list) {
                      layer->sourceCropf.top = (float)bottomCrop.top;
                      layer->sourceCropf.right = (float)bottomCrop.right;
                      layer->sourceCropf.bottom = (float)bottomCrop.bottom;
+#ifdef QCOM_BSP
+                     //Update layer dirtyRect
+                     layer->dirtyRect = getIntersection(bottomCrop,
+                                            layer->dirtyRect);
+#endif
                   }
                }
                j--;
@@ -1943,10 +1947,10 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
 }
 
 bool canUseRotator(hwc_context_t *ctx, int dpy) {
-    if(qdutils::MDPVersion::getInstance().is8x26() &&
+    if(ctx->mOverlay->isDMAMultiplexingSupported() &&
             isSecondaryConnected(ctx) &&
             !ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause) {
-        /* 8x26 mdss driver supports multiplexing of DMA pipe
+        /* mdss driver on certain targets support multiplexing of DMA pipe
          * in LINE and BLOCK modes for writeback panels.
          */
         if(dpy == HWC_DISPLAY_PRIMARY)
@@ -2155,6 +2159,60 @@ void LayerRotMap::setReleaseFd(const int& fence) {
     for(uint32_t i = 0; i < mCount; i++) {
         mRot[i]->setReleaseFd(dup(fence));
     }
+}
+
+hwc_rect_t sanitizeROI(struct hwc_rect roi, hwc_rect boundary)
+{
+   if(!isValidRect(roi))
+      return roi;
+
+   struct hwc_rect t_roi = roi;
+
+   const int LEFT_ALIGN = qdutils::MDPVersion::getInstance().getLeftAlign();
+   const int WIDTH_ALIGN = qdutils::MDPVersion::getInstance().getWidthAlign();
+   const int TOP_ALIGN = qdutils::MDPVersion::getInstance().getTopAlign();
+   const int HEIGHT_ALIGN = qdutils::MDPVersion::getInstance().getHeightAlign();
+   const int MIN_WIDTH = qdutils::MDPVersion::getInstance().getMinROIWidth();
+
+   /* Align to minimum width recommended by the panel */
+   if((t_roi.right - t_roi.left) < MIN_WIDTH) {
+       if((t_roi.left + MIN_WIDTH) > boundary.right)
+           t_roi.left = t_roi.right - MIN_WIDTH;
+       else
+           t_roi.right = t_roi.left + MIN_WIDTH;
+   }
+
+   /* Align left and width to meet panel restrictions */
+   if(WIDTH_ALIGN) {
+       int width = t_roi.right - t_roi.left;
+       width = WIDTH_ALIGN * ((width + (WIDTH_ALIGN - 1)) / WIDTH_ALIGN);
+       t_roi.right = t_roi.left + width;
+
+       if(t_roi.right > boundary.right) {
+           t_roi.right = boundary.right;
+           t_roi.left = t_roi.right - width;
+       }
+   }
+
+   if(LEFT_ALIGN)
+       t_roi.left = t_roi.left - (t_roi.left % LEFT_ALIGN);
+
+   /* Align top and height to meet panel restrictions */
+   if(HEIGHT_ALIGN) {
+       int height = t_roi.bottom - t_roi.top;
+       height = HEIGHT_ALIGN *  ((height + (HEIGHT_ALIGN - 1)) / HEIGHT_ALIGN);
+       t_roi.bottom = t_roi.top  + height;
+
+       if(t_roi.bottom > boundary.bottom) {
+           t_roi.bottom = boundary.bottom;
+           t_roi.top = t_roi.bottom - height;
+       }
+   }
+
+   if(TOP_ALIGN)
+       t_roi.top = t_roi.top - (t_roi.top % TOP_ALIGN);
+
+   return t_roi;
 }
 
 };//namespace qhwc
