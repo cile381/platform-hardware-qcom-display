@@ -18,7 +18,10 @@ include $(CLEAR_VARS)
 LOCAL_COPY_HEADERS_TO           := qcom/display
 LOCAL_COPY_HEADERS              := qdMetaData.h
 LOCAL_MODULE_PATH               := $(TARGET_OUT_SHARED_LIBRARIES)
-LOCAL_SHARED_LIBRARIES          := liblog libcutils libqc-opt
+LOCAL_SHARED_LIBRARIES          := liblog libcutils
+ifeq ($(BOARD_USES_QCOM_HARDWARE),true)
+    LOCAL_SHARED_LIBRARIES += libqc-opt
+endif
 LOCAL_C_INCLUDES                := $(common_includes)
 LOCAL_C_INCLUDES                += $(LOCAL_PATH)/../../../../device/qcom/common/power
 LOCAL_ADDITIONAL_DEPENDENCIES   := $(common_deps)
