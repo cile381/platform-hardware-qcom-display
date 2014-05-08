@@ -1691,10 +1691,11 @@ inline int configMdp(Overlay *ov, const PipeArgs& parg,
     int posW = pos.right - pos.left;
     int posH = pos.bottom - pos.top;
     Dim position(pos.left, pos.top, posW, posH);
-    if(dpy)
-        ov->setPosition(position, dest);
-    else
+
+    if((1==dpy && ctx->mExtDisplay->hasResolutionChanged()) || !dpy)
         ov->setPosition(getOSCPosition(position, ctx), dest);
+    else
+        ov->setPosition(position, dest);
 
     if (metadata)
         ov->setVisualParams(*metadata, dest);
