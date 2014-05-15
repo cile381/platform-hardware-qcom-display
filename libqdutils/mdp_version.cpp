@@ -65,6 +65,11 @@ MDPVersion::MDPVersion()
                 mdp_version *= 10;
 
             mRGBPipes = mVGPipes = 2;
+            char value[PROPERTY_VALUE_MAX];
+            if(property_get("sys.hwc.automotive_mode_enabled", value, "false")
+                    && !strcmp(value, "true")) {
+                mDMAPipes = 1;
+            }
 
         } else if (!strncmp(fb_finfo.id, "mdssfb", 6)) {
             mdp_version = MDSS_V5;

@@ -42,7 +42,8 @@ namespace qdutils {
 // Use this enum to specify the dpy parameters where needed
 enum {
     DISPLAY_PRIMARY = 0,
-    DISPLAY_EXTERNAL,
+    DISPLAY_SECONDARY,
+    DISPLAY_TERTIARY,
 };
 
 // Display Attributes that are available to clients of this library

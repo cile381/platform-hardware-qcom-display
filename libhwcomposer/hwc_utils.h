@@ -52,7 +52,8 @@ class RotMgr;
 namespace qhwc {
 //fwrd decl
 class QueuedBufferStore;
-class ExternalDisplay;
+class SecondaryDisplay;
+class TertiaryDisplay;
 class VirtualDisplay;
 class IFBUpdate;
 class IVideoOverlay;
@@ -182,6 +183,8 @@ inline bool isNonIntegralSourceCrop(const hwc_frect_t& cropF) {
 void dumpLayer(hwc_layer_1_t const* l);
 void setListStats(hwc_context_t *ctx, const hwc_display_contents_1_t *list,
         int dpy);
+void setupObject(hwc_context_t* ctx, int dpy);
+void clearObject(hwc_context_t* ctx, int dpy);
 void initContext(hwc_context_t *ctx);
 void closeContext(hwc_context_t *ctx);
 //Crops source buffer against destination and FB boundaries
@@ -400,7 +403,8 @@ struct hwc_context_t {
     //Primary and external FB updater
     qhwc::IFBUpdate *mFBUpdate[HWC_NUM_DISPLAY_TYPES];
     // External display related information
-    qhwc::ExternalDisplay *mExtDisplay;
+    qhwc::SecondaryDisplay *mSecondaryDisplay;
+    qhwc::TertiaryDisplay *mTertiaryDisplay;
     qhwc::VirtualDisplay *mVirtualDisplay;
     qhwc::MDPInfo mMDP;
     qhwc::VsyncState vstate;
@@ -444,6 +448,8 @@ struct hwc_context_t {
     overlay::utils::Whf mPrevWHF[HWC_NUM_DISPLAY_TYPES];
     // Panel reset flag will be set if BTA check fails
     bool mPanelResetStatus;
+    // flag to indicate automotive mode is on/off
+    bool mAutomotiveModeOn;
 };
 
 namespace qhwc {

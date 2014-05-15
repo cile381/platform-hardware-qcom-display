@@ -98,7 +98,7 @@ static void setExtOrientation(hwc_context_t *ctx, uint32_t orientation) {
 
 static void isExternalConnected(hwc_context_t* ctx, Parcel* outParcel) {
     int connected;
-    connected = ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected ? 1 : 0;
+    connected = ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected ? 1 : 0;
     outParcel->writeInt32(connected);
 }
 
