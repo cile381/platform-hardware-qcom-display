@@ -33,11 +33,6 @@
 #include "mdp_version.h"
 #include "qdMetaData.h"
 
-#ifdef USES_QSEED_SCALAR
-#include <scale/scale.h>
-using namespace scale;
-#endif
-
 #define PIPE_DEBUG 0
 
 namespace overlay {
@@ -163,6 +158,8 @@ utils::eDest Overlay::getPipe(const PipeSpecs& pipeSpecs) {
         return getPipe_8x26(pipeSpecs);
     } else if(MDPVersion::getInstance().is8x16()) {
         return getPipe_8x16(pipeSpecs);
+    } else if(MDPVersion::getInstance().is8x39()) {
+        return getPipe_8x39(pipeSpecs);
     }
 
     eDest dest = OV_INVALID;
@@ -249,6 +246,12 @@ utils::eDest Overlay::getPipe_8x16(const PipeSpecs& pipeSpecs) {
         }
     }
     return dest;
+}
+
+utils::eDest Overlay::getPipe_8x39(const PipeSpecs& pipeSpecs) {
+    //8x16 & 8x36 has same number of pipes, pipe-types & scaling capabilities.
+    //Rely on 8x16 until we see a need to change.
+    return getPipe_8x16(pipeSpecs);
 }
 
 void Overlay::endAllSessions() {
@@ -545,39 +548,20 @@ bool Overlay::validateAndSet(const int& dpy, const int& fbFd) {
 }
 
 void Overlay::initScalar() {
-#ifdef USES_QSEED_SCALAR
     if(sLibScaleHandle == NULL) {
         sLibScaleHandle = dlopen("libscale.so", RTLD_NOW);
-    }
-
-    if(sLibScaleHandle) {
-        if(sScale == NULL) {
-            Scale* (*getInstance)();
-            *(void **) &getInstance = dlsym(sLibScaleHandle, "getInstance");
-            if(getInstance) {
-                sScale = getInstance();
-            }
+        if(sLibScaleHandle) {
+            *(void **) &sFnProgramScale =
+                    dlsym(sLibScaleHandle, "programScale");
         }
     }
-#endif
 }
 
 void Overlay::destroyScalar() {
-#ifdef USES_QSEED_SCALAR
     if(sLibScaleHandle) {
-        if(sScale) {
-            void (*destroyInstance)(Scale*);
-            *(void **) &destroyInstance = dlsym(sLibScaleHandle,
-                    "destroyInstance");
-            if(destroyInstance) {
-                destroyInstance(sScale);
-                sScale = NULL;
-            }
-        }
         dlclose(sLibScaleHandle);
         sLibScaleHandle = NULL;
     }
-#endif
 }
 
 void Overlay::PipeBook::init() {
@@ -607,6 +591,6 @@ int Overlay::PipeBook::sAllocatedBitmap = 0;
 utils::eMdpPipeType Overlay::PipeBook::pipeTypeLUT[utils::OV_MAX] =
     {utils::OV_MDP_PIPE_ANY};
 void *Overlay::sLibScaleHandle = NULL;
-scale::Scale *Overlay::sScale = NULL;
+int (*Overlay::sFnProgramScale)(struct mdp_overlay_list *) = NULL;
 
 }; // namespace overlay
