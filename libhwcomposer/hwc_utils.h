@@ -183,6 +183,7 @@ inline bool isNonIntegralSourceCrop(const hwc_frect_t& cropF) {
 void dumpLayer(hwc_layer_1_t const* l);
 void setListStats(hwc_context_t *ctx, const hwc_display_contents_1_t *list,
         int dpy);
+void updateReverseCameraState(hwc_context_t* ctx);
 void setupObject(hwc_context_t* ctx, int dpy);
 void clearObject(hwc_context_t* ctx, int dpy);
 void initContext(hwc_context_t *ctx);
@@ -383,6 +384,12 @@ int getSocIdFromSystem();
 enum eAnimationState{
     ANIMATION_STOPPED,
     ANIMATION_STARTED,
+};
+
+/* Reverse Camera States */
+enum eReverseCameraState {
+    REVERSE_CAMERA_OFF = 0,
+    REVERSE_CAMERA_ON,
 };
 
 // -----------------------------------------------------------------------------

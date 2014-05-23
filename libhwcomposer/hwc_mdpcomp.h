@@ -198,6 +198,7 @@ private:
     };
 
     virtual int pipesForFB() { return 1; };
+
     /* configure's overlay pipes for the frame */
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                           PipeLayerPair& pipeLayerPair);
@@ -226,6 +227,7 @@ private:
                          MdpPipeInfoHighRes& pipe_info, ePipeType type);
 
     virtual int pipesForFB() { return 2; };
+
     /* configure's overlay pipes for the frame */
     virtual int configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                           PipeLayerPair& pipeLayerPair);

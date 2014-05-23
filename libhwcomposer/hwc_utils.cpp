@@ -44,6 +44,7 @@ using namespace overlay;
 using namespace overlay::utils;
 namespace ovutils = overlay::utils;
 
+#define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
 namespace qhwc {
 
 static int openFramebufferDevice(hwc_context_t *ctx)
@@ -143,6 +144,32 @@ void clearObject(hwc_context_t* ctx, int dpy)
     }
 }
 
+void updateReverseCameraState(hwc_context_t* ctx) {
+    // Open a switch node to receive reverse camera notification from driver.
+    int fd = open(REVERSE_CAMERA_PATH, O_RDONLY);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_PATH, strerror(errno));
+        return;
+    }
+    char status[64];
+    // Read the node to check for reverse camera status
+    ssize_t len = pread(fd, status, 64, 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to read reverse camera switch node : %s",
+                __FUNCTION__, strerror(errno));
+        close(fd);
+        return;
+    }
+    // extract reverse camera status and put the primary in pause state, if
+    // reverse camera preview is on
+    if (!strncmp(status, "1", strlen("1"))) {
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isPause = true;
+    }
+    close(fd);
+    return;
+}
+
 void initContext(hwc_context_t *ctx)
 {
     if(openFramebufferDevice(ctx) < 0) {
@@ -171,6 +198,7 @@ void initContext(hwc_context_t *ctx)
 
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isPause = false;
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         ctx->mLayerRotMap[i] = new LayerRotMap();
@@ -225,6 +253,7 @@ void initContext(hwc_context_t *ctx)
             ALOGE("%s: Error!! Configuraion failed for third display",
                 __FUNCTION__);
         }
+        updateReverseCameraState(ctx);
     }
     for(int dpy = 0; dpy < HWC_NUM_PHYSICAL_DISPLAY_TYPES; dpy++) {
         setupObject(ctx, dpy);

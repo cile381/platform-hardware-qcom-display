@@ -159,16 +159,28 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
-        setListStats(ctx, list, dpy);
-        if((ret = ctx->mMDPComp[dpy]->prepare(ctx, list)) < 0) {
-            const int fbZ = 0;
-            ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZ);
+        if(!ctx->dpyAttr[dpy].isPause) {
+            setListStats(ctx, list, dpy);
+            if((ret = ctx->mMDPComp[dpy]->prepare(ctx, list)) < 0) {
+                const int fbZ = 0;
+                ctx->mFBUpdate[dpy]->prepare(ctx, list, fbZ);
+            }
+            // Use Copybit, when Full/Partial MDP comp fails
+            // (only for 8960 which has  dedicated 2D core)
+            if((ret < 1) &&
+               (ctx->mSocId == NON_PRO_8960_SOC_ID) &&
+               ctx->mCopyBit[dpy])
+                ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
+        } else {
+            /* when reverse camera is on keep primary display in Pause state.
+             * Mark all application layers as OVERLAY so that
+             * GPU will not compose.
+             */
+            for(size_t i = 0 ;i < (size_t)(list->numHwLayers - 1); i++) {
+                hwc_layer_1_t *layer = &list->hwLayers[i];
+                layer->compositionType = HWC_OVERLAY;
+            }
         }
-
-        // Use Copybit, when Full/Partial MDP comp fails
-        // (only for 8960 which has  dedicated 2D core)
-        if((ret < 1) && (ctx->mSocId == NON_PRO_8960_SOC_ID) && ctx->mCopyBit[dpy])
-            ctx->mCopyBit[dpy]->prepare(ctx, list, dpy);
     }
     return 0;
 }
@@ -490,7 +502,8 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     ATRACE_CALL();
     int ret = 0;
     const int dpy = HWC_DISPLAY_PRIMARY;
-    if (LIKELY(list) && ctx->dpyAttr[dpy].isActive) {
+    if (LIKELY(list) && ctx->dpyAttr[dpy].isActive &&
+        (ctx->dpyAttr[dpy].isPause == false)) {
         uint32_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
         int fd = -1; //FenceFD from the Copybit(valid in async mode)
