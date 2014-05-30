@@ -340,8 +340,70 @@ int CopyBit::clear (private_handle_t* hnd, hwc_rect_t& rect)
     return ret;
 }
 
-bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
-                                                        int dpy, int32_t *fd) {
+bool CopyBit::drawUsingAppBufferComposition(hwc_context_t *ctx,
+                                      hwc_display_contents_1_t *list,
+                                      int dpy, int *copybitFd) {
+     int layerCount = 0;
+     uint32_t last = list->numHwLayers - 1;
+     hwc_layer_1_t *fbLayer = &list->hwLayers[last];
+     private_handle_t *fbhnd = (private_handle_t *)fbLayer->handle;
+
+    if(ctx->enableABC == false)
+       return false;
+
+    if(ctx->listStats[dpy].numAppLayers > MAX_LAYERS_FOR_ABC )
+       return false;
+
+    layerCount = ctx->listStats[dpy].numAppLayers;
+    //bottom most layer should
+    //equal to FB
+    hwc_layer_1_t *tmpLayer = &list->hwLayers[0];
+    private_handle_t *hnd = (private_handle_t *)tmpLayer->handle;
+    if(hnd && fbhnd && (hnd->size == fbhnd->size) &&
+    (hnd->width == fbhnd->width) && (hnd->height == fbhnd->height)){
+       if(tmpLayer->transform  ||
+       (!(hnd->format == HAL_PIXEL_FORMAT_RGBA_8888 ||
+       hnd->format == HAL_PIXEL_FORMAT_RGBX_8888))  ||
+                   (needsScaling(tmpLayer) == true)) {
+          return false;
+       }else {
+          ctx->listStats[dpy].renderBufIndexforABC = 0;
+       }
+    }
+
+    if(ctx->listStats[dpy].renderBufIndexforABC == 0) {
+       if(layerCount == 1)
+          return true;
+
+       if(layerCount == MAX_LAYERS_FOR_ABC) {
+          // Pass the Acquire Fence FD to driver for base layer
+          int abcRenderBufIdx = ctx->listStats[dpy].renderBufIndexforABC;
+          private_handle_t *renderBuffer =
+          (private_handle_t *)list->hwLayers[abcRenderBufIdx].handle;
+          copybit_device_t *copybit = getCopyBitDevice();
+          if(list->hwLayers[abcRenderBufIdx].acquireFenceFd >=0){
+             copybit->set_sync(copybit,
+             list->hwLayers[abcRenderBufIdx].acquireFenceFd);
+          }
+          for(int i = 1; i < layerCount; i++){
+             int retVal = drawLayerUsingCopybit(ctx,
+               &(list->hwLayers[i]),renderBuffer, 0);
+             if(retVal < 0) {
+                ALOGE("%s : Copybit failed", __FUNCTION__);
+             }
+          }
+          // Get Release Fence FD of copybit for the App layer(s)
+          copybit->flush_get_fence(copybit, copybitFd);
+          close(list->hwLayers[abcRenderBufIdx].acquireFenceFd);
+          list->hwLayers[abcRenderBufIdx].acquireFenceFd = -1;
+          return true;
+       }
+    }
+    return false;
+}
+
+bool  CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
+                                                          int dpy, int32_t *fd) {
     // draw layers marked for COPYBIT
     int retVal = true;
     int copybitLayerCount = 0;
@@ -352,6 +414,10 @@ bool CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     if(mCopyBitDraw == false){
        mFbCache.reset(); // there is no layer marked for copybit
        return false ;
+    }
+
+    if(drawUsingAppBufferComposition(ctx, list, dpy, fd)) {
+       return true;
     }
     //render buffer
     if (ctx->mMDP.version == qdutils::MDP_V3_0_4) {
