@@ -58,7 +58,7 @@ MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
 
 MDPComp::MDPComp(int dpy):mDpy(dpy){};
 
-void MDPComp::dump(android::String8& buf)
+void MDPComp::dump(android::String8& buf, hwc_context_t *ctx)
 {
     if(mCurrentFrame.layerCount > MAX_NUM_APP_LAYERS)
         return;
@@ -72,6 +72,21 @@ void MDPComp::dump(android::String8& buf)
     dumpsys_log(buf,"needsFBRedraw:%3s  pipesUsed:%2d  MaxPipesPerMixer: %d \n",
                 (mCurrentFrame.needsRedraw? "YES" : "NO"),
                 mCurrentFrame.mdpCount, sMaxPipesPerMixer);
+    if(isDisplaySplit(ctx, mDpy)) {
+        dumpsys_log(buf, "Programmed ROI's: Left: [%d, %d, %d, %d] "
+                "Right: [%d, %d, %d, %d] \n",
+                ctx->listStats[mDpy].lRoi.left, ctx->listStats[mDpy].lRoi.top,
+                ctx->listStats[mDpy].lRoi.right,
+                ctx->listStats[mDpy].lRoi.bottom,
+                ctx->listStats[mDpy].rRoi.left,ctx->listStats[mDpy].rRoi.top,
+                ctx->listStats[mDpy].rRoi.right,
+                ctx->listStats[mDpy].rRoi.bottom);
+    } else {
+        dumpsys_log(buf, "Programmed ROI: [%d, %d, %d, %d] \n",
+                ctx->listStats[mDpy].lRoi.left,ctx->listStats[mDpy].lRoi.top,
+                ctx->listStats[mDpy].lRoi.right,
+                ctx->listStats[mDpy].lRoi.bottom);
+    }
     dumpsys_log(buf," ---------------------------------------------  \n");
     dumpsys_log(buf," listIdx | cached? | mdpIndex | comptype  |  Z  \n");
     dumpsys_log(buf," ---------------------------------------------  \n");
@@ -722,7 +737,8 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     for(int i = 0; i < numAppLayers; i++) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
-        if(not isSupportedForMDPComp(ctx, layer)) {
+        if(not mCurrentFrame.drop[i] and
+           not isSupportedForMDPComp(ctx, layer)) {
             ALOGD_IF(isDebug(), "%s: Unsupported layer in list",__FUNCTION__);
             return false;
         }
@@ -1448,7 +1464,7 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         ALOGD("GEOMETRY change: %d",
                 (list->flags & HWC_GEOMETRY_CHANGED));
         android::String8 sDump("");
-        dump(sDump);
+        dump(sDump, ctx);
         ALOGD("%s",sDump.string());
     }
 
