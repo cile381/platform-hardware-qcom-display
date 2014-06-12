@@ -67,6 +67,7 @@ void MdpCtrl::reset() {
     mPPChanged = false;
     memset(&mParams, 0, sizeof(struct compute_params));
     memset(qseedData,0,sizeof(qseedData));
+    memset(&(mOVInfo.overlay_pp_cfg),0,sizeof(mOVInfo.overlay_pp_cfg));
     mParams.params.conv_params.order = hsic_order_hsc_i;
     mParams.params.conv_params.interface = interface_rec601;
     mParams.params.conv_params.cc_matrix[0][0] = 1;
@@ -274,6 +275,22 @@ bool MdpCtrl::setVisualParams(const MetaData_t& data) {
                     mParams.params.pa_params.contrast = data.hsicData.contrast;
             mParams.params.pa_params.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
             mParams.operation = PP_OP_PA | PP_OP_HSIC;
+        }
+    }
+
+    if (data.operation & PP_PARAM_SHARPNESS) {
+        if(mParams.params.qseed_params.strength != data.sharpness) {
+            ALOGD_IF(HSIC_SETTINGS_DEBUG,
+                "Sharpness has changed from %d to %d",
+                mParams.params.qseed_params.strength,
+                data.sharpness);
+            memset(&(mOVInfo.overlay_pp_cfg.qseed_cfg),0,sizeof(mOVInfo.overlay_pp_cfg.qseed_cfg));
+            mParams.params.qseed_params.strength = data.sharpness;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].len = 2;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].table_num = 1;
+            mOVInfo.overlay_pp_cfg.qseed_cfg[0].data = qseedData;
+            mParams.operation |= PP_OP_QSEED;
+            needUpdate = true;
         }
     }
 
