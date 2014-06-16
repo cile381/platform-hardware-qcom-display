@@ -224,11 +224,6 @@ inline bool isNonIntegralSourceCrop(const hwc_frect_t& cropF) {
 // -----------------------------------------------------------------------------
 // Utility functions - implemented in hwc_utils.cpp
 void dumpLayer(hwc_layer_1_t const* l);
-
-// Calculate viewframe for external/primary display from primary resolution and
-// primary device orientation
-hwc_rect_t calculateDisplayViewFrame(hwc_context_t *ctx, int dpy);
-
 void setListStats(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         int dpy);
 void initContext(hwc_context_t *ctx);
@@ -478,14 +473,20 @@ enum eAnimationState{
     ANIMATION_STARTED,
 };
 
+enum eCompositionState {
+    COMPOSITION_STATE_MDP = 0,        // Set if composition type is MDP
+    COMPOSITION_STATE_GPU,            // Set if composition type is GPU or MIXED
+    COMPOSITION_STATE_IDLE_FALLBACK,  // Set if it is idlefallback
+};
+
 // Structure holds the information about the GPU hint.
 struct gpu_hint_info {
     // system level flag to enable gpu_perf_mode
     bool mGpuPerfModeEnable;
     // Stores the current GPU performance mode DEFAULT/HIGH
     bool mCurrGPUPerfMode;
-    // true if previous composition used GPU
-    bool mPrevCompositionGLES;
+    // Stores the compositon state GPU, MDP or IDLE_FALLBACK
+    bool mCompositionState;
     // Stores the EGLContext of current process
     EGLContext mEGLContext;
     // Stores the EGLDisplay of current process

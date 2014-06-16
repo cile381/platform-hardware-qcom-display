@@ -292,7 +292,7 @@ void initContext(hwc_context_t *ctx)
 
     ctx->mGPUHintInfo.mEGLDisplay = NULL;
     ctx->mGPUHintInfo.mEGLContext = NULL;
-    ctx->mGPUHintInfo.mPrevCompositionGLES = false;
+    ctx->mGPUHintInfo.mCompositionState = COMPOSITION_STATE_MDP;
     ctx->mGPUHintInfo.mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
 #endif
     ALOGI("Initializing Qualcomm Hardware Composer");
@@ -810,28 +810,6 @@ static void trimList(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     }
 }
 
-hwc_rect_t calculateDisplayViewFrame(hwc_context_t *ctx, int dpy) {
-    int dstWidth = ctx->dpyAttr[dpy].xres;
-    int dstHeight = ctx->dpyAttr[dpy].yres;
-    int srcWidth = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
-    int srcHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
-    // default we assume viewframe as a full frame for primary display
-    hwc_rect outRect = {0, 0, dstWidth, dstHeight};
-    if(dpy) {
-        // swap srcWidth and srcHeight, if the device orientation is 90 or 270.
-        if(ctx->deviceOrientation & 0x1) {
-            swap(srcWidth, srcHeight);
-        }
-        // Get Aspect Ratio for external
-        getAspectRatioPosition(dstWidth, dstHeight, srcWidth,
-                            srcHeight, outRect);
-    }
-    ALOGD_IF(HWC_UTILS_DEBUG, "%s: view frame for dpy %d is [%d %d %d %d]",
-        __FUNCTION__, dpy, outRect.left, outRect.top,
-        outRect.right, outRect.bottom);
-    return outRect;
-}
-
 void setListStats(hwc_context_t *ctx,
         hwc_display_contents_1_t *list, int dpy) {
     const int prevYuvCount = ctx->listStats[dpy].yuvCount;
@@ -847,19 +825,13 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
     ctx->listStats[dpy].yuv4k2kCount = 0;
-    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
     ctx->dpyAttr[dpy].mActionSafePresent = isActionSafePresent(ctx, dpy);
     ctx->listStats[dpy].renderBufIndexforABC = -1;
 
     resetROI(ctx, dpy);
 
-    // Calculate view frame of ext display from primary resolution
-    // and primary device orientation.
-    ctx->mViewFrame[dpy] = calculateDisplayViewFrame(ctx, dpy);
-
     trimList(ctx, list, dpy);
     optimizeLayerRects(list);
-
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -2139,7 +2111,8 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
         }
     }
     if(isGLESComp(ctx, list)) {
-        if(!gpuHint->mPrevCompositionGLES && !MDPComp::isIdleFallback()) {
+        if(gpuHint->mCompositionState != COMPOSITION_STATE_GPU
+            && !MDPComp::isIdleFallback()) {
             EGLint attr_list[] = {EGL_GPU_HINT_1,
                                   EGL_GPU_LEVEL_3,
                                   EGL_NONE };
@@ -2149,7 +2122,7 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
                 ALOGW("eglGpuPerfHintQCOM failed for Built in display");
             } else {
                 gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_3;
-                gpuHint->mPrevCompositionGLES = true;
+                gpuHint->mCompositionState = COMPOSITION_STATE_GPU;
             }
         } else {
             EGLint attr_list[] = {EGL_GPU_HINT_1,
@@ -2161,6 +2134,9 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
                 ALOGW("eglGpuPerfHintQCOM failed for Built in display");
             } else {
                 gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
+            }
+            if(MDPComp::isIdleFallback()) {
+                gpuHint->mCompositionState = COMPOSITION_STATE_IDLE_FALLBACK;
             }
         }
     } else {
@@ -2175,7 +2151,7 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
         } else {
             gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
         }
-        gpuHint->mPrevCompositionGLES = false;
+        gpuHint->mCompositionState = COMPOSITION_STATE_MDP;
     }
 #endif
 }
