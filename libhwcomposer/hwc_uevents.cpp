@@ -113,10 +113,6 @@ static void handleReverseCameraState(hwc_context_t* ctx,
     int dpy = HWC_DISPLAY_PRIMARY;
     switch(state) {
         case REVERSE_CAMERA_OFF:
-            /* TODO: need to implement synchronization mechanism to wait for
-               camera to release all the pipes. sleep for camera to release
-               all the pipes for time being */
-            usleep(500*1000);
             ctx->dpyAttr[dpy].isPause = false;
             ctx->proc->invalidate(ctx->proc);
             break;
