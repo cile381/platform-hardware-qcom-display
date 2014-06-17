@@ -1456,6 +1456,17 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
             type = MDPCOMP_OV_DMA;
         }
 
+        // for 8x26, never allow primary display occupy DMA pipe
+        // when external display is connected
+        if(qdutils::MDPVersion::getInstance().is8x26()
+            && ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive
+            && ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected
+            && !ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause
+            && mDpy == HWC_DISPLAY_PRIMARY
+            && type == MDPCOMP_OV_DMA) {
+            type = MDPCOMP_OV_RGB;
+        }
+
         pipe_info.index = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
         if(pipe_info.index == ovutils::OV_INVALID) {
             ALOGD_IF(isDebug(), "%s: Unable to get pipe type = %d",
