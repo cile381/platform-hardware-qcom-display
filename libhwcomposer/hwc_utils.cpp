@@ -1812,7 +1812,7 @@ int configureLowRes(hwc_context_t *ctx, hwc_layer_1_t *layer,
                   static_cast<eRotFlags>(rotFlags), layer->planeAlpha,
                   (ovutils::eBlending) getBlending(layer->blending));
     if ( ((yuvOrder == VIDEO_LAYER_0) && metadata->operation &
-            PP_PARAM_VID_INTFC) || (yuvOrder == VIDEO_LAYER_1) ) {
+            (PP_PARAM_VID_INTFC | PP_PARAM_INTERLACED)) || (yuvOrder == VIDEO_LAYER_1) ) {
         if(metadata && (ctx->mPpParams[yuvOrder].isValid) ) {
             /* Preference will be for the HSIC & QSEED values
              * set through binder */
