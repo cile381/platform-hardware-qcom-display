@@ -599,15 +599,6 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             ALOGD_IF(isDebug(), "%s: Unsupported layer in list",__FUNCTION__);
             return false;
         }
-
-        //For 8x26, if there is only one layer which needs scale for secondary
-        //while no scale for primary display, DMA pipe is occupied by primary.
-        //If need to fall back to GLES composition, virtual display lacks DMA
-        //pipe and error is reported.
-        if(qdutils::MDPVersion::getInstance().is8x26() &&
-                                mDpy >= HWC_DISPLAY_EXTERNAL &&
-                                qhwc::needsScaling(layer))
-            return false;
     }
 
     mCurrentFrame.fbCount = 0;
@@ -1323,12 +1314,23 @@ void MDPCompNonSplit::adjustForSourceSplit(hwc_context_t *ctx,
     //as we split 4k2k layer and increment zorder for right half
     //of the layer
     if(mCurrentFrame.fbZ >= 0) {
-        int n4k2kYuvCount = ctx->listStats[mDpy].yuv4k2kCount;
-        for(int index = 0; index < n4k2kYuvCount; index++){
-            int n4k2kYuvIndex =
-                    ctx->listStats[mDpy].yuv4k2kIndices[index];
-            if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
-                mCurrentFrame.fbZ += 1;
+        for (int index = 0, mdpNextZOrder = 0; index < mCurrentFrame.layerCount;
+                index++) {
+            if(!mCurrentFrame.isFBComposed[index]) {
+                if(mdpNextZOrder == mCurrentFrame.fbZ) {
+                    mdpNextZOrder++;
+                }
+                mdpNextZOrder++;
+                hwc_layer_1_t* layer = &list->hwLayers[index];
+                private_handle_t *hnd = (private_handle_t *)layer->handle;
+                if(is4kx2kYuvBuffer(hnd)) {
+                    if(mdpNextZOrder <= mCurrentFrame.fbZ)
+                        mCurrentFrame.fbZ += 1;
+                    mdpNextZOrder++;
+                    //As we split 4kx2k yuv layer and program to 2 VG pipes
+                    //(if available) increase mdpcount by 1.
+                    mCurrentFrame.mdpCount++;
+                }
             }
         }
     }
@@ -1384,6 +1386,17 @@ bool MDPCompNonSplit::allocLayerPipes(hwc_context_t *ctx,
             && Overlay::getDMAMode() != Overlay::DMA_BLOCK_MODE
             && ctx->mMDP.version >= qdutils::MDSS_V5) {
             type = MDPCOMP_OV_DMA;
+        }
+
+        // for 8x26, never allow primary display occupy DMA pipe
+        // when external display is connected
+        if(qdutils::MDPVersion::getInstance().is8x26()
+            && ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive
+            && ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected
+            && !ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause
+            && mDpy == HWC_DISPLAY_PRIMARY
+            && type == MDPCOMP_OV_DMA) {
+            type = MDPCOMP_OV_RGB;
         }
 
         pipe_info.index = getMdpPipe(ctx, type, Overlay::MIXER_DEFAULT);
@@ -1535,17 +1548,27 @@ void MDPCompSplit::adjustForSourceSplit(hwc_context_t *ctx,
          hwc_display_contents_1_t* list){
     //if 4kx2k yuv layer is totally present in either in left half
     //or right half then try splitting the yuv layer to avoid decimation
-    int n4k2kYuvCount = ctx->listStats[mDpy].yuv4k2kCount;
     const int lSplit = getLeftSplit(ctx, mDpy);
-    for(int index = 0; index < n4k2kYuvCount; index++){
-        int n4k2kYuvIndex = ctx->listStats[mDpy].yuv4k2kIndices[index];
-        hwc_layer_1_t* layer = &list->hwLayers[n4k2kYuvIndex];
-        hwc_rect_t dst = layer->displayFrame;
-        if((dst.left > lSplit) || (dst.right < lSplit)) {
-            mCurrentFrame.mdpCount += 1;
-        }
-        if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
-            mCurrentFrame.fbZ += 1;
+    if(mCurrentFrame.fbZ >= 0) {
+        for (int index = 0, mdpNextZOrder = 0; index < mCurrentFrame.layerCount;
+                index++) {
+            if(!mCurrentFrame.isFBComposed[index]) {
+                if(mdpNextZOrder == mCurrentFrame.fbZ) {
+                    mdpNextZOrder++;
+                }
+                mdpNextZOrder++;
+                hwc_layer_1_t* layer = &list->hwLayers[index];
+                private_handle_t *hnd = (private_handle_t *)layer->handle;
+                if(is4kx2kYuvBuffer(hnd)) {
+                    hwc_rect_t dst = layer->displayFrame;
+                    if((dst.left > lSplit) || (dst.right < lSplit)) {
+                        mCurrentFrame.mdpCount += 1;
+                    }
+                    if(mdpNextZOrder <= mCurrentFrame.fbZ)
+                        mCurrentFrame.fbZ += 1;
+                    mdpNextZOrder++;
+                }
+            }
         }
     }
 }
