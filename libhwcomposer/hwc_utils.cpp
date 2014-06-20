@@ -83,7 +83,8 @@ bool isValidResolution(hwc_context_t *ctx, uint32_t xres, uint32_t yres)
             (xres < MIN_DISPLAY_XRES || yres < MIN_DISPLAY_YRES));
 }
 
-void changeResolution(hwc_context_t *ctx, int xres_orig, int yres_orig) {
+void changeResolution(hwc_context_t *ctx, int xres_orig, int yres_orig,
+                      int width, int height) {
     //Store original display resolution.
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_new = xres_orig;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_new = yres_orig;
@@ -99,6 +100,12 @@ void changeResolution(hwc_context_t *ctx, int xres_orig, int yres_orig) {
             ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres_new = xres_new;
             ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres_new = yres_new;
             ctx->dpyAttr[HWC_DISPLAY_PRIMARY].customFBSize = true;
+
+            //Caluculate DPI according to changed resolution.
+            float xdpi = ((float)xres_new * 25.4f) / (float)width;
+            float ydpi = ((float)yres_new * 25.4f) / (float)height;
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xdpi = xdpi;
+            ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
         }
     }
 }
@@ -168,7 +175,7 @@ static int openFramebufferDevice(hwc_context_t *ctx)
             (uint32_t)(1000000000l / fps);
 
     //To change resolution of primary display
-    changeResolution(ctx, info.xres, info.yres);
+    changeResolution(ctx, info.xres, info.yres, info.width, info.height);
 
     //Unblank primary on first boot
     if(ioctl(fb_fd, FBIOBLANK,FB_BLANK_UNBLANK) < 0) {
@@ -285,7 +292,7 @@ void initContext(hwc_context_t *ctx)
 
     ctx->mGPUHintInfo.mEGLDisplay = NULL;
     ctx->mGPUHintInfo.mEGLContext = NULL;
-    ctx->mGPUHintInfo.mPrevCompositionGLES = false;
+    ctx->mGPUHintInfo.mCompositionState = COMPOSITION_STATE_MDP;
     ctx->mGPUHintInfo.mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
 #endif
     ALOGI("Initializing Qualcomm Hardware Composer");
@@ -803,28 +810,6 @@ static void trimList(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     }
 }
 
-hwc_rect_t calculateDisplayViewFrame(hwc_context_t *ctx, int dpy) {
-    int dstWidth = ctx->dpyAttr[dpy].xres;
-    int dstHeight = ctx->dpyAttr[dpy].yres;
-    int srcWidth = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
-    int srcHeight = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
-    // default we assume viewframe as a full frame for primary display
-    hwc_rect outRect = {0, 0, dstWidth, dstHeight};
-    if(dpy) {
-        // swap srcWidth and srcHeight, if the device orientation is 90 or 270.
-        if(ctx->deviceOrientation & 0x1) {
-            swap(srcWidth, srcHeight);
-        }
-        // Get Aspect Ratio for external
-        getAspectRatioPosition(dstWidth, dstHeight, srcWidth,
-                            srcHeight, outRect);
-    }
-    ALOGD_IF(HWC_UTILS_DEBUG, "%s: view frame for dpy %d is [%d %d %d %d]",
-        __FUNCTION__, dpy, outRect.left, outRect.top,
-        outRect.right, outRect.bottom);
-    return outRect;
-}
-
 void setListStats(hwc_context_t *ctx,
         hwc_display_contents_1_t *list, int dpy) {
     const int prevYuvCount = ctx->listStats[dpy].yuvCount;
@@ -840,19 +825,13 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
     ctx->listStats[dpy].yuv4k2kCount = 0;
-    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
     ctx->dpyAttr[dpy].mActionSafePresent = isActionSafePresent(ctx, dpy);
     ctx->listStats[dpy].renderBufIndexforABC = -1;
 
     resetROI(ctx, dpy);
 
-    // Calculate view frame of ext display from primary resolution
-    // and primary device orientation.
-    ctx->mViewFrame[dpy] = calculateDisplayViewFrame(ctx, dpy);
-
     trimList(ctx, list, dpy);
     optimizeLayerRects(list);
-
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -974,6 +953,32 @@ bool isSecureModePolicy(int mdpVersion) {
         return true;
     else
         return false;
+}
+
+bool isRotatorSupportedFormat(private_handle_t *hnd) {
+    // Following rotator src formats are supported by mdp driver
+    // TODO: Add more formats in future, if mdp driver adds support
+    switch(hnd->format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGB_565:
+        case HAL_PIXEL_FORMAT_RGB_888:
+        case HAL_PIXEL_FORMAT_BGRA_8888:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+
+bool isRotationDoable(hwc_context_t *ctx, private_handle_t *hnd) {
+    // Rotate layers, if it is YUV type or rendered by CPU and not
+    // for the MDP versions below MDP5
+    if((isCPURendered(hnd) && isRotatorSupportedFormat(hnd) &&
+        !ctx->mMDP.version < qdutils::MDSS_V5)
+                   || isYuvBuffer(hnd)) {
+        return true;
+    }
+    return false;
 }
 
 // returns true if Action safe dimensions are set and target supports Actionsafe
@@ -1443,7 +1448,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     return ret;
 }
 
-void setMdpFlags(hwc_layer_1_t *layer,
+void setMdpFlags(hwc_context_t *ctx, hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
         int rotDownscale, int transform) {
     private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -1464,11 +1469,6 @@ void setMdpFlags(hwc_layer_1_t *layer,
             ovutils::setMdpFlags(mdpFlags,
                     ovutils::OV_MDP_DEINTERLACE);
         }
-        //Pre-rotation will be used using rotator.
-        if(transform & HWC_TRANSFORM_ROT_90) {
-            ovutils::setMdpFlags(mdpFlags,
-                    ovutils::OV_MDP_SOURCE_ROTATED_90);
-        }
     }
 
     if(isSecureDisplayBuffer(hnd)) {
@@ -1477,6 +1477,12 @@ void setMdpFlags(hwc_layer_1_t *layer,
                              ovutils::OV_MDP_SECURE_OVERLAY_SESSION);
         ovutils::setMdpFlags(mdpFlags,
                              ovutils::OV_MDP_SECURE_DISPLAY_OVERLAY_SESSION);
+    }
+
+    //Pre-rotation will be used using rotator.
+    if(has90Transform(layer) && isRotationDoable(ctx, hnd)) {
+        ovutils::setMdpFlags(mdpFlags,
+                ovutils::OV_MDP_SOURCE_ROTATED_90);
     }
     //No 90 component and no rot-downscale then flips done by MDP
     //If we use rot then it might as well do flips
@@ -1670,14 +1676,15 @@ int configureNonSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         }
     }
 
-    setMdpFlags(layer, mdpFlags, downscale, transform);
+    setMdpFlags(ctx, layer, mdpFlags, downscale, transform);
 
-    if(isYuvBuffer(hnd) && //if 90 component or downscale, use rot
-            ((transform & HWC_TRANSFORM_ROT_90) || downscale)) {
+    //if 90 component or downscale, use rot
+    if((has90Transform(layer) && isRotationDoable(ctx, hnd)) || downscale) {
         *rot = ctx->mRotMgr->getNext();
         if(*rot == NULL) return -1;
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
-        if(!dpy)
+        // BWC is not tested for other formats So enable it only for YUV format
+        if(!dpy && isYuvBuffer(hnd))
             BwcPM::setBwc(crop, dst, transform, mdpFlags);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
@@ -1767,7 +1774,7 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
        ActionSafe, and extorientation features. */
     calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
 
-    setMdpFlags(layer, mdpFlagsL, 0, transform);
+    setMdpFlags(ctx, layer, mdpFlagsL, 0, transform);
 
     if(lDest != OV_INVALID && rDest != OV_INVALID) {
         //Enable overfetch
@@ -1781,7 +1788,7 @@ int configureSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
         whf.format = wb->getOutputFormat();
     }
 
-    if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
+    if(has90Transform(layer) && isRotationDoable(ctx, hnd)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
@@ -1909,14 +1916,15 @@ int configureSourceSplit(hwc_context_t *ctx, hwc_layer_1_t *layer,
        ActionSafe, and extorientation features. */
     calcExtDisplayPosition(ctx, hnd, dpy, crop, dst, transform, orient);
 
-    setMdpFlags(layer, mdpFlagsL, 0, transform);
+    setMdpFlags(ctx, layer, mdpFlagsL, 0, transform);
     trimLayer(ctx, dpy, transform, crop, dst);
 
-    if(isYuvBuffer(hnd) && (transform & HWC_TRANSFORM_ROT_90)) {
+    if(has90Transform(layer) && isRotationDoable(ctx, hnd)) {
         (*rot) = ctx->mRotMgr->getNext();
         if((*rot) == NULL) return -1;
         ctx->mLayerRotMap[dpy]->add(layer, *rot);
-        if(!dpy)
+        // BWC is not tested for other formats So enable it only for YUV format
+        if(!dpy && isYuvBuffer(hnd))
             BwcPM::setBwc(crop, dst, transform, mdpFlagsL);
         //Configure rotator for pre-rotation
         if(configRotator(*rot, whf, crop, mdpFlagsL, orient, downscale) < 0) {
@@ -2080,6 +2088,24 @@ bool canUseMDPforVirtualDisplay(hwc_context_t* ctx,
     return true;
 }
 
+void dumpBuffer(private_handle_t *ohnd, char *bufferName) {
+    if (ohnd != NULL && ohnd->base) {
+        char dumpFilename[PATH_MAX];
+        bool bResult = false;
+        snprintf(dumpFilename, sizeof(dumpFilename), "/data/%s.%s.%dx%d.raw",
+            bufferName,
+            overlay::utils::getFormatString(utils::getMdpFormat(ohnd->format)),
+            getWidth(ohnd), getHeight(ohnd));
+        FILE* fp = fopen(dumpFilename, "w+");
+        if (NULL != fp) {
+            bResult = (bool) fwrite((void*)ohnd->base, ohnd->size, 1, fp);
+            fclose(fp);
+        }
+        ALOGD("Buffer[%s] Dump to %s: %s",
+        bufferName, dumpFilename, bResult ? "Success" : "Fail");
+    }
+}
+
 bool isGLESComp(hwc_context_t *ctx,
                      hwc_display_contents_1_t* list) {
     int numAppLayers = ctx->listStats[HWC_DISPLAY_PRIMARY].numAppLayers;
@@ -2114,7 +2140,8 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
         }
     }
     if(isGLESComp(ctx, list)) {
-        if(!gpuHint->mPrevCompositionGLES && !MDPComp::isIdleFallback()) {
+        if(gpuHint->mCompositionState != COMPOSITION_STATE_GPU
+            && !MDPComp::isIdleFallback()) {
             EGLint attr_list[] = {EGL_GPU_HINT_1,
                                   EGL_GPU_LEVEL_3,
                                   EGL_NONE };
@@ -2124,7 +2151,7 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
                 ALOGW("eglGpuPerfHintQCOM failed for Built in display");
             } else {
                 gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_3;
-                gpuHint->mPrevCompositionGLES = true;
+                gpuHint->mCompositionState = COMPOSITION_STATE_GPU;
             }
         } else {
             EGLint attr_list[] = {EGL_GPU_HINT_1,
@@ -2136,6 +2163,9 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
                 ALOGW("eglGpuPerfHintQCOM failed for Built in display");
             } else {
                 gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
+            }
+            if(MDPComp::isIdleFallback()) {
+                gpuHint->mCompositionState = COMPOSITION_STATE_IDLE_FALLBACK;
             }
         }
     } else {
@@ -2150,7 +2180,7 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list) {
         } else {
             gpuHint->mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
         }
-        gpuHint->mPrevCompositionGLES = false;
+        gpuHint->mCompositionState = COMPOSITION_STATE_MDP;
     }
 #endif
 }

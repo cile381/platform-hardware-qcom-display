@@ -224,11 +224,6 @@ inline bool isNonIntegralSourceCrop(const hwc_frect_t& cropF) {
 // -----------------------------------------------------------------------------
 // Utility functions - implemented in hwc_utils.cpp
 void dumpLayer(hwc_layer_1_t const* l);
-
-// Calculate viewframe for external/primary display from primary resolution and
-// primary device orientation
-hwc_rect_t calculateDisplayViewFrame(hwc_context_t *ctx, int dpy);
-
 void setListStats(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         int dpy);
 void initContext(hwc_context_t *ctx);
@@ -240,6 +235,10 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
                               hwc_rect_t& nwr);
 bool isSecuring(hwc_context_t* ctx, hwc_layer_1_t const* layer);
 bool isSecureModePolicy(int mdpVersion);
+// Returns true, if the input layer format is supported by rotator
+bool isRotatorSupportedFormat(private_handle_t *hnd);
+//Returns true, if the layer is YUV or the layer has been rendered by CPU
+bool isRotationDoable(hwc_context_t *ctx, private_handle_t *hnd);
 bool isExternalActive(hwc_context_t* ctx);
 bool isAlphaScaled(hwc_layer_1_t const* layer);
 bool needsScaling(hwc_layer_1_t const* layer);
@@ -257,6 +256,7 @@ bool isAbcInUse(hwc_context_t *ctx);
 
 bool canUseMDPforVirtualDisplay(hwc_context_t* ctx,
                                 const hwc_display_contents_1_t *list);
+void dumpBuffer(private_handle_t *ohnd, char *bufferName);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
@@ -319,7 +319,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         int fd);
 
 //Sets appropriate mdp flags for a layer.
-void setMdpFlags(hwc_layer_1_t *layer,
+void setMdpFlags(hwc_context_t *ctx, hwc_layer_1_t *layer,
         ovutils::eMdpFlags &mdpFlags,
         int rotDownscale, int transform);
 
@@ -404,6 +404,10 @@ static inline bool isTileRendered(const private_handle_t* hnd) {
     return (hnd && (private_handle_t::PRIV_FLAGS_TILE_RENDERED & hnd->flags));
 }
 
+static inline bool isCPURendered(const private_handle_t* hnd) {
+    return (hnd && (private_handle_t::PRIV_FLAGS_CPU_RENDERED & hnd->flags));
+}
+
 //Return true if buffer is marked locked
 static inline bool isBufferLocked(const private_handle_t* hnd) {
     return (hnd && (private_handle_t::PRIV_FLAGS_HWC_LOCK & hnd->flags));
@@ -477,14 +481,20 @@ enum eAnimationState{
     ANIMATION_STARTED,
 };
 
+enum eCompositionState {
+    COMPOSITION_STATE_MDP = 0,        // Set if composition type is MDP
+    COMPOSITION_STATE_GPU,            // Set if composition type is GPU or MIXED
+    COMPOSITION_STATE_IDLE_FALLBACK,  // Set if it is idlefallback
+};
+
 // Structure holds the information about the GPU hint.
 struct gpu_hint_info {
     // system level flag to enable gpu_perf_mode
     bool mGpuPerfModeEnable;
     // Stores the current GPU performance mode DEFAULT/HIGH
     bool mCurrGPUPerfMode;
-    // true if previous composition used GPU
-    bool mPrevCompositionGLES;
+    // Stores the compositon state GPU, MDP or IDLE_FALLBACK
+    bool mCompositionState;
     // Stores the EGLContext of current process
     EGLContext mEGLContext;
     // Stores the EGLDisplay of current process
@@ -575,7 +585,7 @@ static inline bool isYuvPresent (hwc_context_t *ctx, int dpy) {
     return  ctx->listStats[dpy].yuvCount;
 }
 
-static inline bool has90Transform(hwc_layer_1_t *layer) {
+static inline bool has90Transform(hwc_layer_1_t const* layer) {
     return ((layer->transform & HWC_TRANSFORM_ROT_90) &&
             !(layer->flags & HWC_COLOR_FILL));
 }

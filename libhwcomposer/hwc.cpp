@@ -143,11 +143,11 @@ static void setDMAState(hwc_context_t *ctx, int numDisplays,
                     hwc_layer_1_t const* layer = &list->hwLayers[layerIndex];
                     private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-                    /* If a video layer requires rotation, set the DMA state
+                    /* If a layer requires rotation, set the DMA state
                      * to BLOCK_MODE */
 
-                    if (UNLIKELY(isYuvBuffer(hnd)) && canUseRotator(ctx, dpy) &&
-                        (layer->transform & HWC_TRANSFORM_ROT_90)) {
+                    if (canUseRotator(ctx, dpy) &&
+                        has90Transform(layer) && isRotationDoable(ctx, hnd)) {
                         if(not ctx->mOverlay->isDMAMultiplexingSupported()) {
                             if(ctx->mOverlay->isPipeTypeAttached(
                                              overlay::utils::OV_MDP_PIPE_DMA))
@@ -214,6 +214,8 @@ static void reset(hwc_context_t *ctx, int numDisplays,
 
         }
 
+        if(ctx->mMDPComp[i])
+            ctx->mMDPComp[i]->reset();
         if(ctx->mFBUpdate[i])
             ctx->mFBUpdate[i]->reset();
         if(ctx->mCopyBit[i])
@@ -223,7 +225,6 @@ static void reset(hwc_context_t *ctx, int numDisplays,
     }
 
     ctx->mAD->reset();
-    MDPComp::reset();
     if(ctx->mHWCVirtual)
         ctx->mHWCVirtual->destroy(ctx, numDisplays, displays);
 }
