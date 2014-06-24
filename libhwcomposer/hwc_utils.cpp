@@ -295,6 +295,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mGPUHintInfo.mCompositionState = COMPOSITION_STATE_MDP;
     ctx->mGPUHintInfo.mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
 #endif
+    memset(&(ctx->mPtorInfo), 0, sizeof(ctx->mPtorInfo));
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -481,10 +482,10 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
         width = float(rect.right - rect.left);
         height = float(rect.bottom - rect.top);
     }
-    xRatio = (float)(inPos.x/actualWidth);
-    yRatio = (float)(inPos.y/actualHeight);
-    wRatio = (float)(inPos.w/actualWidth);
-    hRatio = (float)(inPos.h/actualHeight);
+    xRatio = (float)((float)inPos.x/actualWidth);
+    yRatio = (float)((float)inPos.y/actualHeight);
+    wRatio = (float)((float)inPos.w/actualWidth);
+    hRatio = (float)((float)inPos.h/actualHeight);
 
     //Calculate the pos9ition...
     outPos.x = uint32_t((xRatio * width) + (float)xPos);
@@ -1363,7 +1364,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         }
     }
 
-    if ((fd >= 0) && !dpy && ctx->mMDPComp[dpy]->isPTORActive()) {
+    if ((fd >= 0) && !dpy && ctx->mPtorInfo.isActive()) {
         // Acquire c2d fence of Overlap render buffer
         acquireFd[count++] = fd;
     }
@@ -1373,10 +1374,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 
     //Waits for acquire fences, returns a release fence
     if(LIKELY(!swapzero)) {
-        uint64_t start = systemTime();
         ret = ioctl(fbFd, MSMFB_BUFFER_SYNC, &data);
-        ALOGD_IF(HWC_UTILS_DEBUG, "%s: time taken for MSMFB_BUFFER_SYNC IOCTL = %d",
-                            __FUNCTION__, (size_t) ns2ms(systemTime() - start));
     }
 
     if(ret < 0) {
@@ -1429,7 +1427,7 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
     }
 
     if (!dpy && ctx->mCopyBit[dpy]) {
-        if (ctx->mMDPComp[dpy]->isPTORActive())
+        if (ctx->mPtorInfo.isActive())
             ctx->mCopyBit[dpy]->setReleaseFdSync(releaseFd);
         else
             ctx->mCopyBit[dpy]->setReleaseFd(releaseFd);
@@ -2206,30 +2204,23 @@ void BwcPM::setBwc(const hwc_rect_t& crop,
     if(!qdutils::MDPVersion::getInstance().supportsBWC()) {
         return;
     }
+    int src_w = crop.right - crop.left;
+    int src_h = crop.bottom - crop.top;
+    int dst_w = dst.right - dst.left;
+    int dst_h = dst.bottom - dst.top;
+    if(transform & HAL_TRANSFORM_ROT_90) {
+        swap(src_w, src_h);
+    }
     //src width > MAX mixer supported dim
-    if((crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
+    if(src_w > qdutils::MAX_DISPLAY_DIM) {
         return;
     }
     //Decimation necessary, cannot use BWC. H/W requirement.
     if(qdutils::MDPVersion::getInstance().supportsDecimation()) {
-        int src_w = crop.right - crop.left;
-        int src_h = crop.bottom - crop.top;
-        int dst_w = dst.right - dst.left;
-        int dst_h = dst.bottom - dst.top;
-        if(transform & HAL_TRANSFORM_ROT_90) {
-            swap(src_w, src_h);
-        }
-        float horDscale = 0.0f;
-        float verDscale = 0.0f;
-        int horzDeci = 0;
-        int vertDeci = 0;
-        ovutils::getDecimationFactor(src_w, src_h, dst_w, dst_h, horDscale,
-                verDscale);
-        //TODO Use log2f once math.h has it
-        if((int)horDscale)
-            horzDeci = (int)(log(horDscale) / log(2));
-        if((int)verDscale)
-            vertDeci = (int)(log(verDscale) / log(2));
+        uint8_t horzDeci = 0;
+        uint8_t vertDeci = 0;
+        ovutils::getDecimationFactor(src_w, src_h, dst_w, dst_h, horzDeci,
+                vertDeci);
         if(horzDeci || vertDeci) return;
     }
     //Property
