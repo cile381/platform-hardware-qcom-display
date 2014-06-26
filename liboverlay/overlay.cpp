@@ -33,6 +33,8 @@
 #include "qdMetaData.h"
 
 #define PIPE_DEBUG 0
+#define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
+#define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 
 namespace overlay {
 using namespace utils;
@@ -226,6 +228,33 @@ Overlay* Overlay::getInstance() {
     return sInstance;
 }
 
+bool Overlay::isEarlyCameraOn() {
+    bool ret = false;
+    // Open a switch node to receive reverse camera notification from driver.
+    int fd = ::open(REVERSE_CAMERA_PATH, O_RDONLY);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_PATH, strerror(errno));
+        return ret;
+    }
+    char status[64];
+    // Read the node to check for reverse camera status
+    ssize_t len = pread(fd, status, 64, 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to read reverse camera switch node : %s",
+                __FUNCTION__, strerror(errno));
+        close(fd);
+        return ret;
+    }
+    // extract reverse camera status and put the primary in pause state, if
+    // reverse camera preview is on
+    if (!strncmp(status, "1", strlen("1"))) {
+        ret = true;
+    }
+    close(fd);
+    return ret;
+}
+
 // Clears any VG pipes allocated to the fb devices
 // Generates a LUT for pipe types.
 int Overlay::initOverlay() {
@@ -238,6 +267,7 @@ int Overlay::initOverlay() {
     numPipesXType[OV_MDP_PIPE_DMA] =
             qdutils::MDPVersion::getInstance().getDMAPipes();
 
+    int earlyCameraOnStatus = isEarlyCameraOn();
     int index = 0;
     for(int X = 0; X < (int)OV_MDP_PIPE_ANY; X++) { //iterate over types
         for(int j = 0; j < numPipesXType[X]; j++) { //iterate over num
@@ -297,18 +327,22 @@ int Overlay::initOverlay() {
                 return -1;
             }
             minfo = req.info;
-            for (int j = 0; j < req.cnt; j++) {
-                ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
-                      minfo->z_order);
-                // clear any pipe connected to mixer including base pipe.
-                int index = minfo->pndx;
-                ALOGD("Unset overlay with index: %d at mixer %d", index, i);
-                if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
-                    ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
-                    close(fd);
-                    return -1;
+            // Bypass overlay unset as doing it during earlycamera will result
+            // in black frames (result in pipe null 
+            if(!earlyCameraOnStatus) {
+                for (int j = 0; j < req.cnt; j++) {
+                    ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
+                            minfo->z_order);
+                    // clear any pipe connected to mixer including base pipe.
+                    int index = minfo->pndx;
+                    ALOGD("Unset overlay with index: %d at mixer %d", index, i);
+                    if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
+                        ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
+                        close(fd);
+                        return -1;
+                    }
+                    minfo++;
                 }
-                minfo++;
             }
             close(fd);
             fd = -1;

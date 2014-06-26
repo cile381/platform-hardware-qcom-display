@@ -79,6 +79,8 @@ public:
 
     /* Closes open pipes, called during startup */
     static int initOverlay();
+
+    static bool isEarlyCameraOn();
     /* Returns the singleton instance of overlay */
     static Overlay* getInstance();
     /* Returns available ("unallocated") pipes for a display */
