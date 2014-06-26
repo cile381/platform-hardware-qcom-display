@@ -163,6 +163,11 @@ void MDPComp::reset(hwc_context_t *ctx) {
     ctx->mLayerRotMap[mDpy]->clear();
 }
 
+void MDPComp::reset() {
+    sHandleTimeout = false;
+    mModeOn = false;
+}
+
 void MDPComp::timeout_handler(void *udata) {
     struct hwc_context_t* ctx = (struct hwc_context_t*)(udata);
 
@@ -1212,6 +1217,13 @@ bool MDPComp::hwLimitationsCheck(hwc_context_t* ctx,
 
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     int ret = 0;
+
+    if(!ctx || !list) {
+        ALOGE("%s: Invalid context or list",__FUNCTION__);
+        mCachedFrame.reset();
+        return -1;
+    }
+
     const int numLayers = ctx->listStats[mDpy].numAppLayers;
     MDPVersion& mdpVersion = qdutils::MDPVersion::getInstance();
 
@@ -1249,7 +1261,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(isFrameDoable(ctx)) {
         generateROI(ctx, list);
 
-        if(tryFullFrame(ctx, list) || tryVideoOnly(ctx, list)) {
+        mModeOn = tryFullFrame(ctx, list) || tryVideoOnly(ctx, list);
+        if(mModeOn) {
             setMDPCompLayerFlags(ctx, list);
         } else {
             reset(ctx);
@@ -1319,12 +1332,23 @@ void MDPCompNonSplit::adjustForSourceSplit(hwc_context_t *ctx,
     //as we split 4k2k layer and increment zorder for right half
     //of the layer
     if(mCurrentFrame.fbZ >= 0) {
-        int n4k2kYuvCount = ctx->listStats[mDpy].yuv4k2kCount;
-        for(int index = 0; index < n4k2kYuvCount; index++){
-            int n4k2kYuvIndex =
-                    ctx->listStats[mDpy].yuv4k2kIndices[index];
-            if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
-                mCurrentFrame.fbZ += 1;
+        for (int index = 0, mdpNextZOrder = 0; index < mCurrentFrame.layerCount;
+                index++) {
+            if(!mCurrentFrame.isFBComposed[index]) {
+                if(mdpNextZOrder == mCurrentFrame.fbZ) {
+                    mdpNextZOrder++;
+                }
+                mdpNextZOrder++;
+                hwc_layer_1_t* layer = &list->hwLayers[index];
+                private_handle_t *hnd = (private_handle_t *)layer->handle;
+                if(is4kx2kYuvBuffer(hnd)) {
+                    if(mdpNextZOrder <= mCurrentFrame.fbZ)
+                        mCurrentFrame.fbZ += 1;
+                    mdpNextZOrder++;
+                    //As we split 4kx2k yuv layer and program to 2 VG pipes
+                    //(if available) increase mdpcount by 1.
+                    mCurrentFrame.mdpCount++;
+                }
             }
         }
     }
@@ -1419,18 +1443,8 @@ int MDPCompNonSplit::configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
 bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
-    if(!isEnabled()) {
-        ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
-        return true;
-    }
-
-    if(!ctx || !list) {
-        ALOGE("%s: invalid contxt or list",__FUNCTION__);
-        return false;
-    }
-
-    if(ctx->listStats[mDpy].numAppLayers > MAX_NUM_APP_LAYERS) {
-        ALOGD_IF(isDebug(),"%s: Exceeding max layer count", __FUNCTION__);
+    if(!isEnabled() or !mModeOn) {
+        ALOGD_IF(isDebug(),"%s: MDP Comp not enabled/configured", __FUNCTION__);
         return true;
     }
 
@@ -1543,17 +1557,27 @@ void MDPCompSplit::adjustForSourceSplit(hwc_context_t *ctx,
          hwc_display_contents_1_t* list){
     //if 4kx2k yuv layer is totally present in either in left half
     //or right half then try splitting the yuv layer to avoid decimation
-    int n4k2kYuvCount = ctx->listStats[mDpy].yuv4k2kCount;
     const int lSplit = getLeftSplit(ctx, mDpy);
-    for(int index = 0; index < n4k2kYuvCount; index++){
-        int n4k2kYuvIndex = ctx->listStats[mDpy].yuv4k2kIndices[index];
-        hwc_layer_1_t* layer = &list->hwLayers[n4k2kYuvIndex];
-        hwc_rect_t dst = layer->displayFrame;
-        if((dst.left > lSplit) || (dst.right < lSplit)) {
-            mCurrentFrame.mdpCount += 1;
-        }
-        if(mCurrentFrame.fbZ >= n4k2kYuvIndex){
-            mCurrentFrame.fbZ += 1;
+    if(mCurrentFrame.fbZ >= 0) {
+        for (int index = 0, mdpNextZOrder = 0; index < mCurrentFrame.layerCount;
+                index++) {
+            if(!mCurrentFrame.isFBComposed[index]) {
+                if(mdpNextZOrder == mCurrentFrame.fbZ) {
+                    mdpNextZOrder++;
+                }
+                mdpNextZOrder++;
+                hwc_layer_1_t* layer = &list->hwLayers[index];
+                private_handle_t *hnd = (private_handle_t *)layer->handle;
+                if(is4kx2kYuvBuffer(hnd)) {
+                    hwc_rect_t dst = layer->displayFrame;
+                    if((dst.left > lSplit) || (dst.right < lSplit)) {
+                        mCurrentFrame.mdpCount += 1;
+                    }
+                    if(mdpNextZOrder <= mCurrentFrame.fbZ)
+                        mCurrentFrame.fbZ += 1;
+                    mdpNextZOrder++;
+                }
+            }
         }
     }
 }
@@ -1667,18 +1691,8 @@ int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
 
 bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
-    if(!isEnabled()) {
-        ALOGD_IF(isDebug(),"%s: MDP Comp not configured", __FUNCTION__);
-        return true;
-    }
-
-    if(!ctx || !list) {
-        ALOGE("%s: invalid contxt or list",__FUNCTION__);
-        return false;
-    }
-
-    if(ctx->listStats[mDpy].numAppLayers > MAX_NUM_APP_LAYERS) {
-        ALOGD_IF(isDebug(),"%s: Exceeding max layer count", __FUNCTION__);
+    if(!isEnabled() or !mModeOn) {
+        ALOGD_IF(isDebug(),"%s: MDP Comp not enabled/configured", __FUNCTION__);
         return true;
     }
 
