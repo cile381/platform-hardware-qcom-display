@@ -181,12 +181,17 @@ void initContext(hwc_context_t *ctx)
         ctx->dpyAttr[i].mAsHeightRatio = 0;
     }
 
+    for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+        ctx->mPrevHwLayerCount[i] = 0;
+    }
+
     MDPComp::init(ctx);
     ctx->mAD = new AssertiveDisplay(ctx);
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
     ctx->mExtOrientation = 0;
+    ctx->numActiveDisplays = 1;
 
     //Right now hwc starts the service but anybody could do it, or it could be
     //independent process as well.
@@ -843,15 +848,6 @@ void setListStats(hwc_context_t *ctx,
                 ctx->listStats[dpy].yuv4k2kIndices[yuv4k2kCount] = i;
                 yuv4k2kCount++;
             }
-
-            if((layer->transform & HWC_TRANSFORM_ROT_90) &&
-                    canUseRotator(ctx, dpy)) {
-                if( (dpy == HWC_DISPLAY_PRIMARY) &&
-                        ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
-                    ctx->isPaddingRound = true;
-                }
-                Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
-            }
         }
         if(layer->blending == HWC_BLENDING_PREMULT)
             ctx->listStats[dpy].preMultipliedAlpha = true;
@@ -874,31 +870,13 @@ void setListStats(hwc_context_t *ctx,
             }
         }
     }
-    if(dpy) {
-        //uncomment the below code for testing purpose.
-        /* char value[PROPERTY_VALUE_MAX];
-        property_get("sys.ext_orientation", value, "0");
-        // Assuming the orientation value is in terms of HAL_TRANSFORM,
-        // This needs mapping to HAL, if its in different convention
-        ctx->mExtOrientation = atoi(value); */
-        // Assuming the orientation value is in terms of HAL_TRANSFORM,
-        // This needs mapping to HAL, if its in different convention
-        if(ctx->mExtOrientation || ctx->mBufferMirrorMode) {
-            ALOGD_IF(HWC_UTILS_DEBUG, "%s: ext orientation = %d"
-                     "BufferMirrorMode = %d", __FUNCTION__,
-                     ctx->mExtOrientation, ctx->mBufferMirrorMode);
-            if(ctx->mOverlay->isPipeTypeAttached(OV_MDP_PIPE_DMA)) {
-                ctx->isPaddingRound = true;
-            }
-            Overlay::setDMAMode(Overlay::DMA_BLOCK_MODE);
-        }
-    }
 
     //The marking of video begin/end is useful on some targets where we need
     //to have a padding round to be able to shift pipes across mixers.
     if(prevYuvCount != ctx->listStats[dpy].yuvCount) {
         ctx->mVideoTransFlag = true;
     }
+
     if(dpy == HWC_DISPLAY_PRIMARY) {
         ctx->mAD->markDoable(ctx, list);
     }
@@ -1939,6 +1917,32 @@ bool isDisplaySplit(hwc_context_t* ctx, int dpy) {
         return true;
     }
     return false;
+}
+
+/* Since we fake non-Hybrid WFD solution as external display, this
+ * function helps us in determining the priority between external
+ * (hdmi/non-Hybrid WFD display) and virtual display devices(SSD/
+ * screenrecord). This can be removed once wfd-client migrates to
+ * using virtual-display api's.
+ */
+bool canUseMDPforVirtualDisplay(hwc_context_t* ctx,
+                                const hwc_display_contents_1_t *list) {
+
+    /* We rely on the fact that for pure virtual display solution
+     * list->outbuf will be a non-NULL handle.
+     *
+     * If there are three active displays (which means there is one
+     * primary, one external and one virtual active display)
+     * we give mdss/mdp hw resources(pipes,smp,etc) for external
+     * display(hdmi/non-Hybrid WFD display) rather than for virtual
+     * display(SSD/screenrecord)
+     */
+
+    if(list->outbuf and (ctx->numActiveDisplays == HWC_NUM_DISPLAY_TYPES)) {
+        return false;
+    }
+
+    return true;
 }
 
 void BwcPM::setBwc(hwc_context_t *ctx, const hwc_rect_t& crop,
