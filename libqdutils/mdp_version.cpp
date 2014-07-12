@@ -53,7 +53,7 @@ namespace qdutils {
 #define MDSS_MDP_HW_REV_104 0x10040000 //Next version
 #endif
 #ifndef MDSS_MDP_HW_REV_105
-#define MDSS_MDP_HW_REV_105 0x10050000 //Next version
+#define MDSS_MDP_HW_REV_105 0x10050000 //8994
 #endif
 #ifndef MDSS_MDP_HW_REV_106
 #define MDSS_MDP_HW_REV_106 0x10060000 //8x16
@@ -90,6 +90,7 @@ MDPVersion::MDPVersion()
     mSourceSplit = false;
     mSourceSplitAlways = false;
     mRGBHasNoScalar = false;
+    mRotDownscale = false;
 
     updatePanelInfo();
 
@@ -282,22 +283,22 @@ bool MDPVersion::updateSysFsInfo() {
                     for(int i=1; i<index;i++) {
                         if(!strncmp(tokens[i], "bwc", strlen("bwc"))) {
                            mFeatures |= MDP_BWC_EN;
-                        }
-                        else if(!strncmp(tokens[i], "decimation",
+                        } else if(!strncmp(tokens[i], "decimation",
                                     strlen("decimation"))) {
                            mFeatures |= MDP_DECIMATION_EN;
-                        }
-                        else if(!strncmp(tokens[i], "tile_format",
+                        } else if(!strncmp(tokens[i], "tile_format",
                                     strlen("tile_format"))) {
                            if(enableMacroTile)
                                mMacroTileEnabled = true;
                         } else if(!strncmp(tokens[i], "src_split",
                                     strlen("src_split"))) {
                             mSourceSplit = true;
-                        }
-                        else if(!strncmp(tokens[i], "non_scalar_rgb",
+                        } else if(!strncmp(tokens[i], "non_scalar_rgb",
                                     strlen("non_scalar_rgb"))) {
                             mRGBHasNoScalar = true;
+                        } else if(!strncmp(tokens[i], "rotator_downscale",
+                                    strlen("rotator_downscale"))) {
+                            mRotDownscale = true;
                         }
                     }
                 }
@@ -421,6 +422,11 @@ bool MDPVersion::is8084() {
 bool MDPVersion::is8092() {
     return (mMdpRev >= MDSS_MDP_HW_REV_200 and
             mMdpRev < MDSS_MDP_HW_REV_206);
+}
+
+bool MDPVersion::is8994() {
+    return (mMdpRev >= MDSS_MDP_HW_REV_105 and
+            mMdpRev < MDSS_MDP_HW_REV_106);
 }
 
 bool MDPVersion::is8x16() {
