@@ -124,6 +124,9 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                 ALOGE_IF(UEVENT_DEBUG,"%s:Sending EXTERNAL OFFLINE hotplug"
                         "event", __FUNCTION__);
                 ctx->proc->hotplug(ctx->proc, dpy, EXTERNAL_OFFLINE);
+                // Report Hotplug via CEC HAL
+                ctx->mQService->onHdmiHotplug((int)ctx->dpyAttr[dpy].connected);
+
             }
             break;
         }
@@ -204,6 +207,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             ALOGE_IF(UEVENT_DEBUG, "%s: Sending EXTERNAL ONLINE"
                     "hotplug event", __FUNCTION__);
             ctx->proc->hotplug(ctx->proc, dpy, EXTERNAL_ONLINE);
+            ctx->mQService->onHdmiHotplug(ctx->dpyAttr[dpy].connected);
             break;
         }
     default:

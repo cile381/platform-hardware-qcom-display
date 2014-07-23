@@ -35,6 +35,7 @@
 #include <overlayUtils.h>
 #include <overlayRotator.h>
 #include <EGL/egl.h>
+#include <QService.h>
 
 #define ALIGN_TO(x, align)     (((x) + ((align)-1)) & ~((align)-1))
 #define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
@@ -679,6 +680,8 @@ struct hwc_context_t {
     bool mUseMetaDataRefreshRate;
     // Stores the hpd enabled status- avoids re-enabling HDP on suspend resume.
     bool mHPDEnabled;
+    // Display binder service
+    qService::QService* mQService;
 };
 
 namespace qhwc {
