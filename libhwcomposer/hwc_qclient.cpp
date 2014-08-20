@@ -118,6 +118,10 @@ static void isExternalConnected(hwc_context_t* ctx, Parcel* outParcel) {
 static void getDisplayAttributes(hwc_context_t* ctx, const Parcel* inParcel,
         Parcel* outParcel) {
     int dpy = inParcel->readInt32();
+
+    if(dpy == HWC_DISPLAY_EXTERNAL && ctx->mVirtualonExtActive)
+        dpy = HWC_DISPLAY_VIRTUAL;
+
     outParcel->writeInt32(ctx->dpyAttr[dpy].vsync_period);
     outParcel->writeInt32(ctx->dpyAttr[dpy].xres);
     outParcel->writeInt32(ctx->dpyAttr[dpy].yres);
@@ -146,6 +150,10 @@ static status_t getDisplayVisibleRegion(hwc_context_t* ctx, int dpy,
     // Get the info only if the dpy is valid
     if(dpy >= HWC_DISPLAY_PRIMARY && dpy <= HWC_DISPLAY_VIRTUAL) {
         Locker::Autolock _sl(ctx->mDrawLock);
+
+        if(dpy == HWC_DISPLAY_EXTERNAL && ctx->mVirtualonExtActive)
+            dpy = HWC_DISPLAY_VIRTUAL;
+
         if(dpy && (ctx->mExtOrientation || ctx->mBufferMirrorMode)) {
             // Return the destRect on external, if external orienation
             // is enabled
@@ -203,6 +211,10 @@ static status_t setViewFrame(hwc_context_t* ctx, const Parcel* inParcel) {
     int dpy = inParcel->readInt32();
     if(dpy >= HWC_DISPLAY_PRIMARY && dpy <= HWC_DISPLAY_VIRTUAL) {
         Locker::Autolock _sl(ctx->mDrawLock);
+
+        if(dpy == HWC_DISPLAY_EXTERNAL && ctx->mVirtualonExtActive)
+            dpy = HWC_DISPLAY_VIRTUAL;
+
         ctx->mViewFrame[dpy].left   = inParcel->readInt32();
         ctx->mViewFrame[dpy].top    = inParcel->readInt32();
         ctx->mViewFrame[dpy].right  = inParcel->readInt32();
