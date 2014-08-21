@@ -627,6 +627,9 @@ void ExternalDisplay::setAttributes() {
                 mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode =true;
             }
         }
+
+        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].refreshRate = fps;
+        mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].dynRefreshRate = fps;
         mHwcContext->dpyAttr[HWC_DISPLAY_EXTERNAL].vsync_period =
                 1000000000l / fps;
     }
