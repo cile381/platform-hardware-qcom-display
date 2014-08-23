@@ -78,7 +78,7 @@ namespace qhwc {
 
 bool isValidResolution(hwc_context_t *ctx, uint32_t xres, uint32_t yres)
 {
-    return !((xres > qdutils::MAX_DISPLAY_DIM &&
+    return !((xres > qdutils::MDPVersion::getInstance().getMaxMixerWidth() &&
                 !isDisplaySplit(ctx, HWC_DISPLAY_PRIMARY)) ||
             (xres < MIN_DISPLAY_XRES || yres < MIN_DISPLAY_YRES));
 }
@@ -2008,12 +2008,12 @@ int getLeftSplit(hwc_context_t *ctx, const int& dpy) {
 }
 
 bool isDisplaySplit(hwc_context_t* ctx, int dpy) {
-    if(ctx->dpyAttr[dpy].xres > qdutils::MAX_DISPLAY_DIM) {
+    qdutils::MDPVersion& mdpHw = qdutils::MDPVersion::getInstance();
+    if(ctx->dpyAttr[dpy].xres > mdpHw.getMaxMixerWidth()) {
         return true;
     }
     //For testing we could split primary via device tree values
-    if(dpy == HWC_DISPLAY_PRIMARY &&
-        qdutils::MDPVersion::getInstance().getRightSplit()) {
+    if(dpy == HWC_DISPLAY_PRIMARY && mdpHw.getRightSplit()) {
         return true;
     }
     return false;
@@ -2151,15 +2151,16 @@ void BwcPM::setBwc(const hwc_rect_t& crop,
             const hwc_rect_t& dst, const int& transform,
             ovutils::eMdpFlags& mdpFlags) {
     //Target doesnt support Bwc
-    if(!qdutils::MDPVersion::getInstance().supportsBWC()) {
+    qdutils::MDPVersion& mdpHw = qdutils::MDPVersion::getInstance();
+    if(!mdpHw.supportsBWC()) {
         return;
     }
     //src width > MAX mixer supported dim
-    if((crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
+    if((crop.right - crop.left) > mdpHw.getMaxMixerWidth()) {
         return;
     }
     //Decimation necessary, cannot use BWC. H/W requirement.
-    if(qdutils::MDPVersion::getInstance().supportsDecimation()) {
+    if(mdpHw.supportsDecimation()) {
         int src_w = crop.right - crop.left;
         int src_h = crop.bottom - crop.top;
         int dst_w = dst.right - dst.left;

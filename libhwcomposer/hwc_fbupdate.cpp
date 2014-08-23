@@ -482,9 +482,9 @@ bool FBSrcSplit::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
 
     ovutils::eDest destR = ovutils::OV_INVALID;
 
-    //Request right pipe (2 pipes needed only if dim > 2048)
+    //Request right pipe (2 pipes needed only if dim > mixer_limit)
     if((fbUpdatingRect.right - fbUpdatingRect.left) >
-            qdutils::MAX_DISPLAY_DIM) {
+            (int)qdutils::MDPVersion::getInstance().getMaxMixerWidth()) {
         destR = ov.getPipe(pipeSpecs);
         if(destR == ovutils::OV_INVALID) {
             ALOGE("%s: No pipes available to configure fb for dpy %d's right"
