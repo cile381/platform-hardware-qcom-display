@@ -349,6 +349,7 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     int dst_h = dst.bottom - dst.top;
     float w_scale = ((float)crop_w / (float)dst_w);
     float h_scale = ((float)crop_h / (float)dst_h);
+    MDPVersion& mdpHw = MDPVersion::getInstance();
 
     /* Workaround for MDP HW limitation in DSI command mode panels where
      * FPS will not go beyond 30 if buffers on RGB pipes are of width or height
@@ -360,29 +361,29 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
         return false;
 
     if((w_scale > 1.0f) || (h_scale > 1.0f)) {
-        const uint32_t maxMDPDownscale =
-            qdutils::MDPVersion::getInstance().getMaxMDPDownscale();
+        const uint32_t maxMDPDownscale = mdpHw.getMaxMDPDownscale();
         const float w_dscale = w_scale;
         const float h_dscale = h_scale;
 
         if(ctx->mMDP.version >= qdutils::MDSS_V5) {
 
-            if(!qdutils::MDPVersion::getInstance().supportsDecimation()) {
+            if(!mdpHw.supportsDecimation()) {
                 /* On targets that doesnt support Decimation (eg.,8x26)
                  * maximum downscale support is overlay pipe downscale.
                  */
-                if(crop_w > MAX_DISPLAY_DIM || w_dscale > maxMDPDownscale ||
+                if(crop_w > mdpHw.getMaxMixerWidth() ||
+                        w_dscale > maxMDPDownscale ||
                         h_dscale > maxMDPDownscale)
                     return false;
             } else {
                 // Decimation on macrotile format layers is not supported.
                 if(isTileRendered(hnd)) {
-                    /* MDP can read maximum MAX_DISPLAY_DIM width.
-                     * Bail out if
-                     *      1. Src crop > MAX_DISPLAY_DIM on nonsplit MDPComp
+                    /* Bail out if
+                     *      1. Src crop > Mixer limit on nonsplit MDPComp
                      *      2. exceeds maximum downscale limit
                      */
-                    if(((crop_w > MAX_DISPLAY_DIM) && !sSrcSplitEnabled) ||
+                    if(((crop_w > mdpHw.getMaxMixerWidth()) &&
+                                !sSrcSplitEnabled) ||
                             w_dscale > maxMDPDownscale ||
                             h_dscale > maxMDPDownscale) {
                         return false;
@@ -397,8 +398,7 @@ bool MDPComp::isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer) {
     }
 
     if((w_scale < 1.0f) || (h_scale < 1.0f)) {
-        const uint32_t upscale =
-            qdutils::MDPVersion::getInstance().getMaxMDPUpscale();
+        const uint32_t upscale = mdpHw.getMaxMDPUpscale();
         const float w_uscale = 1.0f / w_scale;
         const float h_uscale = 1.0f / h_scale;
 
@@ -567,8 +567,10 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         return false;
     }
 
-    if(mDpy > HWC_DISPLAY_PRIMARY && (priDispW > MAX_DISPLAY_DIM) &&
-                              (ctx->dpyAttr[mDpy].xres < MAX_DISPLAY_DIM)) {
+    MDPVersion& mdpHw = MDPVersion::getInstance();
+    if(mDpy > HWC_DISPLAY_PRIMARY &&
+            (priDispW >  mdpHw.getMaxMixerWidth()) &&
+            (ctx->dpyAttr[mDpy].xres <  mdpHw.getMaxMixerWidth())) {
         // Disable MDP comp on Secondary when the primary is highres panel and
         // the secondary is a normal 1080p, because, MDP comp on secondary under
         // in such usecase, decimation gets used for downscale and there will be
@@ -600,11 +602,9 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         //For 8x26 with panel width>1k, if RGB layer needs HFLIP fail mdp comp
         // may not need it if Gfx pre-rotation can handle all flips & rotations
         int transform = (layer->flags & HWC_COLOR_FILL) ? 0 : layer->transform;
-        if(qdutils::MDPVersion::getInstance().is8x26() &&
-                                (ctx->dpyAttr[mDpy].xres > 1024) &&
-                                (transform & HWC_TRANSFORM_FLIP_H) &&
-                                (!isYuvBuffer(hnd)))
-                   return false;
+        if( mdpHw.is8x26() && (ctx->dpyAttr[mDpy].xres > 1024) &&
+                (transform & HWC_TRANSFORM_FLIP_H) && (!isYuvBuffer(hnd)))
+            return false;
     }
 
     if(ctx->mAD->isDoable()) {
@@ -731,18 +731,19 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
             // Overlap area > (1/3 * FrameBuffer) area, based on Perf inputs.
             continue;
         }
-        // Found the PTOR layer
-        bool found = true;
+        bool found = false;
         for (int j = i-1; j >= 0; j--) {
             // Check if the layers below this layer qualifies for PTOR comp
             hwc_layer_1_t* layer = &list->hwLayers[j];
             hwc_rect_t disFrame = layer->displayFrame;
-            //layer below PTOR is intersecting and has 90 degree transform or
+            // Layer below PTOR is intersecting and has 90 degree transform or
             // needs scaling cannot be supported.
-            if ((isValidRect(getIntersection(dispFrame, disFrame)))
-                            && (has90Transform(layer) || needsScaling(layer))) {
-                found = false;
-                break;
+            if (isValidRect(getIntersection(dispFrame, disFrame))) {
+                if (has90Transform(layer) || needsScaling(layer)) {
+                    found = false;
+                    break;
+                }
+                found = true;
             }
         }
         // Store the minLayer Index
@@ -785,11 +786,43 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
         sourceCrop[i] = integerizeSourceCrop(layer->sourceCropf);
     }
 
+    private_handle_t *renderBuf = ctx->mCopyBit[mDpy]->getCurrentRenderBuffer();
+    Whf layerWhf[numPTORLayersFound]; // To store w,h,f of PTOR layers
+
+    // Store the blending mode, planeAlpha, and transform of PTOR layers
+    int32_t blending[numPTORLayersFound];
+    uint8_t planeAlpha[numPTORLayersFound];
+    uint32_t transform[numPTORLayersFound];
+
     for(int j = 0; j < numPTORLayersFound; j++) {
         int index =  ctx->mPtorInfo.layerIndex[j];
+
+        // Update src crop of PTOR layer
+        hwc_layer_1_t* layer = &list->hwLayers[index];
+        layer->sourceCropf.left = (float)ctx->mPtorInfo.displayFrame[j].left;
+        layer->sourceCropf.top = (float)ctx->mPtorInfo.displayFrame[j].top;
+        layer->sourceCropf.right = (float)ctx->mPtorInfo.displayFrame[j].right;
+        layer->sourceCropf.bottom =(float)ctx->mPtorInfo.displayFrame[j].bottom;
+
+        // Store & update w, h, format of PTOR layer
+        private_handle_t *hnd = (private_handle_t *)layer->handle;
+        Whf whf(hnd->width, hnd->height, hnd->format, hnd->size);
+        layerWhf[j] = whf;
+        hnd->width = renderBuf->width;
+        hnd->height = renderBuf->height;
+        hnd->format = renderBuf->format;
+
+        // Store & update blending mode, planeAlpha and transform of PTOR layer
+        blending[j] = layer->blending;
+        planeAlpha[j] = layer->planeAlpha;
+        transform[j] = layer->transform;
+        layer->blending = HWC_BLENDING_NONE;
+        layer->planeAlpha = 0xFF;
+        layer->transform = 0;
+
         // Remove overlap from crop & displayFrame of below layers
         for (int i = 0; i < index && index !=-1; i++) {
-            hwc_layer_1_t* layer = &list->hwLayers[i];
+            layer = &list->hwLayers[i];
             if(!isValidRect(getIntersection(layer->displayFrame,
                                             overlapRect[j])))  {
                 continue;
@@ -824,6 +857,19 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
         layer->sourceCropf.top = (float)sourceCrop[i].top;
         layer->sourceCropf.right = (float)sourceCrop[i].right;
         layer->sourceCropf.bottom = (float)sourceCrop[i].bottom;
+    }
+
+    // Restore w,h,f, blending attributes, and transform of PTOR layers
+    for (int i = 0; i < numPTORLayersFound; i++) {
+        int idx = ctx->mPtorInfo.layerIndex[i];
+        hwc_layer_1_t* layer = &list->hwLayers[idx];
+        private_handle_t *hnd = (private_handle_t *)list->hwLayers[idx].handle;
+        hnd->width = layerWhf[i].w;
+        hnd->height = layerWhf[i].h;
+        hnd->format = layerWhf[i].format;
+        layer->blending = blending[i];
+        layer->planeAlpha = planeAlpha[i];
+        layer->transform = transform[i];
     }
 
     if (!result) {
@@ -1743,8 +1789,7 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             if (!mDpy && (index != -1)) {
                 hnd = ctx->mCopyBit[mDpy]->getCurrentRenderBuffer();
                 fd = hnd->fd;
-                // Use the offset of the RenderBuffer
-                offset = ctx->mPtorInfo.mRenderBuffOffset[index];
+                offset = 0;
             }
 
             ALOGD_IF(isDebug(),"%s: MDP Comp: Drawing layer: %p hnd: %p \
@@ -1981,7 +2026,7 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             if (!mDpy && (index != -1)) {
                 hnd = ctx->mCopyBit[mDpy]->getCurrentRenderBuffer();
                 fd = hnd->fd;
-                offset = ctx->mPtorInfo.mRenderBuffOffset[index];
+                offset = 0;
             }
 
             if(ctx->mAD->draw(ctx, fd, offset)) {
@@ -2052,9 +2097,10 @@ bool MDPCompSrcSplit::acquireMDPPipes(hwc_context_t *ctx, hwc_layer_1_t* layer,
         return false;
     }
 
-    //If layer's crop width or dest width > 2048, use 2 pipes
-    if((dst.right - dst.left) > qdutils::MAX_DISPLAY_DIM or
-            (crop.right - crop.left) > qdutils::MAX_DISPLAY_DIM) {
+    //If layer's crop width or dest width > mixer limit, use 2 pipes
+    MDPVersion& mdpHw = MDPVersion::getInstance();
+    if((dst.right - dst.left) > mdpHw.getMaxMixerWidth() or
+            (crop.right - crop.left) > mdpHw.getMaxMixerWidth()) {
         pipe_info.rIndex = ctx->mOverlay->getPipe(pipeSpecs);
         if(pipe_info.rIndex == ovutils::OV_INVALID) {
             return false;
