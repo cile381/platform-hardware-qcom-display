@@ -292,6 +292,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mGPUHintInfo.mCurrGPUPerfMode = EGL_GPU_LEVEL_0;
 #endif
     memset(&(ctx->mPtorInfo), 0, sizeof(ctx->mPtorInfo));
+    ctx->dynamicfps = 60;
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -351,8 +352,7 @@ void closeContext(hwc_context_t *ctx)
         delete ctx->mAD;
         ctx->mAD = NULL;
     }
-
-
+    ctx->dynamicfps = 60;
 }
 
 
