@@ -184,6 +184,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             clear(ctx, dpy);
             ctx->dpyAttr[dpy].connected = false;
             ctx->dpyAttr[dpy].isActive = false;
+            /* If disconnect comes before any composition cycle */
+            ctx->dpyAttr[dpy].isConfiguring = false;
 
             if(dpy == HWC_DISPLAY_EXTERNAL) {
                 ctx->mExtDisplay->teardown();
@@ -254,23 +256,14 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                         }
                     }
 
-                    /*TODO: Uncomment the below chunk and remove usleep
-                      once wfd module issues binder call on teardown */
-
-                    /*ctx->mWfdSyncLock.lock();
+                    ctx->mWfdSyncLock.lock();
                     ALOGD_IF(HWC_WFDDISPSYNC_LOG,
                              "%s: Waiting for wfd-teardown to be signalled",
                              __FUNCTION__);
                     ctx->mWfdSyncLock.wait();
                     ALOGD_IF(HWC_WFDDISPSYNC_LOG,
                              "%s: Teardown signalled",__FUNCTION__);
-                    ctx->mWfdSyncLock.unlock();*/
-
-                    /* For now, Wait for few frames for SF to tear down
-                     * the WFD session.
-                     */
-                    usleep(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period
-                           * 2 / 1000);
+                    ctx->mWfdSyncLock.unlock();
                 }
                 ctx->mExtDisplay->configure();
             } else {
