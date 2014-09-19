@@ -45,6 +45,7 @@ using namespace overlay;
 
 #define VSYNC_DEBUG 0
 #define BLANK_DEBUG 1
+#define MAX_SYSFS_FILE_PATH 255
 
 static int hwc_device_open(const struct hw_module_t* module,
                            const char* name,
@@ -227,6 +228,44 @@ static void reset(hwc_context_t *ctx, int numDisplays,
     ctx->mAD->reset();
     if(ctx->mHWCVirtual)
         ctx->mHWCVirtual->destroy(ctx, numDisplays, displays);
+}
+
+static uint32_t getDynFps() {
+    char property[PROPERTY_VALUE_MAX];
+    if(property_get("persist.hwc.dynamicfps", property, NULL) > 0) {
+        return atoi(property);
+    }
+    return 0;
+}
+
+static void updateDynFps(hwc_context_t *ctx, uint32_t refreshRate) {
+
+    char sysfsPath[MAX_SYSFS_FILE_PATH];
+    snprintf(sysfsPath, sizeof(sysfsPath),
+             "/sys/class/graphics/fb%d/dynamic_fps",0);
+
+    if(refreshRate == ctx->dynamicfps)
+        return;
+
+    int fd = open(sysfsPath, O_WRONLY);
+
+    if(fd >= 0) {
+        char str[64];
+        snprintf(str, sizeof(str), "%d", refreshRate);
+        ssize_t ret = write(fd, str, strlen(str));
+        if(ret < 0) {
+            ALOGE("%s: Failed to write %d with error %s",
+                  __FUNCTION__, refreshRate, strerror(errno));
+        } else {
+            ALOGI("%s: Wrote %d to update dynamic_fps",
+                  __FUNCTION__, refreshRate);
+            ctx->dynamicfps = refreshRate;
+        }
+        close(fd);
+    } else {
+        ALOGE("%s: Failed to open %s with error %s", __FUNCTION__, sysfsPath,
+              strerror(errno));
+    }
 }
 
 static void scaleDisplayFrame(hwc_context_t *ctx, int dpy,
@@ -566,6 +605,7 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     ATRACE_CALL();
     int ret = 0;
     const int dpy = HWC_DISPLAY_PRIMARY;
+    static bool waitforfinish = true;
     if (LIKELY(list) && ctx->dpyAttr[dpy].isActive) {
         size_t last = list->numHwLayers - 1;
         hwc_layer_1_t *fbLayer = &list->hwLayers[last];
@@ -606,11 +646,19 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         }
 
         if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,
-                                            ctx->listStats[dpy].roi)) {
+                                   ctx->listStats[dpy].roi,waitforfinish)) {
             ALOGE("%s: display commit fail for %d dpy!", __FUNCTION__, dpy);
             ret = -1;
+        } else {
+            if(list->numHwLayers > 1) {
+                /* Ensure that the first non-blank commit is syncrhonous */
+                waitforfinish = false;
+                uint32_t dynfps = getDynFps();
+                if(dynfps != 0) {
+                    updateDynFps(ctx,dynfps);
+                }
+            }
         }
-
     }
 
     closeAcquireFds(list);
