@@ -456,10 +456,10 @@ int Overlay::initOverlay() {
 
 bool Overlay::displayCommit(const int& fd) {
     utils::Dim roi;
-    return displayCommit(fd, roi);
+    return displayCommit(fd, roi,false);
 }
 
-bool Overlay::displayCommit(const int& fd, const utils::Dim& roi) {
+bool Overlay::displayCommit(const int& fd, const utils::Dim& roi, bool wait) {
     //Commit
     struct mdp_display_commit info;
     memset(&info, 0, sizeof(struct mdp_display_commit));
@@ -468,6 +468,7 @@ bool Overlay::displayCommit(const int& fd, const utils::Dim& roi) {
     info.roi.y = roi.y;
     info.roi.w = roi.w;
     info.roi.h = roi.h;
+    info.wait_for_finish = wait;
 
     if(!mdp_wrapper::displayCommit(fd, info)) {
         ALOGE("%s: commit failed", __func__);
