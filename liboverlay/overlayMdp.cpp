@@ -266,8 +266,16 @@ void MdpCtrl3D::dump() const {
 }
 
 bool MdpCtrl::setVisualParams(const MetaData_t& data) {
-    bool needUpdate = false;
+    ALOGD_IF(0, "In %s: data.operation = %d", __FUNCTION__, data.operation);
+
+    // Set Color Space for MDP to configure CSC matrix
+    mOVInfo.color_space = ITU_R_601;
+    if (data.operation & UPDATE_COLOR_SPACE) {
+        mOVInfo.color_space = data.colorSpace;
+    }
+
 #ifdef USES_POST_PROCESSING
+    bool needUpdate = false;
     /* calculate the data */
     if (data.operation & PP_PARAM_HSIC) {
         if (mParams.params.pa_params.hue != data.hsicData.hue) {
