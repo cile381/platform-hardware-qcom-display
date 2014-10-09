@@ -43,8 +43,6 @@ public:
     // during virtual display disconnect.
     void destroy(hwc_context_t *ctx, size_t numDisplays,
                        hwc_display_contents_1_t** displays);
-    void pause(hwc_context_t* ctx, int dpy);
-    void resume(hwc_context_t* ctx, int dpy);
     // We can dump the frame buffer and WB
     // output buffer by dynamically enabling
     // dumping via a binder call:
