@@ -406,8 +406,15 @@ static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
             value = FB_BLANK_POWERDOWN;
             break;
         case HWC_POWER_MODE_DOZE:
+            // FB_BLANK_NORMAL is being used here to map to doze mode
+            // This definition is specific to our fbdev implementation
+            value = FB_BLANK_NORMAL;
+            break;
         case HWC_POWER_MODE_DOZE_SUSPEND:
-            //Need to set valid power mode - FB_BLANK_VSYNC_SUSPEND
+            // FB_BLANK_VSYNC_SUSPEND is being used here to map to doze_suspend
+            // This definition is specific to our fbdev implementation
+            value = FB_BLANK_VSYNC_SUSPEND;
+            break;
         case HWC_POWER_MODE_NORMAL:
             value = FB_BLANK_UNBLANK;
             break;
@@ -428,7 +435,8 @@ static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
             ctx->mHPDEnabled = true;
         }
 
-        ctx->dpyAttr[dpy].isActive =  not(mode == HWC_POWER_MODE_OFF);
+        ctx->dpyAttr[dpy].isActive = not(mode == HWC_POWER_MODE_OFF ||
+                    mode == HWC_POWER_MODE_DOZE_SUSPEND);
 
         if(ctx->mVirtualonExtActive) {
             /* if mVirtualonExtActive is true, display hal will
@@ -438,6 +446,7 @@ static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
              of Google API's */
             break;
         }
+
         //Deliberate fall through since there is no explicit power mode for
         //virtual displays.
     case HWC_DISPLAY_VIRTUAL:
