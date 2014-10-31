@@ -35,4 +35,4 @@ LOCAL_SRC_FILES               := hwc.cpp          \
                                  hwc_dump_layers.cpp \
                                  hwc_ad.cpp \
                                  hwc_virtual.cpp
-include $(BUILD_SHARED_LIBRARY)
+#include $(BUILD_SHARED_LIBRARY)
