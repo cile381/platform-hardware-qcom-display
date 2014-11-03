@@ -25,7 +25,7 @@
 #include <cutils/properties.h>
 #include <overlay.h>
 
-#define DEFAULT_IDLE_TIME 70
+#define DEFAULT_IDLE_TIME 600
 #define MAX_PIPES_PER_MIXER 4
 
 namespace overlay {
