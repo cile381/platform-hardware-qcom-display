@@ -54,12 +54,16 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx, int dpy):mFd(-1),
 bool ExternalDisplay::openFrameBuffer()
 {
     if (mFd == -1) {
-        char strDevPath[MAX_SYSFS_FILE_PATH];
-        snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d", mFbNum);
-        mFd = open(strDevPath, O_RDWR);
-        if (mFd < 0)
-            ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
-        mHwcContext->dpyAttr[mDpy].fd = mFd;
+        if(0 > mHwcContext->dpyAttr[mDpy].fd) {
+            char strDevPath[MAX_SYSFS_FILE_PATH];
+            snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d", mFbNum);
+            mFd = open(strDevPath, O_RDWR);
+            if (mFd < 0)
+                ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
+            mHwcContext->dpyAttr[mDpy].fd = mFd;
+        } else {
+            mFd = mHwcContext->dpyAttr[mDpy].fd;
+        }
     }
     return (mFd > 0);
 }
@@ -135,8 +139,10 @@ int SecondaryDisplay::configure() {
     }
     setResolution(mode);
     setAttributes();
-    // set system property
-    property_set("hw.hdmiON", "1");
+    if(!mHwcContext->mAutomotiveModeOn) {
+        // set system property
+        property_set("hw.hdmiON", "1");
+    }
     return 0;
 }
 
@@ -278,9 +284,11 @@ void SecondaryDisplay::readCEUnderscanInfo()
         ALOGE("%s: scan_info string error", __FUNCTION__);
     }
 
-    // Store underscan support info in a system property
-    const char* prop = (mUnderscanSupported) ? "1" : "0";
-    property_set("hw.underscan_supported", prop);
+    if(!mHwcContext->mAutomotiveModeOn) {
+        // Store underscan support info in a system property
+        const char* prop = (mUnderscanSupported) ? "1" : "0";
+        property_set("hw.underscan_supported", prop);
+    }
     return;
 }
 
