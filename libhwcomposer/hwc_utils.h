@@ -391,6 +391,9 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list);
 // Returns true if rect1 is peripheral to rect2, false otherwise.
 bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 
+// Checks if boot animation has completed and applies default mode
+void processBootAnimCompleted(hwc_context_t *ctx);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
@@ -582,6 +585,8 @@ struct hwc_context_t {
     struct gpu_hint_info mGPUHintInfo;
     // PTOR Info
     qhwc::PtorInfo mPtorInfo;
+    //Used to notify that boot has completed
+    bool mBootAnimCompleted;
 };
 
 namespace qhwc {
