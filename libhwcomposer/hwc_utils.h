@@ -53,6 +53,10 @@ struct hwc_context_t;
 
 namespace ovutils = overlay::utils;
 
+namespace qmode {
+class ModeManager;
+}
+
 namespace overlay {
 class Overlay;
 class Rotator;
@@ -433,6 +437,9 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list);
 // Returns true if rect1 is peripheral to rect2, false otherwise.
 bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 
+// Checks if boot animation has completed and applies default mode
+void processBootAnimCompleted(hwc_context_t *ctx);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
@@ -555,6 +562,13 @@ struct gpu_hint_info {
     EGLDisplay mEGLDisplay;
 };
 
+//struct holds the information about libmm-qdcm.so
+struct qdcm_info {
+    qmode::ModeManager *mQdcmMode;
+    void *mQdcmLib;
+    bool  mBootAnimCompleted;
+};
+
 // -----------------------------------------------------------------------------
 // HWC context
 // This structure contains overall state
@@ -630,6 +644,10 @@ struct hwc_context_t {
     // This denotes the tolerance between video layer and external display
     // aspect ratio
     float mAspectRatioToleranceLevel;
+    //Used to notify that boot has completed
+    bool  mBootAnimCompleted;
+    //struct holds the information about display tuning service library.
+    struct qdcm_info mQdcmInfo;
 };
 
 namespace qhwc {

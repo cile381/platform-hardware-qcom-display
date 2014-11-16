@@ -54,6 +54,7 @@ public:
         SET_VIEW_FRAME,          // Set view frame of display
         DYNAMIC_DEBUG,           // Enable more logging on the fly
         SET_IDLE_TIMEOUT,        // Set idle timeout for GPU fallback
+        QDCM_SVC_CMDS,           // request QDCM services.
         COMMAND_LIST_END = 400,
     };
 
