@@ -52,6 +52,11 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     struct fb_fix_screeninfo finfo;
     struct fb_var_screeninfo info;
 
+    /*Set all fd to -1 first*/
+    for(uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+         ctx->dpyAttr[i].fd = -1;
+    }
+
     int fb_fd = openFb(HWC_DISPLAY_PRIMARY);
     if(fb_fd < 0) {
         ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
@@ -109,6 +114,26 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xdpi = xdpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
+
+    if(ctx->mAutomotiveModeOn) {
+        //Open framebuffer for secondary display
+        fb_fd = openFb(HWC_DISPLAY_SECONDARY);
+        if(fb_fd < 0) {
+            ALOGE("%s: Error Opening FB for display=%d : %s",
+                  __FUNCTION__, HWC_DISPLAY_SECONDARY, strerror(errno));
+            return -errno;
+        }
+        ctx->dpyAttr[HWC_DISPLAY_SECONDARY].fd = fb_fd;
+
+        //Open framebuffer for third display
+        fb_fd = openFb(HWC_DISPLAY_TERTIARY);
+        if(fb_fd < 0) {
+            ALOGE("%s: Error Opening FB for display=%d : %s",
+                  __FUNCTION__, HWC_DISPLAY_TERTIARY, strerror(errno));
+            return -errno;
+        }
+        ctx->dpyAttr[HWC_DISPLAY_TERTIARY].fd = fb_fd;
+    }
 
     return 0;
 }
@@ -172,6 +197,14 @@ void updateReverseCameraState(hwc_context_t* ctx) {
 
 void initContext(hwc_context_t *ctx)
 {
+    /*Read the automotive mode on flag from the property.*/
+    ctx->mAutomotiveModeOn = false;
+    char value[PROPERTY_VALUE_MAX];
+    if(property_get("sys.hwc.automotive_mode_enabled", value, "false")
+            && !strcmp(value, "true")) {
+        ctx->mAutomotiveModeOn = true;
+    }
+
     if(openFramebufferDevice(ctx) < 0) {
         ALOGE("%s: failed to open framebuffer!!", __FUNCTION__);
     }
@@ -179,6 +212,7 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
+
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = RotMgr::getInstance();
@@ -225,13 +259,6 @@ void initContext(hwc_context_t *ctx)
     ctx->mBufferMirrorMode = false;
     ctx->mSocId = getSocIdFromSystem();
 
-    // Read the automotive mode on flag from the property.
-    ctx->mAutomotiveModeOn = false;
-    char value[PROPERTY_VALUE_MAX];
-    if(property_get("sys.hwc.automotive_mode_enabled", value, "false")
-            && !strcmp(value, "true")) {
-        ctx->mAutomotiveModeOn = true;
-    }
     // create objects for external and virtual displays
     ctx->mSecondaryDisplay = new SecondaryDisplay(ctx, HWC_DISPLAY_SECONDARY);
     ctx->mTertiaryDisplay = new TertiaryDisplay(ctx, HWC_DISPLAY_TERTIARY);
@@ -240,7 +267,7 @@ void initContext(hwc_context_t *ctx)
 
     if(ctx->mAutomotiveModeOn) {
         // configure secondary display
-        if(!ctx->mSecondaryDisplay->configure()) {
+        if(ctx->mSecondaryDisplay && !ctx->mSecondaryDisplay->configure()) {
             ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = true;
             ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause = false;
         } else {
