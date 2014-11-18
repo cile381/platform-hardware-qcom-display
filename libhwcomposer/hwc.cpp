@@ -44,7 +44,7 @@ using namespace qhwc;
 using namespace overlay;
 
 #define VSYNC_DEBUG 0
-#define POWER_MODE_DEBUG 1
+#define BLANK_DEBUG 1
 
 static int hwc_device_open(const struct hw_module_t* module,
                            const char* name,
@@ -412,50 +412,43 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
     return ret;
 }
 
-static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
-        int mode)
+static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
 {
     ATRACE_CALL();
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     int ret = 0, value = 0;
 
     Locker::Autolock _l(ctx->mDrawLock);
-    ALOGD_IF(POWER_MODE_DEBUG, "%s: Setting mode %d on display: %d",
-            __FUNCTION__, mode, dpy);
+    ALOGD_IF(BLANK_DEBUG, "%s: Setting mode %d on display: %d",
+            __FUNCTION__, blank, dpy);
 
-    switch(mode) {
-        case HWC_POWER_MODE_OFF:
-            // free up all the overlay pipes in use
-            // when we get a blank for either display
-            // makes sure that all pipes are freed
-            ctx->mOverlay->configBegin();
-            ctx->mOverlay->configDone();
-            ctx->mRotMgr->clear();
-            // If VDS is connected, do not clear WB object as it
-            // will end up detaching IOMMU. This is required
-            // to send black frame to WFD sink on power suspend.
-            // Note: With this change, we keep the WriteBack object
-            // alive on power suspend for AD use case.
-            value = FB_BLANK_POWERDOWN;
-            break;
-        case HWC_POWER_MODE_DOZE:
-        case HWC_POWER_MODE_DOZE_SUSPEND:
-            value = FB_BLANK_VSYNC_SUSPEND;
-            break;
-        case HWC_POWER_MODE_NORMAL:
-            value = FB_BLANK_UNBLANK;
-            break;
+
+    ALOGD_IF(BLANK_DEBUG, "%s: %s display: %d", __FUNCTION__,
+          blank==1 ? "Blanking":"Unblanking", dpy);
+    if(blank) {
+        // free up all the overlay pipes in use
+        // when we get a blank for either display
+        // makes sure that all pipes are freed
+        ctx->mOverlay->configBegin();
+        ctx->mOverlay->configDone();
+        ctx->mRotMgr->clear();
+        // If VDS is connected, do not clear WB object as it
+        // will end up detaching IOMMU. This is required
+        // to send black frame to WFD sink on power suspend.
+        // Note: With this change, we keep the WriteBack object
+        // alive on power suspend for AD use case.
     }
 
     switch(dpy) {
     case HWC_DISPLAY_PRIMARY:
+        value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
         if(ctx->mHDMIDisplay->isHDMIPrimaryDisplay()) {
             if(ctx->dpyAttr[dpy].connected) {
                 // When HDMI is connected as primary we clean up resources
                 // and call commit to generate a black frame on the interface.
                 // However, we do not call blank since we need the timing
                 // generator and HDMI core to remain turned on.
-                if((mode == HWC_POWER_MODE_OFF) &&
+                if((blank) &&
                         (!Overlay::displayCommit(ctx->dpyAttr[dpy].fd))) {
                     ALOGE("%s: display commit fail for %d", __FUNCTION__, dpy);
                     ret = -1;
@@ -468,44 +461,43 @@ static int hwc_setPowerMode(struct hwc_composer_device_1* dev, int dpy,
                 return -errno;
             }
 
-            if(mode == HWC_POWER_MODE_NORMAL) {
+            if(!blank) {
                 // Enable HPD here, as during bootup POWER_MODE_NORMAL is set
                 // when SF is completely initialized
                 ctx->mHDMIDisplay->setHPD(1);
             }
 
-            ctx->dpyAttr[dpy].isActive = not(mode == HWC_POWER_MODE_OFF);
+            ctx->dpyAttr[dpy].isActive = !blank;
         }
         //Deliberate fall through since there is no explicit power mode for
         //virtual displays.
     case HWC_DISPLAY_VIRTUAL:
         if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected) {
-            const int dpy = HWC_DISPLAY_VIRTUAL;
-            if(mode == HWC_POWER_MODE_OFF and
-                    (not ctx->dpyAttr[dpy].isPause)) {
+            if(blank and (!ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause)) {
+                int dpy = HWC_DISPLAY_VIRTUAL;
                 if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
-                    ALOGE("%s: displayCommit failed for virtual", __FUNCTION__);
+                    ALOGE("%s: display commit fail for virtual!", __FUNCTION__);
                     ret = -1;
                 }
             }
-            ctx->dpyAttr[dpy].isActive = not(mode == HWC_POWER_MODE_OFF);
+            ctx->dpyAttr[dpy].isActive = !blank;
         }
         break;
     case HWC_DISPLAY_EXTERNAL:
-        if(mode == HWC_POWER_MODE_OFF) {
+        if(blank) {
             if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
-                ALOGE("%s: displayCommit failed for external", __FUNCTION__);
+                ALOGE("%s: display commit fail for external!", __FUNCTION__);
                 ret = -1;
             }
         }
-        ctx->dpyAttr[dpy].isActive = not(mode == HWC_POWER_MODE_OFF);
+        ctx->dpyAttr[dpy].isActive = !blank;
         break;
     default:
         return -EINVAL;
     }
 
-    ALOGD_IF(POWER_MODE_DEBUG, "%s: Done setting mode %d on display %d",
-            __FUNCTION__, mode, dpy);
+    ALOGD_IF(BLANK_DEBUG, "%s: Done %s display: %d", __FUNCTION__,
+          blank ? "blanking":"unblanking", dpy);
     return ret;
 }
 
@@ -520,15 +512,15 @@ static void reset_panel(struct hwc_composer_device_1* dev)
         return;
     }
 
-    ALOGD("%s: setting power mode off", __FUNCTION__);
-    ret = hwc_setPowerMode(dev, HWC_DISPLAY_PRIMARY, HWC_POWER_MODE_OFF);
+    ALOGD("%s: calling BLANK DISPLAY", __FUNCTION__);
+    ret = hwc_blank(dev, HWC_DISPLAY_PRIMARY, 1);
     if (ret < 0) {
         ALOGE("%s: FBIOBLANK failed to BLANK:  %s", __FUNCTION__,
                 strerror(errno));
     }
 
-    ALOGD("%s: setting power mode normal and enabling vsync", __FUNCTION__);
-    ret = hwc_setPowerMode(dev, HWC_DISPLAY_PRIMARY, HWC_POWER_MODE_NORMAL);
+    ALOGD("%s: calling UNBLANK DISPLAY and enabling vsync", __FUNCTION__);
+    ret = hwc_blank(dev, HWC_DISPLAY_PRIMARY, 0);
     if (ret < 0) {
         ALOGE("%s: FBIOBLANK failed to UNBLANK : %s", __FUNCTION__,
                 strerror(errno));
@@ -889,20 +881,18 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
 
         //Setup HWC methods
         dev->device.common.tag          = HARDWARE_DEVICE_TAG;
-        dev->device.common.version      = HWC_DEVICE_API_VERSION_1_4;
+        dev->device.common.version      = HWC_DEVICE_API_VERSION_1_3;
         dev->device.common.module       = const_cast<hw_module_t*>(module);
         dev->device.common.close        = hwc_device_close;
         dev->device.prepare             = hwc_prepare;
         dev->device.set                 = hwc_set;
         dev->device.eventControl        = hwc_eventControl;
-        dev->device.setPowerMode        = hwc_setPowerMode;
+        dev->device.blank               = hwc_blank;
         dev->device.query               = hwc_query;
         dev->device.registerProcs       = hwc_registerProcs;
         dev->device.dump                = hwc_dump;
         dev->device.getDisplayConfigs   = hwc_getDisplayConfigs;
         dev->device.getDisplayAttributes = hwc_getDisplayAttributes;
-        dev->device.getActiveConfig     = hwc_getActiveConfig;
-        dev->device.setActiveConfig     = hwc_setActiveConfig;
         *device = &dev->device.common;
         status = 0;
     }
