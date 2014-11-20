@@ -125,14 +125,6 @@ static int openFramebufferDevice(hwc_context_t *ctx)
         }
         ctx->dpyAttr[HWC_DISPLAY_SECONDARY].fd = fb_fd;
 
-        //Open framebuffer for third display
-        fb_fd = openFb(HWC_DISPLAY_VIRTUAL);
-        if(fb_fd < 0) {
-            ALOGE("%s: Error Opening FB for display=%d : %s",
-                  __FUNCTION__, HWC_DISPLAY_TERTIARY, strerror(errno));
-            return -errno;
-        }
-        ctx->dpyAttr[HWC_DISPLAY_TERTIARY].fd = fb_fd;
     }
 
     return 0;
