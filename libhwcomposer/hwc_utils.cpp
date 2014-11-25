@@ -224,6 +224,12 @@ void initContext(hwc_context_t *ctx)
     ctx->mVPUClient = new VPUClient();
 #endif
 
+    ctx->mUseMetaDataRefreshRate = true;
+    if(property_get("persist.metadata_dynfps.disable", value, "false")
+            && !strcmp(value, "true")) {
+        ctx->mUseMetaDataRefreshRate = false;
+    }
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -290,7 +296,7 @@ void closeContext(hwc_context_t *ctx)
 }
 
 //Helper to roundoff the refreshrates
-static uint32_t roundOff(uint32_t refreshRate) {
+uint32_t roundOff(uint32_t refreshRate) {
     int count =  (int) (sizeof(stdRefreshRates)/sizeof(stdRefreshRates[0]));
     uint32_t rate = refreshRate;
     for(int i=0; i< count; i++) {
@@ -857,7 +863,7 @@ void setListStats(hwc_context_t *ctx,
             ctx->listStats[dpy].extOnlyLayerIndex = i;
         }
 #ifdef DYNAMIC_FPS
-        if (dpy == HWC_DISPLAY_PRIMARY && mdpHw.isDynFpsSupported()) {
+        if (!dpy && mdpHw.isDynFpsSupported() && ctx->mUseMetaDataRefreshRate){
             //dyn fps: get refreshrate from metadata
             //Support multiple refresh rates if they are same
             //else set to  default
