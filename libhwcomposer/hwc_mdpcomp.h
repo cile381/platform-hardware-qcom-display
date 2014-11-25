@@ -54,6 +54,7 @@ public:
     /* Initialize MDP comp*/
     static bool init(hwc_context_t *ctx);
     static void resetIdleFallBack() { sIdleFallBack = false; }
+    void setDynRefreshRate(hwc_context_t *ctx, hwc_display_contents_1_t* list);
 
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
