@@ -1360,7 +1360,7 @@ int MDPCompNonSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
                              PipeLayerPair& PipeLayerPair) {
     MdpPipeInfoNonSplit& mdp_info =
         *(static_cast<MdpPipeInfoNonSplit*>(PipeLayerPair.pipeInfo));
-    eMdpFlags mdpFlags = OV_MDP_BACKEND_COMPOSITION;
+    eMdpFlags mdpFlags = ovutils::OV_MDP_FLAGS_NONE;
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
     eDest dest = mdp_info.index;
@@ -1432,7 +1432,7 @@ int MDPCompNonSplit::configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
             *(static_cast<MdpYUVPipeInfo*>(PipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
-    eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
+    eMdpFlags mdpFlagsL = ovutils::OV_MDP_FLAGS_NONE;
     eDest lDest = mdp_info.lIndex;
     eDest rDest = mdp_info.rIndex;
 
@@ -1656,7 +1656,7 @@ int MDPCompSplit::configure4k2kYuv(hwc_context_t *ctx, hwc_layer_1_t *layer,
                 *(static_cast<MdpYUVPipeInfo*>(PipeLayerPair.pipeInfo));
         eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
         eIsFg isFg = IS_FG_OFF;
-        eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
+        eMdpFlags mdpFlagsL = ovutils::OV_MDP_FLAGS_NONE;
         eDest lDest = mdp_info.lIndex;
         eDest rDest = mdp_info.rIndex;
 
@@ -1677,7 +1677,7 @@ int MDPCompSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
         *(static_cast<MdpPipeInfoSplit*>(PipeLayerPair.pipeInfo));
     eZorder zOrder = static_cast<eZorder>(mdp_info.zOrder);
     eIsFg isFg = IS_FG_OFF;
-    eMdpFlags mdpFlagsL = OV_MDP_BACKEND_COMPOSITION;
+    eMdpFlags mdpFlagsL = ovutils::OV_MDP_FLAGS_NONE;
     eDest lDest = mdp_info.lIndex;
     eDest rDest = mdp_info.rIndex;
 
