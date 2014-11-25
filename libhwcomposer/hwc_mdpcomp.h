@@ -57,6 +57,7 @@ public:
     static bool isIdleFallback() { return sIdleFallBack; }
     static void dynamicDebug(bool enable){ sDebugLogs = enable; }
     static void setIdleTimeout(const uint32_t& timeout);
+    void setDynRefreshRate(hwc_context_t *ctx, hwc_display_contents_1_t* list);
 
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
