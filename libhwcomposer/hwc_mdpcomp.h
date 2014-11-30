@@ -56,6 +56,7 @@ public:
     static void dynamicDebug(bool enable){ sDebugLogs = enable; }
     static void setIdleTimeout(const uint32_t& timeout);
     static void setMaxPipesPerMixer(const uint32_t value);
+    static int setPartialUpdatePref(hwc_context_t *ctx, bool enable);
 
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
@@ -258,6 +259,7 @@ protected:
     static int sMaxPipesPerMixer;
     static bool sSrcSplitEnabled;
     static IdleInvalidator *sIdleInvalidator;
+    static bool sIsPartialUpdateActive;
     struct FrameInfo mCurrentFrame;
     struct LayerCache mCachedFrame;
     //Enable 4kx2k yuv layer split
