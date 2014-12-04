@@ -59,8 +59,6 @@ public:
     static int setPartialUpdatePref(hwc_context_t *ctx, bool enable);
 
 protected:
-    enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
-
     enum ePipeType {
         MDPCOMP_OV_RGB = ovutils::OV_MDP_PIPE_RGB,
         MDPCOMP_OV_VG = ovutils::OV_MDP_PIPE_VG,
@@ -260,6 +258,7 @@ protected:
     static bool sSrcSplitEnabled;
     static IdleInvalidator *sIdleInvalidator;
     static bool sIsPartialUpdateActive;
+    static int sMaxSecLayers;
     struct FrameInfo mCurrentFrame;
     struct LayerCache mCachedFrame;
     //Enable 4kx2k yuv layer split
