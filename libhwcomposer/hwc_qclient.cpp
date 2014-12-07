@@ -34,6 +34,7 @@
 #include <hwc_mdpcomp.h>
 #include <hwc_virtual.h>
 #include <overlay.h>
+#include <hwc_qdcm.h>
 
 #define QCLIENT_DEBUG 0
 
@@ -41,6 +42,7 @@ using namespace android;
 using namespace qService;
 using namespace qhwc;
 using namespace overlay;
+using namespace qQdcm;
 
 namespace qClient {
 
@@ -288,6 +290,9 @@ status_t QClient::notifyCallback(uint32_t command, const Parcel* inParcel,
             break;
         case IQService::SET_IDLE_TIMEOUT:
             setIdleTimeout(mHwcContext, inParcel);
+            break;
+        case IQService::QDCM_SVC_CMDS:
+            qdcmCmdsHandler(mHwcContext, inParcel, outParcel);
             break;
         default:
             ret = NO_ERROR;

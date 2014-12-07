@@ -43,6 +43,7 @@
 #include "comptype.h"
 #include "hwc_virtual.h"
 #include "qd_utils.h"
+#include "hwc_qdcm.h"
 #include <sys/sysinfo.h>
 
 using namespace qClient;
@@ -50,6 +51,7 @@ using namespace qService;
 using namespace android;
 using namespace overlay;
 using namespace overlay::utils;
+using namespace qQdcm;
 namespace ovutils = overlay::utils;
 
 #ifdef QCOM_BSP
@@ -401,12 +403,19 @@ void initContext(hwc_context_t *ctx)
     }
 
     memset(&(ctx->mPtorInfo), 0, sizeof(ctx->mPtorInfo));
+
+    //init qdcm service related context.
+    qdcmInitContext(ctx);
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
 
 void closeContext(hwc_context_t *ctx)
 {
+    //close qdcm service related context.
+    qdcmCloseContext(ctx);
+
     if(ctx->mOverlay) {
         delete ctx->mOverlay;
         ctx->mOverlay = NULL;
@@ -2466,6 +2475,23 @@ bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2) {
     if (rect1.bottom == rect2.bottom)
         eqBounds++;
     return (eqBounds == 3);
+}
+
+void processBootAnimCompleted(hwc_context_t *ctx) {
+    char value[PROPERTY_VALUE_MAX];
+    int boot_finished = 0;
+
+    // Reading property set on boot finish in SF
+    property_get("service.bootanim.exit", value, "0");
+    boot_finished = atoi(value);
+    if (!boot_finished)
+        return;
+
+    ctx->mBootAnimCompleted = true;
+
+    //one-shot action check if bootanimation completed then apply
+    //default display mode.
+    qdcmApplyDefaultAfterBootAnimationDone(ctx);
 }
 
 void BwcPM::setBwc(const hwc_rect_t& crop, const hwc_rect_t& dst,
