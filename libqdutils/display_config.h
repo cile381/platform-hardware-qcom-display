@@ -42,7 +42,8 @@ namespace qdutils {
 // Use this enum to specify the dpy parameters where needed
 enum {
     DISPLAY_PRIMARY = 0,
-    DISPLAY_EXTERNAL,
+    DISPLAY_SECONDARY,
+    DISPLAY_TERTIARY,
 };
 
 // Display Attributes that are available to clients of this library
@@ -73,7 +74,4 @@ int setHSIC(int dpy, const HSICData_t& hsic_data);
 // get the active visible region for the display
 // Returns 0 on success, negative values on errors
 int getDisplayVisibleRegion(int dpy, hwc_rect_t &rect);
-
-// set the view frame information in hwc context from surfaceflinger
-int setViewFrame(int dpy, int l, int t, int r, int b);
 }; //namespace

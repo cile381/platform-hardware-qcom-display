@@ -44,12 +44,18 @@ using namespace overlay;
 using namespace overlay::utils;
 namespace ovutils = overlay::utils;
 
+#define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
 namespace qhwc {
 
 static int openFramebufferDevice(hwc_context_t *ctx)
 {
     struct fb_fix_screeninfo finfo;
     struct fb_var_screeninfo info;
+
+    /*Set all fd to -1 first*/
+    for(uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+         ctx->dpyAttr[i].fd = -1;
+    }
 
     int fb_fd = openFb(HWC_DISPLAY_PRIMARY);
     if(fb_fd < 0) {
@@ -109,11 +115,88 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].ydpi = ydpi;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].vsync_period = 1000000000l / fps;
 
+    if(ctx->mAutomotiveModeOn) {
+        //Open framebuffer for secondary display
+        fb_fd = openFb(HWC_DISPLAY_SECONDARY);
+        if(fb_fd < 0) {
+            ALOGE("%s: Error Opening FB for display=%d : %s",
+                  __FUNCTION__, HWC_DISPLAY_SECONDARY, strerror(errno));
+            return -errno;
+        }
+        ctx->dpyAttr[HWC_DISPLAY_SECONDARY].fd = fb_fd;
+
+    }
+
     return 0;
+}
+
+void setupObject(hwc_context_t* ctx, int dpy)
+{
+    ctx->mFBUpdate[dpy] =
+        IFBUpdate::getObject(ctx, ctx->dpyAttr[dpy].xres, dpy);
+    ctx->mMDPComp[dpy] =
+        MDPComp::getObject(ctx->dpyAttr[dpy].xres, dpy);
+    int compositionType =
+                qdutils::QCCompositionType::getInstance().getCompositionType();
+    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
+                           qdutils::COMPOSITION_TYPE_MDP |
+                           qdutils::COMPOSITION_TYPE_C2D)) {
+        ctx->mCopyBit[dpy] = new CopyBit(ctx, dpy);
+    }
+}
+
+void clearObject(hwc_context_t* ctx, int dpy)
+{
+    if(ctx->mFBUpdate[dpy]) {
+        delete ctx->mFBUpdate[dpy];
+        ctx->mFBUpdate[dpy] = NULL;
+    }
+    if(ctx->mCopyBit[dpy]){
+        delete ctx->mCopyBit[dpy];
+        ctx->mCopyBit[dpy] = NULL;
+    }
+    if(ctx->mMDPComp[dpy]) {
+        delete ctx->mMDPComp[dpy];
+        ctx->mMDPComp[dpy] = NULL;
+    }
+}
+
+void updateReverseCameraState(hwc_context_t* ctx) {
+    // Open a switch node to receive reverse camera notification from driver.
+    int fd = open(REVERSE_CAMERA_PATH, O_RDONLY);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_PATH, strerror(errno));
+        return;
+    }
+    char status[64];
+    // Read the node to check for reverse camera status
+    ssize_t len = pread(fd, status, 64, 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to read reverse camera switch node : %s",
+                __FUNCTION__, strerror(errno));
+        close(fd);
+        return;
+    }
+    // extract reverse camera status and put the primary in pause state, if
+    // reverse camera preview is on
+    if (!strncmp(status, "1", strlen("1"))) {
+        ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isPause = true;
+    }
+    close(fd);
+    return;
 }
 
 void initContext(hwc_context_t *ctx)
 {
+    /*Read the automotive mode on flag from the property.*/
+    ctx->mAutomotiveModeOn = false;
+    char value[PROPERTY_VALUE_MAX];
+    if(property_get("sys.hwc.automotive_mode_enabled", value, "false")
+            && !strcmp(value, "true")) {
+        ctx->mAutomotiveModeOn = true;
+    }
+
     if(openFramebufferDevice(ctx) < 0) {
         ALOGE("%s: failed to open framebuffer!!", __FUNCTION__);
     }
@@ -121,44 +204,27 @@ void initContext(hwc_context_t *ctx)
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
+
     overlay::Overlay::initOverlay();
     ctx->mOverlay = overlay::Overlay::getInstance();
     ctx->mRotMgr = RotMgr::getInstance();
 
-    //Is created and destroyed only once for primary
-    //For external it could get created and destroyed multiple times depending
-    //on what external we connect to.
-    ctx->mFBUpdate[HWC_DISPLAY_PRIMARY] =
-        IFBUpdate::getObject(ctx, ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
-        HWC_DISPLAY_PRIMARY);
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].mDownScaleMode = false;
 
-    // Check if the target supports copybit compostion (dyn/mdp/c2d) to
-    // decide if we need to open the copybit module.
-    int compositionType =
-        qdutils::QCCompositionType::getInstance().getCompositionType();
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isActive = false;
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].connected = false;
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].mDownScaleMode = false;
 
-    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
-                           qdutils::COMPOSITION_TYPE_MDP |
-                           qdutils::COMPOSITION_TYPE_C2D)) {
-            ctx->mCopyBit[HWC_DISPLAY_PRIMARY] = new CopyBit(ctx,
-                    HWC_DISPLAY_PRIMARY);
-    }
-
-    ctx->mExtDisplay = new ExternalDisplay(ctx);
-    ctx->mVirtualDisplay = new VirtualDisplay(ctx);
-    ctx->mVirtualonExtActive = false;
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive = false;
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].connected = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
-    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
-    ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].mDownScaleMode = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].mDownScaleMode = false;
 
-    ctx->mMDPComp[HWC_DISPLAY_PRIMARY] =
-         MDPComp::getObject(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres,
-         HWC_DISPLAY_PRIMARY);
+
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].mDownScaleMode= false;
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].connected = true;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].isPause = false;
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         ctx->mLayerRotMap[i] = new LayerRotMap();
@@ -166,8 +232,6 @@ void initContext(hwc_context_t *ctx)
         ctx->mHwcDebug[i] = new HwcDebug(i);
         ctx->mPrevHwLayerCount[i] = 0;
     }
-
-    MDPComp::init(ctx);
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
@@ -186,6 +250,36 @@ void initContext(hwc_context_t *ctx)
     ctx->deviceOrientation = 0;
     ctx->mBufferMirrorMode = false;
     ctx->mSocId = getSocIdFromSystem();
+
+    // create objects for external and virtual displays
+    ctx->mSecondaryDisplay = new SecondaryDisplay(ctx, HWC_DISPLAY_SECONDARY);
+    ctx->mTertiaryDisplay = new TertiaryDisplay(ctx, HWC_DISPLAY_TERTIARY);
+    ctx->mVirtualDisplay = new VirtualDisplay(ctx);
+    ctx->mVirtualonExtActive = false;
+
+    if(ctx->mAutomotiveModeOn) {
+        // configure secondary display
+        if(ctx->mSecondaryDisplay && !ctx->mSecondaryDisplay->configure()) {
+            ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = true;
+            ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause = false;
+        } else {
+            ALOGE("%s: Error!! Configuraion failed for external", __FUNCTION__);
+        }
+        if(!ctx->mTertiaryDisplay->configure()) {
+            ctx->dpyAttr[HWC_DISPLAY_TERTIARY].connected = true;
+            ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isPause = false;
+        } else {
+            ALOGE("%s: Error!! Configuraion failed for third display",
+                __FUNCTION__);
+        }
+        updateReverseCameraState(ctx);
+    }
+    for(int dpy = 0; dpy < HWC_NUM_PHYSICAL_DISPLAY_TYPES; dpy++) {
+        setupObject(ctx, dpy);
+    }
+    // Initialize the MDPComp after creating MDP comp objects for all displays
+    MDPComp::init(ctx);
+
     ALOGI("Initializing Qualcomm Hardware Composer");
     ALOGI("MDP version: %d", ctx->mMDP.version);
 }
@@ -203,10 +297,7 @@ void closeContext(hwc_context_t *ctx)
     }
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
-        if(ctx->mCopyBit[i]) {
-            delete ctx->mCopyBit[i];
-            ctx->mCopyBit[i] = NULL;
-        }
+        clearObject(ctx, i);
     }
 
     if(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd) {
@@ -214,20 +305,19 @@ void closeContext(hwc_context_t *ctx)
         ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = -1;
     }
 
-    if(ctx->mExtDisplay) {
-        delete ctx->mExtDisplay;
-        ctx->mExtDisplay = NULL;
+    if(ctx->mSecondaryDisplay) {
+        ctx->mSecondaryDisplay->teardown();
+        delete ctx->mSecondaryDisplay;
+        ctx->mSecondaryDisplay = NULL;
+    }
+
+    if(ctx->mTertiaryDisplay) {
+        ctx->mTertiaryDisplay->teardown();
+        delete ctx->mTertiaryDisplay;
+        ctx->mTertiaryDisplay = NULL;
     }
 
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
-        if(ctx->mFBUpdate[i]) {
-            delete ctx->mFBUpdate[i];
-            ctx->mFBUpdate[i] = NULL;
-        }
-        if(ctx->mMDPComp[i]) {
-            delete ctx->mMDPComp[i];
-            ctx->mMDPComp[i] = NULL;
-        }
         if(ctx->mLayerRotMap[i]) {
             delete ctx->mLayerRotMap[i];
             ctx->mLayerRotMap[i] = NULL;
@@ -240,7 +330,6 @@ void closeContext(hwc_context_t *ctx)
 
 
 }
-
 
 void dumpsys_log(android::String8& buf, const char* fmt, ...)
 {
@@ -266,7 +355,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
 
     // if external supports underscan, do nothing
     // it will be taken care in the driver
-    if(ctx->mExtDisplay->isCEUnderscanSupported())
+    if(ctx->mSecondaryDisplay->isCEUnderscanSupported())
         return;
 
     char value[PROPERTY_VALUE_MAX];
@@ -291,7 +380,7 @@ void getActionSafePosition(hwc_context_t *ctx, int dpy, hwc_rect_t& rect) {
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         // if downscale Mode is enabled for external, need to query
         // the actual width and height, as that is the physical w & h
-         ctx->mExtDisplay->getAttributes(fbWidth, fbHeight);
+         ctx->mSecondaryDisplay->getAttributes(fbWidth, fbHeight);
     }
 
 
@@ -451,8 +540,8 @@ void getAspectRatioPosition(hwc_context_t* ctx, int dpy, int extOrientation,
     }
     if(ctx->dpyAttr[dpy].mDownScaleMode) {
         int extW, extH;
-        if(dpy == HWC_DISPLAY_EXTERNAL)
-            ctx->mExtDisplay->getAttributes(extW, extH);
+        if(dpy == HWC_DISPLAY_SECONDARY)
+            ctx->mSecondaryDisplay->getAttributes(extW, extH);
         else
             ctx->mVirtualDisplay->getAttributes(extW, extH);
         fbWidth  = ctx->dpyAttr[dpy].xres;
@@ -502,7 +591,7 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                                ovutils::eTransform& orient) {
     // Swap width and height when there is a 90deg transform
     int extOrient = getExtOrientation(ctx);
-    if(dpy) {
+    if(dpy == HWC_DISPLAY_SECONDARY) {
         if(!isYuvBuffer(hnd)) {
             if(extOrient & HWC_TRANSFORM_ROT_90) {
                 int dstWidth = ctx->dpyAttr[dpy].xres;
@@ -532,8 +621,8 @@ void calcExtDisplayPosition(hwc_context_t *ctx,
                 float fbWidth  = ctx->dpyAttr[dpy].xres;
                 float fbHeight = ctx->dpyAttr[dpy].yres;
                 // query MDP configured attributes
-                if(dpy == HWC_DISPLAY_EXTERNAL)
-                    ctx->mExtDisplay->getAttributes(extW, extH);
+                if(dpy == HWC_DISPLAY_SECONDARY)
+                    ctx->mSecondaryDisplay->getAttributes(extW, extH);
                 else
                     ctx->mVirtualDisplay->getAttributes(extW, extH);
                 //Calculate the ratio...
@@ -656,12 +745,17 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
+    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
+
     optimizeLayerRects(ctx, list, dpy);
 
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
+        // Calculate view frame of each display from the layer displayframe
+        ctx->mViewFrame[dpy] = getUnion(ctx->mViewFrame[dpy],
+                                        layer->displayFrame);
 #ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
@@ -984,7 +1078,7 @@ void getNonWormholeRegion(hwc_display_contents_1_t* list,
 }
 
 bool isExternalActive(hwc_context_t* ctx) {
-    return ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isActive;
+    return ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isActive;
 }
 
 void closeAcquireFds(hwc_display_contents_1_t* list) {

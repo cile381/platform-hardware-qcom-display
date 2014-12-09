@@ -33,6 +33,8 @@
 #include "qdMetaData.h"
 
 #define PIPE_DEBUG 0
+#define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
+#define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 
 namespace overlay {
 using namespace utils;
@@ -226,6 +228,33 @@ Overlay* Overlay::getInstance() {
     return sInstance;
 }
 
+bool Overlay::isEarlyCameraOn() {
+    bool ret = false;
+    // Open a switch node to receive reverse camera notification from driver.
+    int fd = ::open(REVERSE_CAMERA_PATH, O_RDONLY);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_PATH, strerror(errno));
+        return ret;
+    }
+    char status[64];
+    // Read the node to check for reverse camera status
+    ssize_t len = pread(fd, status, 64, 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to read reverse camera switch node : %s",
+                __FUNCTION__, strerror(errno));
+        close(fd);
+        return ret;
+    }
+    // extract reverse camera status and put the primary in pause state, if
+    // reverse camera preview is on
+    if (!strncmp(status, "1", strlen("1"))) {
+        ret = true;
+    }
+    close(fd);
+    return ret;
+}
+
 // Clears any VG pipes allocated to the fb devices
 // Generates a LUT for pipe types.
 int Overlay::initOverlay() {
@@ -238,50 +267,12 @@ int Overlay::initOverlay() {
     numPipesXType[OV_MDP_PIPE_DMA] =
             qdutils::MDPVersion::getInstance().getDMAPipes();
 
+    int earlyCameraOnStatus = isEarlyCameraOn();
     int index = 0;
     for(int X = 0; X < (int)OV_MDP_PIPE_ANY; X++) { //iterate over types
         for(int j = 0; j < numPipesXType[X]; j++) { //iterate over num
             PipeBook::pipeTypeLUT[index] = (utils::eMdpPipeType)X;
             index++;
-        }
-    }
-
-    if (mdpVersion < qdutils::MDSS_V5) {
-        msmfb_mixer_info_req  req;
-        mdp_mixer_info *minfo = NULL;
-        char name[64];
-        int fd = -1;
-        for(int i = 0; i < MAX_FB_DEVICES; i++) {
-            snprintf(name, 64, FB_DEVICE_TEMPLATE, i);
-            ALOGD("initoverlay:: opening the device:: %s", name);
-            fd = ::open(name, O_RDWR, 0);
-            if(fd < 0) {
-                ALOGE("cannot open framebuffer(%d)", i);
-                return -1;
-            }
-            //Get the mixer configuration */
-            req.mixer_num = i;
-            if (ioctl(fd, MSMFB_MIXER_INFO, &req) == -1) {
-                ALOGE("ERROR: MSMFB_MIXER_INFO ioctl failed");
-                close(fd);
-                return -1;
-            }
-            minfo = req.info;
-            for (int j = 0; j < req.cnt; j++) {
-                ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
-                      minfo->z_order);
-                // clear any pipe connected to mixer including base pipe.
-                int index = minfo->pndx;
-                ALOGD("Unset overlay with index: %d at mixer %d", index, i);
-                if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
-                    ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
-                    close(fd);
-                    return -1;
-                }
-                minfo++;
-            }
-            close(fd);
-            fd = -1;
         }
     }
 
@@ -305,9 +296,56 @@ int Overlay::initOverlay() {
                 sDpyFbMap[DPY_EXTERNAL] = num;
             } else if(strncmp(fbType, strWbPanel, strlen(strWbPanel)) == 0) {
                 sDpyFbMap[DPY_WRITEBACK] = num;
+            } else {
+                // if it comes here assume third display is available
+                sDpyFbMap[DPY_TERTIARY] = num;
             }
 
             fclose(displayDeviceFP);
+        }
+    }
+    if (mdpVersion < qdutils::MDSS_V5) {
+        msmfb_mixer_info_req  req;
+        mdp_mixer_info *minfo = NULL;
+        char name[64];
+        int fd = -1;
+        // detach the pipes from mixer0, mixer1 and mixer2, if any pipes are
+        // attached to any mixer.
+        for(int i = 0; i < (MAX_FB_DEVICES - 1); i++) {
+            snprintf(name, 64, FB_DEVICE_TEMPLATE, i);
+            ALOGD("initoverlay:: opening the device:: %s", name);
+            fd = ::open(name, O_RDWR, 0);
+            if(fd < 0) {
+                ALOGE("cannot open framebuffer(%d)", i);
+                return -1;
+            }
+            //Get the mixer configuration */
+            req.mixer_num = i;
+            if (ioctl(fd, MSMFB_MIXER_INFO, &req) == -1) {
+                ALOGE("ERROR: MSMFB_MIXER_INFO ioctl failed");
+                close(fd);
+                return -1;
+            }
+            minfo = req.info;
+            // Bypass overlay unset as doing it during earlycamera will result
+            // in black frames (result in pipe null 
+            if(!earlyCameraOnStatus) {
+                for (int j = 0; j < req.cnt; j++) {
+                    ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
+                            minfo->z_order);
+                    // clear any pipe connected to mixer including base pipe.
+                    int index = minfo->pndx;
+                    ALOGD("Unset overlay with index: %d at mixer %d", index, i);
+                    if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
+                        ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
+                        close(fd);
+                        return -1;
+                    }
+                    minfo++;
+                }
+            }
+            close(fd);
+            fd = -1;
         }
     }
 
@@ -378,7 +416,7 @@ void Overlay::PipeBook::destroy() {
 }
 
 Overlay* Overlay::sInstance = 0;
-int Overlay::sDpyFbMap[DPY_MAX] = {0, -1,-1};
+int Overlay::sDpyFbMap[DPY_MAX] = {0, -1, -1, -1};
 int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
 int Overlay::PipeBook::sLastUsageBitmap = 0;

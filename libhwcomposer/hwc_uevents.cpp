@@ -37,6 +37,7 @@ using namespace overlay;
 namespace qhwc {
 #define HWC_UEVENT_SWITCH_STR  "change@/devices/virtual/switch/"
 #define HWC_UEVENT_THREAD_NAME "hwcUeventThread"
+#define REVERSE_CAMERA_ACK "/sys/class/switch/reverse/ack"
 
 /* External Display states */
 enum {
@@ -46,42 +47,11 @@ enum {
     EXTERNAL_RESUME
 };
 
-static void setup(hwc_context_t* ctx, int dpy)
-{
-    ctx->mFBUpdate[dpy] =
-        IFBUpdate::getObject(ctx, ctx->dpyAttr[dpy].xres, dpy);
-    ctx->mMDPComp[dpy] =
-        MDPComp::getObject(ctx->dpyAttr[dpy].xres, dpy);
-    int compositionType =
-                qdutils::QCCompositionType::getInstance().getCompositionType();
-    if (compositionType & (qdutils::COMPOSITION_TYPE_DYN |
-                           qdutils::COMPOSITION_TYPE_MDP |
-                           qdutils::COMPOSITION_TYPE_C2D)) {
-        ctx->mCopyBit[dpy] = new CopyBit(ctx, dpy);
-    }
-}
-
-static void clear(hwc_context_t* ctx, int dpy)
-{
-    if(ctx->mFBUpdate[dpy]) {
-        delete ctx->mFBUpdate[dpy];
-        ctx->mFBUpdate[dpy] = NULL;
-    }
-    if(ctx->mCopyBit[dpy]){
-        delete ctx->mCopyBit[dpy];
-        ctx->mCopyBit[dpy] = NULL;
-    }
-    if(ctx->mMDPComp[dpy]) {
-        delete ctx->mMDPComp[dpy];
-        ctx->mMDPComp[dpy] = NULL;
-    }
-}
-
 /* Parse uevent data for devices which we are interested */
 static int getConnectedDisplay(const char* strUdata)
 {
     if(strcasestr("change@/devices/virtual/switch/hdmi", strUdata))
-        return HWC_DISPLAY_EXTERNAL;
+        return HWC_DISPLAY_SECONDARY;
     if(strcasestr("change@/devices/virtual/switch/wfd", strUdata))
         return HWC_DISPLAY_VIRTUAL;
     return -1;
@@ -119,8 +89,92 @@ static int getConnectedState(const char* strUdata, int len)
     return -1;
 }
 
+static void signalReverseCameraToStart() {
+    // Open a switch node to send notification to reverse camera .
+    int fd = open(REVERSE_CAMERA_ACK, O_RDWR, 0);
+    if (fd < 0) {
+        ALOGE ("%s:not able to open %s node %s",
+                __FUNCTION__, REVERSE_CAMERA_ACK, strerror(errno));
+        return;
+    }
+    // write to the node to send ack for reverse camera
+    ssize_t len = pwrite(fd, "1", strlen("1"), 0);
+    if (UNLIKELY(len < 0)) {
+        ALOGE ("%s: Unable to write reverse camera ack node : %s",
+                __FUNCTION__, strerror(errno));
+    }
+    close(fd);
+    return;
+}
+
+static void handleReverseCameraState(hwc_context_t* ctx,
+                                           const eReverseCameraState state) {
+    ctx->mDrawLock.lock();
+    int dpy = HWC_DISPLAY_PRIMARY;
+    switch(state) {
+        case REVERSE_CAMERA_OFF:
+            ctx->dpyAttr[dpy].isPause = false;
+            ctx->proc->invalidate(ctx->proc);
+            break;
+        case REVERSE_CAMERA_ON:
+            // Change the primary display state to pause not to configure
+            // the overlay from next draw cycle and trigger new draw cycle
+            ctx->dpyAttr[dpy].isPause = true;
+            ctx->proc->invalidate(ctx->proc);
+            //Wait for draw thread to signal the completion of overlay unset
+            ctx->mDrawLock.wait();
+            // Call display commit to release the layer's fence and the pipes
+            //assoiciated with the layers
+            if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd, 1)) {
+                ALOGE("%s: display commit fail for primary!", __FUNCTION__);
+            }
+            // Acknowledge the reverse camera driver to acquire the pipes
+            signalReverseCameraToStart();
+            break;
+        default:
+            ALOGE("%s: Invalid reverse camera state %d", __FUNCTION__, state);
+            break;
+    }
+    ctx->mDrawLock.unlock();
+}
+
+/* Parse uevent data for action requested for the display */
+static bool getReverseCameraState(const char* strUdata,
+                                       int len,
+                                       eReverseCameraState& reverseCameraState)
+{
+    const char* iter_str = strUdata;
+    if (strcasestr("change@/devices/virtual/switch/reverse", strUdata)) {
+        while(((iter_str - strUdata) <= len) && (*iter_str)) {
+            char* pstr = strstr(iter_str, "SWITCH_STATE=");
+            if (pstr != NULL) {
+                reverseCameraState =
+                    (eReverseCameraState)(atoi(pstr + strlen("SWITCH_STATE=")));
+                ALOGE_IF(UEVENT_DEBUG, "%s: reverse camera switch state %d",
+                    __FUNCTION__, reverseCameraState);
+                // send an update to the screen, so that when user switches from
+                // rear view camera to UI, the UI will be shown immediately.
+                return true;
+            }
+            iter_str += strlen(iter_str)+1;
+        }
+    }
+    return false;
+}
+
 static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
+    // do not handle uevent of hdmi or wfd, if automotive mode is on
+    if(ctx->mAutomotiveModeOn) {
+        eReverseCameraState reverseCameraState;
+        bool state_update = getReverseCameraState(udata, len,
+                                                  reverseCameraState);
+        // Handle the state transition, if there is any state update
+        if(state_update)
+            handleReverseCameraState(ctx, reverseCameraState);
+        return;
+    }
+
     bool bpanelReset = getPanelResetStatus(ctx, udata, len);
     if (bpanelReset) {
         ctx->proc->invalidate(ctx->proc);
@@ -149,17 +203,17 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             ctx->mDrawLock.lock();
-            clear(ctx, dpy);
+            clearObject(ctx, dpy);
             ctx->dpyAttr[dpy].connected = false;
             ctx->dpyAttr[dpy].isActive = false;
 
             /* We need to send hotplug to SF only when we are disconnecting
              * (1) HDMI OR (2) proprietary WFD session */
-            if(dpy == HWC_DISPLAY_EXTERNAL ||
+            if(dpy == HWC_DISPLAY_SECONDARY ||
                     ctx->mVirtualonExtActive) {
                 ALOGE_IF(UEVENT_DEBUG,"%s:Sending EXTERNAL OFFLINE hotplug"
                         "event", __FUNCTION__);
-                ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL,
+                ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_SECONDARY,
                         EXTERNAL_OFFLINE);
                 ctx->mVirtualonExtActive = false;
             }
@@ -174,8 +228,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                         __FUNCTION__, dpy);
             }
 
-            if(dpy == HWC_DISPLAY_EXTERNAL) {
-                ctx->mExtDisplay->teardown();
+            if(dpy == HWC_DISPLAY_SECONDARY) {
+                ctx->mSecondaryDisplay->teardown();
             } else {
                 ctx->mVirtualDisplay->teardown();
             }
@@ -206,13 +260,14 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
             ctx->mDrawLock.wait();
             ctx->mDrawLock.unlock();
-            if(dpy == HWC_DISPLAY_EXTERNAL) {
+            if(dpy == HWC_DISPLAY_SECONDARY) {
                 if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected) {
                     ALOGD_IF(UEVENT_DEBUG,"Received HDMI connection request"
                              "when WFD is active");
 
                     ctx->mDrawLock.lock();
-                    clear(ctx, HWC_DISPLAY_VIRTUAL);
+                    clearObject(ctx, HWC_DISPLAY_VIRTUAL);
+                    clearObject(ctx, HWC_DISPLAY_VIRTUAL);
                     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
                     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
 
@@ -221,7 +276,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
                     if(ctx->mVirtualonExtActive) {
                         ALOGE_IF(UEVENT_DEBUG,"%s: Sending EXTERNAL OFFLINE"
                                 "hotplug event", __FUNCTION__);
-                        ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_EXTERNAL,
+                        ctx->proc->hotplug(ctx->proc, HWC_DISPLAY_SECONDARY,
                                 EXTERNAL_OFFLINE);
                         ctx->mVirtualonExtActive = false;
                     }
@@ -239,7 +294,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 
                     ctx->mVirtualDisplay->teardown();
                 }
-                ctx->mExtDisplay->configure();
+                ctx->mSecondaryDisplay->configure();
             } else {
                 {
                     Locker::Autolock _l(ctx->mDrawLock);
@@ -258,17 +313,17 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             Locker::Autolock _l(ctx->mDrawLock);
-            setup(ctx, dpy);
+            setupObject(ctx, dpy);
             ctx->dpyAttr[dpy].isPause = false;
             ctx->dpyAttr[dpy].connected = true;
             ctx->dpyAttr[dpy].isConfiguring = true;
 
-            if(dpy == HWC_DISPLAY_EXTERNAL ||
+            if(dpy == HWC_DISPLAY_SECONDARY ||
                ctx->mVirtualonExtActive) {
                 /* External display is HDMI or non-hybrid WFD solution */
                 ALOGE_IF(UEVENT_DEBUG, "%s: Sending EXTERNAL_OFFLINE ONLINE"
                          "hotplug event", __FUNCTION__);
-                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_EXTERNAL,
+                ctx->proc->hotplug(ctx->proc,HWC_DISPLAY_SECONDARY,
                                    EXTERNAL_ONLINE);
             } else {
                 /* We wont be getting unblank for VIRTUAL DISPLAY and its

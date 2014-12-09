@@ -57,7 +57,8 @@ void MDPComp::dump(android::String8& buf)
 {
     dumpsys_log(buf,"HWC Map for Dpy: %s \n",
                 (mDpy == 0) ? "\"PRIMARY\"" :
-                (mDpy == 1) ? "\"EXTERNAL\"" : "\"VIRTUAL\"");
+                (mDpy == 1) ? "\"SECONDARY\"" :
+                (mDpy == 2) ? "\"TERTIARY\"" : "\"VIRTUAL\"");
     dumpsys_log(buf,"CURR_FRAME: layerCount:%2d mdpCount:%2d "
                 "fbCount:%2d \n", mCurrentFrame.layerCount,
                 mCurrentFrame.mdpCount, mCurrentFrame.fbCount);
@@ -384,6 +385,12 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list)
         return false;
     }
 
+    if(mDpy == HWC_DISPLAY_TERTIARY) {
+        ALOGD_IF(isDebug(),"%s: Disable MDP Comp. for third display",
+              __FUNCTION__);
+        return false;
+    }
+
     for(int i = 0; i < numAppLayers; ++i) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -395,9 +402,9 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx, hwc_display_contents_1_t* list)
     /* Need a check for secureYUVlayers to avoid composing them
        through FB during pause/resume events */
     if(!isSecureYUVLayer &&
-       (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isConfiguring ||
+       (ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isConfiguring ||
         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isConfiguring ||
-        ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause ||
+        ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause ||
         ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause)) {
         ALOGD_IF(isDebug(),"%s: External Display connection is pending",
               __FUNCTION__);
@@ -412,6 +419,14 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
                                 hwc_display_contents_1_t* list){
 
     const int numAppLayers = ctx->listStats[mDpy].numAppLayers;
+
+    //Disable mixed mode MDPComp for secondary display, if automotive mode is on
+    if(ctx->mAutomotiveModeOn && mDpy) {
+        ALOGD_IF(isDebug(), "%s: Disable mixed mode for automotive dpy %d",
+            __FUNCTION__, mDpy);
+        return false;
+    }
+
 
     if(sIdleFallBack && !ctx->listStats[mDpy].secureUI) {
         ALOGD_IF(isDebug(), "%s: Idle fallback dpy %d",__FUNCTION__, mDpy);
@@ -470,9 +485,9 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
                 return false;
             }
             if((isSecureBuffer(hnd)) &&
-              (ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isConfiguring ||
+              (ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isConfiguring ||
                ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isConfiguring ||
-               ctx->dpyAttr[HWC_DISPLAY_EXTERNAL].isPause ||
+               ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause ||
                ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isPause)) {
                 ALOGD_IF(isDebug(), "%s: Fall back to VideoOnlyComposition for"
                          "secure YUV layers during external isConfiguring",

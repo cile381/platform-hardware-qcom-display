@@ -43,7 +43,7 @@ public:
     //Abstract Display types. Each backed by a LayerMixer,
     //represented by a fb node.
     //High res panels can be backed by 2 layer mixers and a single fb node.
-    enum { DPY_PRIMARY, DPY_EXTERNAL, DPY_WRITEBACK, DPY_UNUSED };
+    enum { DPY_PRIMARY, DPY_EXTERNAL, DPY_TERTIARY, DPY_WRITEBACK, DPY_UNUSED };
     enum { DPY_MAX = DPY_UNUSED };
     enum { MAX_FB_DEVICES = DPY_MAX };
 
@@ -79,6 +79,8 @@ public:
 
     /* Closes open pipes, called during startup */
     static int initOverlay();
+
+    static bool isEarlyCameraOn();
     /* Returns the singleton instance of overlay */
     static Overlay* getInstance();
     /* Returns available ("unallocated") pipes for a display */

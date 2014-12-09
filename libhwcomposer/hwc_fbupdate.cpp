@@ -120,8 +120,16 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
                 mAlignedFBHeight,
                 ovutils::getMdpFormat(HAL_PIXEL_FORMAT_RGBA_8888));
 
-        //Request a fb pipe
-        ovutils::eDest dest = getPipeForFb(ctx, mDpy);
+        //Request a pipe
+	  ovutils::eDest dest = ovutils::OV_INVALID;
+        // As third display uses DMAS path, request DMA pipe which has been
+        // mapped to DMAS in liboverlay
+        if(ctx->mAutomotiveModeOn && mDpy == HWC_DISPLAY_TERTIARY) {
+            ovutils::eMdpPipeType type = ovutils::OV_MDP_PIPE_DMA;
+            dest = ov.nextPipe(type, mDpy);
+        } else {
+	    dest = getPipeForFb(ctx, mDpy);
+        }
         if(dest == ovutils::OV_INVALID) { //None available
             ALOGE("%s: No pipes available to configure fb for dpy %d",
                 __FUNCTION__, mDpy);
@@ -152,11 +160,12 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         // sourceCrop during animation on external display and
         // Dont do wormhole calculation when extorientation is set on External
         // Dont do wormhole calculation when extDownscale is enabled on External
+        // Dont do wormhole calculation for third display
         if(ctx->listStats[mDpy].isDisplayAnimating && mDpy) {
             sourceCrop = layer->displayFrame;
             displayFrame = sourceCrop;
         } else if((!mDpy ||
-                   (mDpy && !extOrient
+                   ((mDpy == HWC_DISPLAY_SECONDARY) && !extOrient
                    && !ctx->dpyAttr[mDpy].mDownScaleMode))
                    && (extOnlyLayerIndex == -1)) {
                 getNonWormholeRegion(list, sourceCrop);
@@ -313,10 +322,11 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         hwc_rect_t displayFrame = layer->displayFrame;
         // Do not use getNonWormholeRegion() function to calculate the
         // sourceCrop during animation on external display.
+        // Dont do wormhole calculation for third display
         if(ctx->listStats[mDpy].isDisplayAnimating && mDpy) {
             sourceCrop = layer->displayFrame;
             displayFrame = sourceCrop;
-        } else if(extOnlyLayerIndex == -1) {
+        } else if((extOnlyLayerIndex == -1) && (mDpy != HWC_DISPLAY_TERTIARY)) {
             getNonWormholeRegion(list, sourceCrop);
             displayFrame = sourceCrop;
         }
