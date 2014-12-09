@@ -640,6 +640,8 @@ struct hwc_context_t {
     float mAspectRatioToleranceLevel;
     // Runtime switch for BWC for targets that support it
     bool mBWCEnabled;
+   // Stores the hpd enabled status- avoids re-enabling HDP on suspend resume.
+    bool mHPDEnabled;
 };
 
 namespace qhwc {
