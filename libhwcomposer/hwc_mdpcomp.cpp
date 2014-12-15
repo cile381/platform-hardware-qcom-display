@@ -485,7 +485,8 @@ bool MDPComp::validateAndApplyROI(hwc_context_t *ctx,
             }
 
             /* deduct any opaque region from visibleRect */
-            if (layer->blending == HWC_BLENDING_NONE)
+            if (layer->blending == HWC_BLENDING_NONE &&
+                    layer->planeAlpha == 0xFF)
                 visibleRect = deductRect(visibleRect, res);
         }
     }
@@ -842,7 +843,7 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
             // Update layer attributes
             hwc_rect_t srcCrop = integerizeSourceCrop(layer->sourceCropf);
             hwc_rect_t destRect = deductRect(layer->displayFrame,
-                                             overlapRect[j]);
+                        getIntersection(layer->displayFrame, overlapRect[j]));
             qhwc::calculate_crop_rects(srcCrop, layer->displayFrame, destRect,
                                        layer->transform);
             layer->sourceCropf.left = (float)srcCrop.left;
@@ -856,8 +857,14 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
     mCurrentFrame.fbCount = 0;
     mCurrentFrame.fbZ = -1;
 
-    for (int j = 0; j < numAppLayers; j++)
-        mCurrentFrame.isFBComposed[j] = false;
+    for (int j = 0; j < numAppLayers; j++) {
+        if(isValidRect(list->hwLayers[j].displayFrame)) {
+            mCurrentFrame.isFBComposed[j] = false;
+        } else {
+            mCurrentFrame.mdpCount--;
+            mCurrentFrame.drop[j] = true;
+        }
+    }
 
     bool result = postHeuristicsHandling(ctx, list);
 
