@@ -39,15 +39,15 @@ using namespace qhwc;
 
 namespace qQdcm {
 //----------------------------------------------------------------------------
-void qdcmInitContext(hwc_context_t *ctx)
+void qdcmInitContext(hwc_context_t *ctx __unused)
 {
 }
 
-void qdcmCloseContext(hwc_context_t *ctx)
+void qdcmCloseContext(hwc_context_t *ctx __unused)
 {
 }
 
-void qdcmApplyDefaultAfterBootAnimationDone(hwc_context_t *ctx)
+void qdcmApplyDefaultAfterBootAnimationDone(hwc_context_t *ctx __unused)
 {
     int ret = 0;
     int (*applyMode)(int) = NULL;
@@ -70,7 +70,8 @@ void qdcmApplyDefaultAfterBootAnimationDone(hwc_context_t *ctx)
 }
 
 //do nothing in case qdcm legacy implementation.
-void qdcmCmdsHandler(hwc_context_t *ctx, const Parcel *in, Parcel *out)
+void qdcmCmdsHandler(hwc_context_t *ctx __unused, const Parcel *in __unused,
+        Parcel *out __unused)
 {
 }
 
