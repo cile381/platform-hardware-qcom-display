@@ -1339,8 +1339,8 @@ bool MDPComp::mdpOnlyLayersComp(hwc_context_t *ctx,
         return false;
 
     /* Bail out if we are processing only secured video layers
-     * and we dont have any */
-    if(!isSecurePresent(ctx, mDpy) && secureOnly){
+     * and we dont have any secure RGB layers */
+    if (!ctx->listStats[mDpy].secureRGBCount) {
         reset(ctx);
         return false;
     }
