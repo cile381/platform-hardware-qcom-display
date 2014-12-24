@@ -393,6 +393,9 @@ bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 // Checks if boot animation has completed and applies default mode
 void processBootAnimCompleted(hwc_context_t *ctx);
 
+// Resets display ROI to full panel resoluion
+void resetROI(hwc_context_t *ctx, const int dpy);
+
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
     return (UNLIKELY(l && (l->flags & HWC_SKIP_LAYER)));
