@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -58,7 +58,7 @@ public:
     static void dynamicDebug(bool enable){ sDebugLogs = enable; }
     static void setIdleTimeout(const uint32_t& timeout);
     static int setPartialUpdatePref(hwc_context_t *ctx, bool enable);
-
+    static int getPartialUpdatePref(hwc_context_t *ctx);
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
 
