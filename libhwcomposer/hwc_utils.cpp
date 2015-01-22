@@ -468,7 +468,7 @@ void closeContext(hwc_context_t *ctx)
 }
 
 //Helper to roundoff the refreshrates
-static uint32_t roundOff(uint32_t refreshRate) {
+uint32_t roundOff(uint32_t refreshRate) {
     int count =  (int) (sizeof(stdRefreshRates)/sizeof(stdRefreshRates[0]));
     uint32_t rate = refreshRate;
     for(int i=0; i< count; i++) {
