@@ -58,6 +58,7 @@ public:
         /* Enable/Disable/Set refresh rate dynamically */
         CONFIGURE_DYN_REFRESH_RATE = 18,
         SET_PARTIAL_UPDATE = 19,   // Preference on partial update feature
+        SET_S3D_MODE = 22, // Set the 3D mode as specified in msm_hdmi_modes.h
         COMMAND_LIST_END = 400,
     };
 

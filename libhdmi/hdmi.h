@@ -73,6 +73,8 @@ public:
     int getAttrForConfig(int config, uint32_t& xres,
             uint32_t& yres, uint32_t& refresh) const;
     int getDisplayConfigs(uint32_t* configs, size_t* numConfigs) const;
+    bool configure3D(int s3dMode);
+    bool isS3DModeSupported(int s3dMode);
 
 private:
     int getModeCount() const;
@@ -94,6 +96,7 @@ private:
     int openDeviceNode(const char* node, int fileMode) const;
     int getModeIndex(int mode);
     bool isValidConfigChange(int newConfig);
+    bool writeS3DMode(int s3dMode);
 
     int mFd;
     int mFbNum;
