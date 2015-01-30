@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2010 - 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010 - 2013, 2015, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -48,6 +48,9 @@
 #elif defined(COPYBIT_QSD8K)
 #define MAX_SCALE_FACTOR    (8)
 #define MAX_DIMENSION       (2048)
+#elif defined(COPYBIT_MSM8960)
+#define MAX_SCALE_FACTOR    (8)
+#define MAX_DIMENSION       (2048)
 #else
 #error "Unsupported MDP version"
 #endif
@@ -61,6 +64,7 @@ struct copybit_context_t {
     uint8_t mAlpha;
     int     mFlags;
     bool    mBlitToFB;
+    int     mBGColor;
 };
 
 /**
@@ -125,6 +129,7 @@ static int get_format(int format) {
         case HAL_PIXEL_FORMAT_RGB_565:       return MDP_RGB_565;
         case HAL_PIXEL_FORMAT_RGBX_8888:     return MDP_RGBX_8888;
         case HAL_PIXEL_FORMAT_RGB_888:       return MDP_RGB_888;
+        case HAL_PIXEL_FORMAT_BGR_888:       return MDP_BGR_888;
         case HAL_PIXEL_FORMAT_RGBA_8888:     return MDP_RGBA_8888;
         case HAL_PIXEL_FORMAT_BGRA_8888:     return MDP_BGRA_8888;
         case HAL_PIXEL_FORMAT_YCrCb_422_I:   return MDP_YCRYCB_H2V1;
@@ -137,6 +142,28 @@ static int get_format(int format) {
         case HAL_PIXEL_FORMAT_NV12_ENCODEABLE: return MDP_Y_CBCR_H2V2;
     }
     return -1;
+}
+
+static int get_bpp(int format)
+{
+    int bpp = 0;
+    switch (format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+        case HAL_PIXEL_FORMAT_BGRA_8888:
+            bpp = 4;
+            break;
+        case HAL_PIXEL_FORMAT_RGB_888:
+        case HAL_PIXEL_FORMAT_BGR_888:
+            bpp = 3;
+            break;
+        case HAL_PIXEL_FORMAT_RGB_565:
+            bpp = 2;
+            break;
+        default:
+            ALOGE("%s, format=0x%x is not supported", __FUNCTION__, format);
+    }
+    return bpp;
 }
 
 /** convert from copybit image to mdp image structure */
@@ -340,6 +367,9 @@ static int set_parameter_copybit(
                             __FUNCTION__, value);
                 }
                 break;
+            case COPYBIT_BACKGROUND_COLOR:
+                ctx->mBGColor = value;
+                break;
             default:
                 status = -EINVAL;
                 break;
@@ -452,7 +482,7 @@ static int stretch_copybit(
             }
         }
         const uint32_t maxCount = sizeof(list.req)/sizeof(list.req[0]);
-        const struct copybit_rect_t bounds = { 0, 0, dst->w, dst->h };
+        const struct copybit_rect_t bounds = {0, 0, (int)dst->w, (int)dst->h};
         struct copybit_rect_t clip;
         list.count = 0;
         status = 0;
@@ -501,14 +531,120 @@ static int blit_copybit(
     struct copybit_image_t const *src,
     struct copybit_region_t const *region)
 {
-    struct copybit_rect_t dr = { 0, 0, dst->w, dst->h };
-    struct copybit_rect_t sr = { 0, 0, src->w, src->h };
+    struct copybit_rect_t dr = { 0, 0, (int)dst->w, (int)dst->h };
+    struct copybit_rect_t sr = { 0, 0, (int)src->w, (int)src->h };
     return stretch_copybit(dev, dst, src, &dr, &sr, region);
+}
+
+/** Perform a software blit type operation */
+static int sw_blit_copybit(
+    struct copybit_device_t *dev,
+    struct copybit_image_t const *dst,
+    struct copybit_image_t const *src,
+    struct copybit_rect_t const *dst_rect,
+    struct copybit_rect_t const *src_rect,
+    struct copybit_region_t const *region)
+{
+    int status = 0;
+
+    if ((dev == NULL ) || (dst == NULL) || (src == NULL) || 
+        (dst_rect == NULL) || (src_rect == NULL) || (region == NULL)) {
+        ALOGE("%s, Invalid input parameters", __FUNCTION__);
+        status = -EINVAL;
+        return status;
+    }
+    if (src->format != dst->format) {
+        ALOGE("%s, sw_blit doesn't support format converting", __FUNCTION__);
+        status = -EINVAL;
+        return status;
+    }
+    if (((src_rect->b - src_rect->t) != (dst_rect->b - dst_rect->t)) ||
+        ((src_rect->r - src_rect->l) != (dst_rect->r - dst_rect->l))) {
+        ALOGE("%s, sw_blit doesn't support scaling, src=[%d,%d,%d%d],"
+              "dst=[%d,%d,%d,%d]", __FUNCTION__,
+              src_rect->l,src_rect->t,src_rect->r,src_rect->b,
+              dst_rect->l,dst_rect->t,dst_rect->r,dst_rect->b);
+        status = -EINVAL;
+        return status;
+    }
+
+    struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
+    struct copybit_rect_t src_bounds;
+    struct copybit_rect_t dst_bounds;
+    struct copybit_rect_t clip;
+    int i = 0;
+    void *src_base = src->base;
+    void *dst_base = dst->base;
+    int bpp = get_bpp(src->format);
+    int src_stride = (src->w + src->horiz_padding) * bpp;
+    int dst_stride = (dst->w + dst->horiz_padding) * bpp;
+    if (bpp == 0) {
+        ALOGE("%s, Invalid bpp=0", __FUNCTION__);
+        status = -EINVAL;
+        return status;
+    }
+    if (src_base == NULL) {
+        if (src->handle == NULL) {
+            ALOGE("%s, Invalid src base and handle", __FUNCTION__);
+            status = -EINVAL;
+            return status;
+        } else {
+            private_handle_t* src_hnd = (private_handle_t*)src->handle;
+            src_base = (void *)src_hnd->base;
+        }
+    }
+    if (dst_base == NULL) {
+        if (dst->handle == NULL) {
+            ALOGE("%s, Invalid dst base and handle", __FUNCTION__);
+            status = -EINVAL;
+            return status;
+        } else {
+            private_handle_t* dst_hnd = (private_handle_t*)dst->handle;
+            dst_base = (void *)dst_hnd->base;
+        }
+    }
+    if (ctx->mFlags != COPYBIT_TRANSFORM_FLIP_V) {
+        ALOGE("%s, Invalid operation flag=0x%08x. "
+              "sw_blit only supports V flip",
+              __FUNCTION__, ctx->mFlags);
+        status = -EINVAL;
+        return status;
+    }
+    if (ctx->mBGColor != 0) {
+        memset(dst_base, ctx->mBGColor, dst_stride * dst->h);
+    }
+    while ((status == 0) && region->next(region, &clip)) {
+        intersect(&src_bounds, src_rect, &clip);
+        intersect(&dst_bounds, dst_rect, &clip);
+        /* SW copy */
+        if (ctx->mFlags == COPYBIT_TRANSFORM_FLIP_V) {
+            /* Vertical flip */
+            for (i = clip.t; i < clip.b; i++) {
+                memcpy((void *)((int)dst_base+dst_stride*(i+dst_bounds.t)+
+                                (clip.l+dst_bounds.l)*bpp),
+                       (void *)((int)src_base+(src->h-i-1-src_bounds.t)*
+                                src_stride+(clip.l+src_bounds.l)*bpp),
+                       clip.r*bpp);
+            }
+        } else {
+            /* Normal operation*/
+            for (i = clip.t; i < clip.b; i++) {
+                memcpy((void *)((int)dst_base+dst_stride*(i+dst_bounds.t)+
+                                (clip.l+dst_bounds.l)*bpp),
+                       (void *)((int)src_base+src_stride*(i+src_bounds.t)+
+                                (clip.l+src_bounds.l)*bpp),
+                       clip.r*bpp);
+            }
+        }
+    }
+
+    return status;
 }
 
 static int finish_copybit(struct copybit_device_t *dev)
 {
     // NOP for MDP copybit
+    return 0;
 }
 
 /*****************************************************************************/
@@ -540,6 +676,7 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     ctx->device.set_parameter = set_parameter_copybit;
     ctx->device.get = get;
     ctx->device.blit = blit_copybit;
+    ctx->device.sw_blit = sw_blit_copybit;
     ctx->device.stretch = stretch_copybit;
     ctx->device.finish = finish_copybit;
     ctx->mAlpha = MDP_ALPHA_NOP;

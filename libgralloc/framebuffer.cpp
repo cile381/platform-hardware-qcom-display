@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2010-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,6 +61,29 @@ struct fb_context_t {
 };
 
 
+static uint32_t get_mdp_pixel_format(uint32_t hal_format)
+{
+    uint32_t mdp_format = MDP_RGB_888;
+    switch(hal_format) {
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+            mdp_format = MDP_RGBA_8888;
+            break;
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+            mdp_format = MDP_RGBX_8888;
+            break;
+        case HAL_PIXEL_FORMAT_RGB_888:
+            mdp_format = MDP_RGB_888;
+            break;
+        case HAL_PIXEL_FORMAT_BGR_888:
+            mdp_format = MDP_BGR_888;
+            break;
+        case HAL_PIXEL_FORMAT_RGB_565:
+            mdp_format = MDP_RGB_565;
+            break;
+    }
+    return mdp_format;
+}
+
 static int fb_setSwapInterval(struct framebuffer_device_t* dev,
                               int interval)
 {
@@ -89,12 +112,64 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     private_handle_t *hnd = static_cast<private_handle_t*>
         (const_cast<native_handle_t*>(buffer));
     const size_t offset = hnd->base - m->framebuffer->base;
-    m->info.activate = FB_ACTIVATE_VBL;
-    m->info.yoffset = offset / m->finfo.line_length;
-    if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
-        ALOGE("%s: FBIOPUT_VSCREENINFO for primary failed, str: %s",
+    msmfb_overlay_data overlay_data;
+    memset(&overlay_data, 0x00, sizeof(overlay_data));
+
+    /* Set overlay first*/
+    if(!m->setOverlay) {
+        memset(&(m->overlay), 0x00, sizeof(m->overlay));
+        m->overlay.id          = MSMFB_NEW_REQUEST;
+        m->overlay.src.width   = hnd->width;
+        m->overlay.src.height  = hnd->height;
+        m->overlay.src.format  = get_mdp_pixel_format(hnd->format);
+        m->overlay.src_rect.x  = 0;
+        m->overlay.src_rect.y  = 0;
+        m->overlay.src_rect.w  = m->info.xres;
+        m->overlay.src_rect.h  = m->info.yres;
+        m->overlay.dst_rect.x  = 0;
+        m->overlay.dst_rect.y  = 0;
+        m->overlay.dst_rect.w  = m->info.xres;
+        m->overlay.dst_rect.h  = m->info.yres;
+        m->overlay.z_order     = 3;
+        m->overlay.alpha       = MDP_ALPHA_NOP;
+        m->overlay.transp_mask = MDP_TRANSP_NOP;
+        m->overlay.flags       = 0;
+        m->overlay.is_fg       = 0;
+        if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_SET, &(m->overlay))) {
+            ALOGE("%s: MSMFB_OVERLAY_SET for primary display failed, str=%s",
+                    __FUNCTION__, strerror(errno));
+            return -errno;
+        }
+        m->setOverlay = 1;
+    }
+
+    overlay_data.id = m->overlay.id;
+    overlay_data.data.memory_id = hnd->fd;
+    overlay_data.data.offset = hnd->offset;
+    if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_PLAY, &overlay_data)) {
+        ALOGE("%s: MSMFB_OVERLAY_PLAY for primary failed, str: %s",
                 __FUNCTION__, strerror(errno));
         return -errno;
+    }
+
+    mdp_display_commit commit;
+    memset(&commit, 0x00, sizeof(commit));
+    commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+    commit.wait_for_finish = true;
+    if(ioctl(m->framebuffer->fd, MSMFB_DISPLAY_COMMIT, &commit)) {
+        ALOGE("%s: MSMFB_DISPLAY_COMMIT for primary failed, str: %s",
+                __FUNCTION__, strerror(errno));
+        return -errno;
+    }
+
+    if(!m->automotive) {
+        m->info.activate = FB_ACTIVATE_VBL;
+        m->info.yoffset = offset / m->finfo.line_length;
+        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
+            ALOGE("%s: FBIOPUT_VSCREENINFO for primary failed, str: %s",
+                    __FUNCTION__, strerror(errno));
+            return -errno;
+        }
     }
     return 0;
 }
@@ -181,6 +256,20 @@ int mapFrameBufferLocked(struct private_module_t* module)
             module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
         else
             module->fbFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+    } else if (info.bits_per_pixel == 24) {
+        /*
+         * Explicitly request RGB_888
+         */
+        info.bits_per_pixel = 24;
+        info.red.offset     = 16;
+        info.red.length     = 8;
+        info.green.offset   = 8;
+        info.green.length   = 8;
+        info.blue.offset    = 0;
+        info.blue.length    = 8;
+        info.transp.offset  = 0;
+        info.transp.length  = 0;
+        module->fbFormat    = HAL_PIXEL_FORMAT_RGB_888;
     } else {
         /*
          * Explicitly request 5/6/5
@@ -194,7 +283,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
         info.blue.length    = 5;
         info.transp.offset  = 0;
         info.transp.length  = 0;
-        module->fbFormat = HAL_PIXEL_FORMAT_RGB_565;
+        module->fbFormat    = HAL_PIXEL_FORMAT_RGB_565;
     }
 
     //adreno needs 4k aligned offsets. Max hole size is 4096-1
@@ -338,11 +427,18 @@ static int mapFrameBuffer(struct private_module_t* module)
 {
     int err = -1;
     char property[PROPERTY_VALUE_MAX];
-    if((property_get("debug.gralloc.map_fb_memory", property, NULL) > 0) &&
+    if(property_get("sys.hwc.automotive_mode_enabled", property, "false")
+            && !strcmp(property, "true"))
+        module->automotive = 1;
+
+    if(((property_get("debug.gralloc.map_fb_memory", property, NULL) > 0) &&
        (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
-        (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
+        (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) ||
+       module->automotive) {
         pthread_mutex_lock(&module->lock);
         err = mapFrameBufferLocked(module);
+        if (err != 0)
+            ALOGE("mapFrameBufferLocked error=%d", err);
         pthread_mutex_unlock(&module->lock);
     }
     return err;
@@ -354,6 +450,19 @@ static int fb_close(struct hw_device_t *dev)
 {
     fb_context_t* ctx = (fb_context_t*)dev;
     if (ctx) {
+        private_module_t* m = (private_module_t*)ctx->device.common.module;
+        int overlay_id = m->overlay.id;
+        if(m && m->framebuffer && (m->framebuffer->fd >= 0) &&
+            (overlay_id >= 0)) {
+            if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_UNSET,
+                &(m->overlay.id))) {
+                ALOGE("Error unset overlay");
+            }
+        }
+        if (m && m->framebuffer) {
+            delete m->framebuffer;
+            m->framebuffer = NULL;
+        }
         free(ctx);
     }
     return 0;

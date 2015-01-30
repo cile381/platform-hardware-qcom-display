@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2015 Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -373,6 +373,9 @@ void HwcDebug::getHalPixelFormatStr(int format, char pixFormatStr[])
             break;
         case HAL_PIXEL_FORMAT_RGB_888:
             strcpy(pixFormatStr, "RGB_888");
+            break;
+        case HAL_PIXEL_FORMAT_BGR_888:
+            strcpy(pixFormatStr, "BGR_888");
             break;
         case HAL_PIXEL_FORMAT_RGB_565:
             strcpy(pixFormatStr, "RGB_565");

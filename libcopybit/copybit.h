@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -46,6 +46,7 @@ enum {
     COPYBIT_FORMAT_RGBA_8888    = HAL_PIXEL_FORMAT_RGBA_8888,
     COPYBIT_FORMAT_RGBX_8888    = HAL_PIXEL_FORMAT_RGBX_8888,
     COPYBIT_FORMAT_RGB_888      = HAL_PIXEL_FORMAT_RGB_888,
+    COPYBIT_FORMAT_BGR_888      = HAL_PIXEL_FORMAT_BGR_888,
     COPYBIT_FORMAT_RGB_565      = HAL_PIXEL_FORMAT_RGB_565,
     COPYBIT_FORMAT_BGRA_8888    = HAL_PIXEL_FORMAT_BGRA_8888,
     COPYBIT_FORMAT_YCbCr_422_SP = 0x10,
@@ -75,6 +76,8 @@ enum {
     COPYBIT_FRAMEBUFFER_WIDTH = 7,
     /* FB height */
     COPYBIT_FRAMEBUFFER_HEIGHT = 8,
+    /* Background color in RGB888 format*/
+    COPYBIT_BACKGROUND_COLOR = 9,
 };
 
 /* values for copybit_set_parameter(COPYBIT_TRANSFORM) */
@@ -209,6 +212,25 @@ struct copybit_device_t {
                 struct copybit_image_t const *dst,
                 struct copybit_image_t const *src,
                 struct copybit_region_t const *region);
+
+    /**
+     * Execute the software bit blit copy operation
+     *
+     * @param dev from open
+     * @param dst is the destination image
+     * @param src is the source image
+     * @param dst_rect is the destination rectangle
+     * @param src_rect is the source rectangle
+     * @param region the clip region
+     *
+     * @return 0 if successful
+     */
+    int (*sw_blit)(struct copybit_device_t *dev,
+                   struct copybit_image_t const *dst,
+                   struct copybit_image_t const *src,
+                   struct copybit_rect_t const *dst_rect,
+                   struct copybit_rect_t const *src_rect,
+                   struct copybit_region_t const *region);
 
     /**
      * Execute the stretch bit blit copy operation
