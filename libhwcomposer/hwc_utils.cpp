@@ -2147,6 +2147,11 @@ bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2) {
     return (eqBounds == 3);
 }
 
+void resetROI(hwc_context_t *ctx, const int dpy) {
+    ctx->listStats[dpy].roi = ovutils::Dim(0, 0,
+            (int)ctx->dpyAttr[dpy].xres, (int)ctx->dpyAttr[dpy].yres);
+}
+
 void BwcPM::setBwc(const hwc_rect_t& crop,
             const hwc_rect_t& dst, const int& transform,
             ovutils::eMdpFlags& mdpFlags) {
