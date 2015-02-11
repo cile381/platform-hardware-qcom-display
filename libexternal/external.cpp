@@ -83,32 +83,41 @@ bool ExternalDisplay::closeFrameBuffer()
 SecondaryDisplay::SecondaryDisplay(hwc_context_t* ctx, int dpy):
     ExternalDisplay(ctx, dpy),
     mCurrentMode(-1), mModeCount(0),
-    mUnderscanSupported(false)
+    mUnderscanSupported(false),
+    mNonHdmiDisplay(false)
 {
     if(ctx->mAutomotiveModeOn) {
+        // For automotive mode, always read resolution from VSCREEN INFO
+        mNonHdmiDisplay = true;
+    }
+
+    if(ctx->mAutomotiveModeOn) {
         // Enable HPD for automotive because HDMI is connected by default
-        writeHPDOption(1);
+        if (!mNonHdmiDisplay)
+            writeHPDOption(1);
     } else {
         // disable HPD at start, it will be enabled later
         // when the display powers on
         // This helps for framework reboot or adb shell stop/start
         writeHPDOption(0);
     }
-
-    // for HDMI - retreive all the modes supported by the driver
-    if(mFbNum != -1) {
-        supported_video_mode_lut =
-                        new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
-        // Populate the mode table for supported modes
-        MSM_HDMI_MODES_INIT_TIMINGS(supported_video_mode_lut);
-        MSM_HDMI_MODES_SET_SUPP_TIMINGS(supported_video_mode_lut,
-                                        MSM_HDMI_MODES_ALL);
-        // Update the Source Product Information
-        // Vendor Name
-        setSPDInfo("vendor_name", "ro.product.manufacturer");
-        // Product Description
-        setSPDInfo("product_description", "ro.product.name");
+    if (!mNonHdmiDisplay) {
+        // for HDMI - retreive all the modes supported by the driver
+        if(mFbNum != -1) {
+            supported_video_mode_lut =
+                            new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
+            // Populate the mode table for supported modes
+            MSM_HDMI_MODES_INIT_TIMINGS(supported_video_mode_lut);
+            MSM_HDMI_MODES_SET_SUPP_TIMINGS(supported_video_mode_lut,
+                                            MSM_HDMI_MODES_ALL);
+            // Update the Source Product Information
+            // Vendor Name
+            setSPDInfo("vendor_name", "ro.product.manufacturer");
+            // Product Description
+            setSPDInfo("product_description", "ro.product.name");
+        }
     }
+
 }
 
 SecondaryDisplay::~SecondaryDisplay()
@@ -127,7 +136,7 @@ int SecondaryDisplay::configure() {
         return -1;
     }
 
-    if(mHwcContext->mAutomotiveModeOn) {
+    if(mNonHdmiDisplay) {
         // Get the fb_var_screeninfo and initialize mVInfo of tertiary display
         struct fb_var_screeninfo info;
         int ret = 0;
@@ -166,7 +175,7 @@ int SecondaryDisplay::configure() {
 
 void SecondaryDisplay::getAttributes(int& width, int& height) {
     if(mHwcContext) {
-        if(mHwcContext->mAutomotiveModeOn) {
+        if(mNonHdmiDisplay) {
             /* derive the width and height values from fb_var_screeninfo */
             width = mVInfo.xres;
             height = mVInfo.yres;
@@ -221,8 +230,12 @@ void SecondaryDisplay::setSPDInfo(const char* node, const char* property) {
 }
 
 void SecondaryDisplay::setHPD(uint32_t startEnd) {
-    ALOGD_IF(DEBUG,"HPD enabled=%d", startEnd);
-    writeHPDOption(startEnd);
+    if (!mNonHdmiDisplay) {
+        ALOGD_IF(DEBUG,"HPD enabled=%d", startEnd);
+        writeHPDOption(startEnd);
+    } else {
+        ALOGD_IF(DEBUG,"Not a HDMI display");
+    }
 }
 
 void SecondaryDisplay::setActionSafeDimension(int w, int h) {
@@ -411,49 +424,55 @@ bool SecondaryDisplay::readResolution()
 }
 
 bool SecondaryDisplay::waitForConnectEvent() {
-    // Open a sysfs node to receive the timeout notification from driver.
-    char sysFsExtConnectionPath[MAX_SYSFS_FILE_PATH];
-    snprintf(sysFsExtConnectionPath , sizeof(sysFsExtConnectionPath),
-                 "/sys/devices/virtual/graphics/fb%d/connected", mFbNum);
-    int fd = open(sysFsExtConnectionPath, O_RDONLY);
-    if (fd < 0) {
-        ALOGE ("%s:not able to open %s node %s",
-                __FUNCTION__, sysFsExtConnectionPath, strerror(errno));
-        return false;
-    }
-    struct pollfd pFd;
-    pFd.fd = fd;
-    if (pFd.fd >= 0)
-        pFd.events = POLLPRI | POLLERR;
-    do {
-        // Poll for an HDMI connect event from driver
-        int err = poll(&pFd, 1, 1000);
-        if(err > 0) {
-            if (pFd.revents & POLLPRI) {
-                char status[64];
-                // Consume the node by reading it
-                ssize_t len = pread(pFd.fd, status, 64, 0);
-                if (UNLIKELY(len < 0)) {
-                    // If the read was just interrupted - it is not a
-                    // fatal error. Just continue in this case
-                    ALOGE ("%s: Unable to read connect event for secondary: %s",
-                            __FUNCTION__, strerror(errno));
-                    continue;
-                }
-                // extract connection status
-                if (!strncmp(status, "1", strlen("1"))) {
-                    close(fd);
-                    return true;
-                } else {
-                    close(fd);
-                    return false;
-                }
-            }
-        }else {
-            close(fd);
+    if (!mNonHdmiDisplay) {
+        // Open a sysfs node to receive the timeout notification from driver.
+        char sysFsExtConnectionPath[MAX_SYSFS_FILE_PATH];
+        snprintf(sysFsExtConnectionPath , sizeof(sysFsExtConnectionPath),
+                     "/sys/devices/virtual/graphics/fb%d/connected", mFbNum);
+        int fd = open(sysFsExtConnectionPath, O_RDONLY);
+        if (fd < 0) {
+            ALOGE ("%s:not able to open %s node %s",
+                    __FUNCTION__, sysFsExtConnectionPath, strerror(errno));
             return false;
         }
-    }while(true);
+        struct pollfd pFd;
+        pFd.fd = fd;
+        if (pFd.fd >= 0)
+            pFd.events = POLLPRI | POLLERR;
+        do {
+            // Poll for an HDMI connect event from driver
+            int err = poll(&pFd, 1, 1000);
+            if(err > 0) {
+                if (pFd.revents & POLLPRI) {
+                    char status[64];
+                    // Consume the node by reading it
+                    ssize_t len = pread(pFd.fd, status, 64, 0);
+                    if (UNLIKELY(len < 0)) {
+                        // If the read was just interrupted - it is not a
+                        // fatal error. Just continue in this case
+                        ALOGE ("%s: Unable to read connect event for secondary: %s",
+                                __FUNCTION__, strerror(errno));
+                        continue;
+                    }
+                    // extract connection status
+                    if (!strncmp(status, "1", strlen("1"))) {
+                        close(fd);
+                        return true;
+                    } else {
+                        close(fd);
+                        return false;
+                    }
+                }
+            }else {
+                close(fd);
+                return false;
+            }
+        }while(true);
+    } else {
+        // Panel is always connected if not a hdmi display
+        return true;
+    }
+
 }
 
 // clears the vinfo, edid, best modes
@@ -667,13 +686,11 @@ void SecondaryDisplay::setResolution(int ID)
 }
 
 void SecondaryDisplay::setAttributes() {
-
     int width = 0, height = 0, fps = 60;
     getAttributes(width, height);
-    ALOGD("Secondary setting xres = %d, yres = %d", width, height);
-
+    ALOGD("SecondaryDisplay setting xres = %d, yres = %d", width, height);
     if(mHwcContext) {
-        if(mHwcContext->mAutomotiveModeOn) {
+        if(mNonHdmiDisplay) {
             // Always set dpyAttr res to mVInfo res
             mHwcContext->dpyAttr[mDpy].xres = width;
             mHwcContext->dpyAttr[mDpy].yres = height;
@@ -799,7 +816,10 @@ void SecondaryDisplay::getAttrForMode(int& width, int& height, int& fps) {
             fps = 60;
             break;
         default:
-            ALOGE("missing mode details.. check..:mode:%d", mCurrentMode);
+            width = 0;
+            height = 0;
+            fps = 0;
+            ALOGE("%s: missing mode details.. check..:mode:%d", __FUNCTION__, mCurrentMode);
             break;
     }
 }
