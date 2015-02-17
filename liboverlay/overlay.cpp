@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+* Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -333,13 +333,16 @@ int Overlay::initOverlay() {
                 for (int j = 0; j < req.cnt; j++) {
                     ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
                             minfo->z_order);
-                    // clear any pipe connected to mixer including base pipe.
-                    int index = minfo->pndx;
-                    ALOGD("Unset overlay with index: %d at mixer %d", index, i);
-                    if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
-                        ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
-                        close(fd);
-                        return -1;
+                    /* Dont clear base pipe, which z_order is -1*/
+                    if (minfo->z_order >= 0) {
+                        int index = minfo->pndx;
+                        ALOGD("Unset overlay with index: %d at mixer %d",
+                                index, i);
+                        if(ioctl(fd, MSMFB_OVERLAY_UNSET, &index) == -1) {
+                            ALOGE("ERROR: MSMFB_OVERLAY_UNSET failed");
+                            close(fd);
+                            return -1;
+                        }
                     }
                     minfo++;
                 }

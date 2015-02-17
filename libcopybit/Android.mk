@@ -41,4 +41,9 @@ else
             include $(BUILD_SHARED_LIBRARY)
         endif
     endif
+    ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
+            LOCAL_CFLAGS += -DCOPYBIT_MSM8960=1
+            LOCAL_SRC_FILES := software_converter.cpp copybit.cpp
+            include $(BUILD_SHARED_LIBRARY)
+    endif
 endif

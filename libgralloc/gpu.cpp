@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -296,6 +296,9 @@ int gpu_context_t::alloc_impl(int w, int h, int format, int usage,
        (!strncmp(property, "1", PROPERTY_VALUE_MAX ) ||
         (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) {
         useFbMem = true;
+        if(property_get("sys.hwc.automotive_mode_enabled", property, "false")
+                && !strcmp(property, "true"))
+            useFbMem = false;
     }
 
     int err = 0;

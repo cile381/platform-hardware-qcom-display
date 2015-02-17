@@ -96,6 +96,8 @@ int getMdpFormat(int format) {
             return MDP_RGBX_8888;
         case HAL_PIXEL_FORMAT_RGB_888:
             return MDP_RGB_888;
+        case HAL_PIXEL_FORMAT_BGR_888:
+            return MDP_BGR_888;
         case HAL_PIXEL_FORMAT_RGB_565:
             return MDP_RGB_565;
         case HAL_PIXEL_FORMAT_BGRA_8888:
@@ -152,6 +154,8 @@ int getHALFormat(int mdpFormat) {
             return HAL_PIXEL_FORMAT_RGBX_8888;
         case MDP_RGB_888:
             return HAL_PIXEL_FORMAT_RGB_888;
+        case MDP_BGR_888:
+            return HAL_PIXEL_FORMAT_BGR_888;
         case MDP_RGB_565:
             return HAL_PIXEL_FORMAT_RGB_565;
         case MDP_BGRA_8888:
