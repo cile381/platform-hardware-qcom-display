@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -126,20 +126,38 @@ int SecondaryDisplay::configure() {
         ALOGE("%s: Failed to open FB: %d", __FUNCTION__, mFbNum);
         return -1;
     }
-    readCEUnderscanInfo();
-    readResolution();
-    // TODO: Move this to activate
-    /* Used for changing the resolution
-     * getUserMode will get the preferred
-     * mode set thru adb shell */
-    int mode = getUserMode();
-    if (mode == -1) {
-        //Get the best mode and set
-        mode = getBestMode();
-    }
-    setResolution(mode);
-    setAttributes();
-    if(!mHwcContext->mAutomotiveModeOn) {
+
+    if(mHwcContext->mAutomotiveModeOn) {
+        // Get the fb_var_screeninfo and initialize mVInfo of tertiary display
+        struct fb_var_screeninfo info;
+        int ret = 0;
+        ret = ioctl(mFd, FBIOGET_VSCREENINFO, &mVInfo);
+        if(ret < 0) {
+            ALOGE("In %s: FBIOGET_VSCREENINFO failed Err Str = %s", __FUNCTION__,
+                                                                strerror(errno));
+        }
+        ALOGI("%s: GET Info<ID=%d %dx%d (%d,%d,%d),"
+                "(%d,%d,%d) %dMHz>", __FUNCTION__,
+                mVInfo.reserved[3], mVInfo.xres, mVInfo.yres,
+                mVInfo.right_margin, mVInfo.hsync_len, mVInfo.left_margin,
+                mVInfo.lower_margin, mVInfo.vsync_len, mVInfo.upper_margin,
+                mVInfo.pixclock/1000/1000);
+        // For secondary display, set the attributes
+        setAttributes();
+    } else {
+        readCEUnderscanInfo();
+        readResolution();
+        // TODO: Move this to activate
+        /* Used for changing the resolution
+         * getUserMode will get the preferred
+         * mode set thru adb shell */
+        int mode = getUserMode();
+        if (mode == -1) {
+            //Get the best mode and set
+            mode = getBestMode();
+        }
+        setResolution(mode);
+        setAttributes();
         // set system property
         property_set("hw.hdmiON", "1");
     }
@@ -147,8 +165,16 @@ int SecondaryDisplay::configure() {
 }
 
 void SecondaryDisplay::getAttributes(int& width, int& height) {
-    int fps = 0;
-    getAttrForMode(width, height, fps);
+    if(mHwcContext) {
+        if(mHwcContext->mAutomotiveModeOn) {
+            /* derive the width and height values from fb_var_screeninfo */
+            width = mVInfo.xres;
+            height = mVInfo.yres;
+        } else {
+            int fps = 0;
+            getAttrForMode(width, height, fps);
+        }
+    }
 }
 
 int SecondaryDisplay::teardown() {
@@ -641,39 +667,50 @@ void SecondaryDisplay::setResolution(int ID)
 }
 
 void SecondaryDisplay::setAttributes() {
-    int width = 0, height = 0, fps = 0;
-    getAttrForMode(width, height, fps);
-    ALOGD("SecondaryDisplay setting xres = %d, yres = %d", width, height);
+
+    int width = 0, height = 0, fps = 60;
+    getAttributes(width, height);
+    ALOGD("Secondary setting xres = %d, yres = %d", width, height);
+
     if(mHwcContext) {
-        // Always set dpyAttr res to mVInfo res
-        mHwcContext->dpyAttr[mDpy].xres = width;
-        mHwcContext->dpyAttr[mDpy].yres = height;
-        mHwcContext->dpyAttr[mDpy].mDownScaleMode = false;
-        int priW = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
-        int priH = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
-        // if primary resolution is more than HDMI resolution and
-        // downscale_factor is zero(which corresponds to downscale
-        // to > 50% of orig),then configure dpy attr to primary
-        // resolution and set downscale mode.
-        if(((priW * priH) > (width * height)) &&
-            (priW <= MAX_DISPLAY_DIM )) {
-            int downscale_factor =
-                overlay::utils::getDownscaleFactor(priW, priH, width, height);
-            if(!downscale_factor) {
-                mHwcContext->dpyAttr[mDpy].xres = priW;
-                mHwcContext->dpyAttr[mDpy].yres = priH;
-                // HDMI is always in landscape, so always assign the higher
-                // dimension to hdmi's xres
-                if(priH > priW) {
-                    mHwcContext->dpyAttr[mDpy].xres = priH;
-                    mHwcContext->dpyAttr[mDpy].yres = priW;
+        if(mHwcContext->mAutomotiveModeOn) {
+            // Always set dpyAttr res to mVInfo res
+            mHwcContext->dpyAttr[mDpy].xres = width;
+            mHwcContext->dpyAttr[mDpy].yres = height;
+            mHwcContext->dpyAttr[mDpy].mDownScaleMode = false;
+            mHwcContext->dpyAttr[mDpy].vsync_period =
+                    1000000000l / fps;
+        } else {
+            // Always set dpyAttr res to mVInfo res
+            mHwcContext->dpyAttr[mDpy].xres = width;
+            mHwcContext->dpyAttr[mDpy].yres = height;
+            mHwcContext->dpyAttr[mDpy].mDownScaleMode = false;
+            int priW = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].xres;
+            int priH = mHwcContext->dpyAttr[HWC_DISPLAY_PRIMARY].yres;
+            // if primary resolution is more than HDMI resolution and
+            // downscale_factor is zero(which corresponds to downscale
+            // to > 50% of orig),then configure dpy attr to primary
+            // resolution and set downscale mode.
+            if(((priW * priH) > (width * height)) &&
+                (priW <= MAX_DISPLAY_DIM )) {
+                int downscale_factor =
+                    overlay::utils::getDownscaleFactor(priW, priH, width, height);
+                if(!downscale_factor) {
+                    mHwcContext->dpyAttr[mDpy].xres = priW;
+                    mHwcContext->dpyAttr[mDpy].yres = priH;
+                    // HDMI is always in landscape, so always assign the higher
+                    // dimension to hdmi's xres
+                    if(priH > priW) {
+                        mHwcContext->dpyAttr[mDpy].xres = priH;
+                        mHwcContext->dpyAttr[mDpy].yres = priW;
+                    }
+                    // Set Secondary Display MDP Downscale mode indicator
+                    mHwcContext->dpyAttr[mDpy].mDownScaleMode =true;
                 }
-                // Set Secondary Display MDP Downscale mode indicator
-                mHwcContext->dpyAttr[mDpy].mDownScaleMode =true;
             }
+            mHwcContext->dpyAttr[mDpy].vsync_period =
+                    1000000000l / fps;
         }
-        mHwcContext->dpyAttr[mDpy].vsync_period =
-                1000000000l / fps;
     }
 }
 
