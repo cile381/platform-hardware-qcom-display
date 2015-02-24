@@ -274,11 +274,12 @@ int initContext(hwc_context_t *ctx)
     //independent process as well.
     QService::init();
     sp<IQClient> client = new QClient(ctx);
-    android::sp<qService::IQService> qservice_sp = interface_cast<IQService>(
+    sp<IQService> iqs = interface_cast<IQService>(
             defaultServiceManager()->getService(
             String16("display.qservice")));
-    if (qservice_sp.get()) {
-      qservice_sp->connect(client);
+    if (iqs.get()) {
+      iqs->connect(client);
+      ctx->mQService = reinterpret_cast<QService* >(iqs.get());
     } else {
       ALOGE("%s: Failed to acquire service pointer", __FUNCTION__);
       return error;
@@ -396,21 +397,6 @@ int initContext(hwc_context_t *ctx)
     ctx->vstate.fakevsync = false;
     ctx->mExtOrientation = 0;
     ctx->numActiveDisplays = 1;
-
-    //Right now hwc starts the service but anybody could do it, or it could be
-    //independent process as well.
-    QService::init();
-    sp<IQClient> client = new QClient(ctx);
-    sp<IQService> iqs = interface_cast<IQService>(
-            defaultServiceManager()->getService(
-            String16("display.qservice")));
-    if (iqs.get()) {
-      iqs->connect(client);
-      ctx->mQService = reinterpret_cast<QService* >(iqs.get());
-    } else {
-      ALOGE("%s: Failed to acquire service pointer", __FUNCTION__);
-      return;
-    }
 
     // Initialize device orientation to its default orientation
     ctx->deviceOrientation = 0;
