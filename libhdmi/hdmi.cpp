@@ -151,6 +151,7 @@ HDMIDisplay::HDMIDisplay():mFd(-1),
     mUnderscanSupported(false)
 {
     memset(&mVInfo, 0, sizeof(mVInfo));
+    mFbNum = qdutils::getHDMINode();
 
     mDisplayId = HWC_DISPLAY_EXTERNAL;
     // Update the display if HDMI is connected as primary
@@ -158,7 +159,6 @@ HDMIDisplay::HDMIDisplay():mFd(-1),
         mDisplayId = HWC_DISPLAY_PRIMARY;
     }
 
-    mFbNum = overlay::Overlay::getInstance()->getFbForDpy(mDisplayId);
     // disable HPD at start, it will be enabled later
     // when the display powers on
     // This helps for framework reboot or adb shell stop/start
@@ -759,7 +759,7 @@ bool HDMIDisplay::isS3DModeSupported(int s3dMode) {
     if(s3dMode == HDMI_S3D_NONE)
         return true;
 
-    char s3dEdidStr[128] = {'\0'};
+    char s3dEdidStr[PAGE_SIZE] = {'\0'};
 
     const char *s3dModeString = getS3DStringFromMode(s3dMode);
 
@@ -802,7 +802,6 @@ bool HDMIDisplay::isS3DModeSupported(int s3dMode) {
 
         }
     } else {
-        int mFbNum = qdutils::getHDMINode();
         ALOGI("%s: /sys/class/graphics/fb%d/edid_3d_modes could not be opened : %s",
                 __FUNCTION__, mFbNum, strerror(errno));
     }
