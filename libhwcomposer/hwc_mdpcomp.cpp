@@ -932,7 +932,7 @@ bool MDPComp::cacheBasedComp(hwc_context_t *ctx,
         hwc_display_contents_1_t* list) {
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     mCurrentFrame.reset(numAppLayers);
-    updateLayerCache(ctx, list);
+    updateLayerCache(ctx, list, mCurrentFrame);
 
     //If an MDP marked layer is unsupported cannot do partial MDP Comp
     for(int i = 0; i < numAppLayers; i++) {
@@ -947,7 +947,7 @@ bool MDPComp::cacheBasedComp(hwc_context_t *ctx,
         }
     }
 
-    updateYUV(ctx, list, false /*secure only*/);
+    updateYUV(ctx, list, false /*secure only*/, mCurrentFrame);
     bool ret = markLayersForCaching(ctx, list); //sets up fbZ also
     if(!ret) {
         ALOGD_IF(isDebug(),"%s: batching failed, dpy %d",__FUNCTION__, mDpy);
@@ -1084,7 +1084,7 @@ bool MDPComp::videoOnlyComp(hwc_context_t *ctx,
 
     mCurrentFrame.reset(numAppLayers);
     mCurrentFrame.fbCount -= mCurrentFrame.dropCount;
-    updateYUV(ctx, list, secureOnly);
+    updateYUV(ctx, list, secureOnly, mCurrentFrame);
     int mdpCount = mCurrentFrame.mdpCount;
 
     if(!isYuvPresent(ctx, mDpy) or (mdpCount == 0)) {
@@ -1313,56 +1313,53 @@ bool  MDPComp::markLayersForCaching(hwc_context_t* ctx,
 }
 
 void MDPComp::updateLayerCache(hwc_context_t* ctx,
-        hwc_display_contents_1_t* list) {
+        hwc_display_contents_1_t* list, FrameInfo& frame) {
     int numAppLayers = ctx->listStats[mDpy].numAppLayers;
     int fbCount = 0;
 
     for(int i = 0; i < numAppLayers; i++) {
         if (mCachedFrame.hnd[i] == list->hwLayers[i].handle) {
-            if(!mCurrentFrame.drop[i])
+            if(!frame.drop[i])
                 fbCount++;
-            mCurrentFrame.isFBComposed[i] = true;
+            frame.isFBComposed[i] = true;
         } else {
-            mCurrentFrame.isFBComposed[i] = false;
+            frame.isFBComposed[i] = false;
         }
     }
 
-    mCurrentFrame.fbCount = fbCount;
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount - mCurrentFrame.fbCount
-                                                    - mCurrentFrame.dropCount;
+    frame.fbCount = fbCount;
+    frame.mdpCount = frame.layerCount - frame.fbCount
+                                            - frame.dropCount;
 
-    ALOGD_IF(isDebug(),"%s: MDP count: %d FB count %d drop count: %d"
-             ,__FUNCTION__, mCurrentFrame.mdpCount, mCurrentFrame.fbCount,
-            mCurrentFrame.dropCount);
+    ALOGD_IF(isDebug(),"%s: MDP count: %d FB count %d drop count: %d",
+            __FUNCTION__, frame.mdpCount, frame.fbCount, frame.dropCount);
 }
 
 void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
-        bool secureOnly) {
+        bool secureOnly, FrameInfo& frame) {
     int nYuvCount = ctx->listStats[mDpy].yuvCount;
     for(int index = 0;index < nYuvCount; index++){
         int nYuvIndex = ctx->listStats[mDpy].yuvIndices[index];
         hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];
 
         if(!isYUVDoable(ctx, layer)) {
-            if(!mCurrentFrame.isFBComposed[nYuvIndex]) {
-                mCurrentFrame.isFBComposed[nYuvIndex] = true;
-                mCurrentFrame.fbCount++;
+            if(!frame.isFBComposed[nYuvIndex]) {
+                frame.isFBComposed[nYuvIndex] = true;
+                frame.fbCount++;
             }
         } else {
-            if(mCurrentFrame.isFBComposed[nYuvIndex]) {
+            if(frame.isFBComposed[nYuvIndex]) {
                 private_handle_t *hnd = (private_handle_t *)layer->handle;
                 if(!secureOnly || isSecureBuffer(hnd)) {
-                    mCurrentFrame.isFBComposed[nYuvIndex] = false;
-                    mCurrentFrame.fbCount--;
+                    frame.isFBComposed[nYuvIndex] = false;
+                    frame.fbCount--;
                 }
             }
         }
     }
 
-    mCurrentFrame.mdpCount = mCurrentFrame.layerCount -
-            mCurrentFrame.fbCount - mCurrentFrame.dropCount;
-    ALOGD_IF(isDebug(),"%s: fb count: %d",__FUNCTION__,
-             mCurrentFrame.fbCount);
+    frame.mdpCount = frame.layerCount - frame.fbCount - frame.dropCount;
+    ALOGD_IF(isDebug(),"%s: fb count: %d",__FUNCTION__, frame.fbCount);
 }
 
 hwc_rect_t MDPComp::getUpdatingFBRect(hwc_display_contents_1_t* list){
@@ -1508,6 +1505,32 @@ bool MDPComp::hwLimitationsCheck(hwc_context_t* ctx,
     return true;
 }
 
+void MDPComp::setDynRefreshRate(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
+    //For primary display, set the dynamic refreshrate
+    if(!mDpy && qdutils::MDPVersion::getInstance().isDynFpsSupported()) {
+        FrameInfo frame;
+        frame.reset(mCurrentFrame.layerCount);
+        memset(&frame.drop, 0, sizeof(frame.drop));
+        frame.dropCount = 0;
+        ALOGD_IF(isDebug(), "%s: Update Cache and YUVInfo for Dyn Refresh Rate",
+                 __FUNCTION__);
+        updateLayerCache(ctx, list, frame);
+        updateYUV(ctx, list, false /*secure only*/, frame);
+        uint32_t refreshRate = ctx->dpyAttr[mDpy].refreshRate;
+        MDPVersion& mdpHw = MDPVersion::getInstance();
+        if(sIdleFallBack) {
+            //Set minimum panel refresh rate during idle timeout
+            refreshRate = mdpHw.getMinFpsSupported();
+        } else if((ctx->listStats[mDpy].yuvCount == frame.mdpCount) ||
+                                (frame.layerCount == 1)) {
+            //Set the new fresh rate, if there is only one updating YUV layer
+            //or there is one single RGB layer with this request
+            refreshRate = ctx->listStats[mDpy].refreshRateRequest;
+        }
+        setRefreshRate(ctx, mDpy, refreshRate);
+    }
+}
+
 int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     int ret = 0;
 
@@ -1523,18 +1546,21 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(!mDpy)
         memset(&(ctx->mPtorInfo), 0, sizeof(ctx->mPtorInfo));
 
+    //reset old data
+    mCurrentFrame.reset(numLayers);
+    memset(&mCurrentFrame.drop, 0, sizeof(mCurrentFrame.drop));
+    mCurrentFrame.dropCount = 0;
+
     //Do not cache the information for next draw cycle.
     if(numLayers > MAX_NUM_APP_LAYERS or (!numLayers)) {
         ALOGI("%s: Unsupported layer count for mdp composition",
                 __FUNCTION__);
         mCachedFrame.reset();
+#ifdef DYNAMIC_FPS
+        setDynRefreshRate(ctx, list);
+#endif
         return -1;
     }
-
-    //reset old data
-    mCurrentFrame.reset(numLayers);
-    memset(&mCurrentFrame.drop, 0, sizeof(mCurrentFrame.drop));
-    mCurrentFrame.dropCount = 0;
 
     // Detect the start of animation and fall back to GPU only once to cache
     // all the layers in FB and display FB content untill animation completes.
@@ -1546,6 +1572,9 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         }
         setMDPCompLayerFlags(ctx, list);
         mCachedFrame.updateCounts(mCurrentFrame);
+#ifdef DYNAMIC_FPS
+        setDynRefreshRate(ctx, list);
+#endif
         ret = -1;
         return ret;
     } else {
@@ -1578,6 +1607,10 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         dump(sDump);
         ALOGD("%s",sDump.string());
     }
+
+#ifdef DYNAMIC_FPS
+    setDynRefreshRate(ctx, list);
+#endif
 
     mCachedFrame.cacheAll(list);
     mCachedFrame.updateCounts(mCurrentFrame);
