@@ -96,6 +96,7 @@ private:
     int mEDIDModes[64];
     int mModeCount;
     bool mUnderscanSupported;
+    bool mNonHdmiDisplay;
     // Holds all the HDMI modes and timing info supported by driver
     msm_hdmi_mode_timing_info* supported_video_mode_lut;
 };
