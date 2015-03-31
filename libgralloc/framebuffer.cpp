@@ -60,6 +60,29 @@ struct fb_context_t {
     framebuffer_device_t  device;
 };
 
+static struct fb_display_mapping mFbDisplayMapping[] = {
+    { GRALLOC_HARDWARE_FB_PRIMARY,   "PRIMARY" },
+    { GRALLOC_HARDWARE_FB_SECONDARY, "SECONDARY" },
+    { GRALLOC_HARDWARE_FB_TERTIARY,  "TERTIARY" },
+};
+static const int mFbDisplayMappingLen =
+    sizeof(mFbDisplayMapping)/sizeof(struct fb_display_mapping);
+
+#define NUMBER_OF_FB_MAX     (4)
+#define LENGTH_OF_NAME_MAX   64
+#define FB_ATTRIBUTE_DISPLAY_ID_PATH "/sys/class/graphics/fb%u/msm_fb_disp_id"
+#define KPI_LOG_MESSAGE      "fb_post[%s]"
+
+static void place_marker(const char* str)
+{
+    FILE *fp = NULL;
+
+    fp = fopen( "/proc/bootkpi/marker_entry" , "w" );
+    if (fp) {
+        fwrite(str , 1 , strlen(str) , fp );
+        fclose(fp);
+    }
+}
 
 static uint32_t get_mdp_pixel_format(uint32_t hal_format)
 {
@@ -111,9 +134,14 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         reinterpret_cast<private_module_t*>(dev->common.module);
     private_handle_t *hnd = static_cast<private_handle_t*>
         (const_cast<native_handle_t*>(buffer));
-    const size_t offset = hnd->base - m->framebuffer->base;
+    size_t offset = 0;
     msmfb_overlay_data overlay_data;
+    char log_msg[LENGTH_OF_NAME_MAX];
+
     memset(&overlay_data, 0x00, sizeof(overlay_data));
+
+    if (!m->automotive)
+        offset = hnd->base - m->framebuffer->base;
 
     /* Set overlay first*/
     if(!m->setOverlay) {
@@ -160,6 +188,15 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         ALOGE("%s: MSMFB_DISPLAY_COMMIT for primary failed, str: %s",
                 __FUNCTION__, strerror(errno));
         return -errno;
+    } else if(m->automotive) {
+        /* Log KPI message for first fb post */
+        if (!m->logKPI) {
+            memset(log_msg, 0x00, LENGTH_OF_NAME_MAX);
+            snprintf(log_msg, LENGTH_OF_NAME_MAX, KPI_LOG_MESSAGE,
+                     (m->display_id==NULL) ? "NULL" : m->display_id);
+            place_marker(log_msg);
+            m->logKPI = 1;
+        }
     }
 
     if(!m->automotive) {
@@ -182,7 +219,7 @@ static int fb_compositionComplete(struct framebuffer_device_t* dev)
     return 0;
 }
 
-int mapFrameBufferLocked(struct private_module_t* module)
+int mapFrameBufferLocked(struct private_module_t* module, const char* name)
 {
     // already initialized...
     if (module->framebuffer) {
@@ -194,27 +231,73 @@ int mapFrameBufferLocked(struct private_module_t* module)
         0 };
 
     int fd = -1;
-    int i=0;
-    char name[64];
+    int i = 0;
+    char fd_name[LENGTH_OF_NAME_MAX];
     char property[PROPERTY_VALUE_MAX];
+    const char *display_id = NULL;
+    FILE *fp = NULL;
+    char fb_display_id[LENGTH_OF_NAME_MAX];
+    int fb_id = -1;
 
-    while ((fd==-1) && device_template[i]) {
-        snprintf(name, 64, device_template[i], 0);
-        fd = open(name, O_RDWR, 0);
+    for (i = 0; i < mFbDisplayMappingLen; i++) {
+        if (!strcmp(name, mFbDisplayMapping[i].fb_name)) {
+            display_id = mFbDisplayMapping[i].display_id;
+            fb_id = i;
+            break;
+        }
+    }
+
+    if (!display_id) {
+        ALOGE("%s can't find display_id for fb=%s", __func__, name);
+        return -ENOENT;
+    }
+
+    /* Search and match with the new msm_fb_disp_id from the driver*/
+    for (i = 0; i < NUMBER_OF_FB_MAX; i++) {
+        memset(fd_name, 0x00, LENGTH_OF_NAME_MAX);
+        snprintf(fd_name, LENGTH_OF_NAME_MAX, FB_ATTRIBUTE_DISPLAY_ID_PATH, i);
+        fp = fopen(fd_name, "r");
+        if (!fp) {
+            ALOGW("%s can't open display id fb path=%s", __func__, fd_name);
+            /* Try next one */
+            continue;
+        } else {
+            memset(fb_display_id, 0x00, LENGTH_OF_NAME_MAX);
+            fread(fb_display_id, sizeof(char), LENGTH_OF_NAME_MAX, fp);
+            if (!strncmp(display_id, fb_display_id, strlen(display_id))) {
+                fb_id = i;
+                module->display_id = display_id;
+                fclose(fp);
+                break;
+            }
+            fclose(fp);
+        }
+    }
+
+    i = 0;
+    while ((fd < 0) && device_template[i]) {
+        snprintf(fd_name, LENGTH_OF_NAME_MAX, device_template[i], fb_id);
+        fd = open(fd_name, O_RDWR, 0);
         i++;
     }
-    if (fd < 0)
+    if (fd < 0) {
+        ALOGE("%s can't open fb, name=%s", __func__, fd_name);
         return -errno;
+    }
 
     memset(&module->commit, 0, sizeof(struct mdp_display_commit));
 
     struct fb_fix_screeninfo finfo;
-    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
+    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        ALOGE("%s can't get FSCREENINFO for fb name=%s", __func__, fd_name);
         return -errno;
+    }
 
     struct fb_var_screeninfo info;
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1)
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        ALOGE("%s can't get VSCREENINFO for fb name=%s", __func__, fd_name);
         return -errno;
+    }
 
     info.reserved[0] = 0;
     info.reserved[1] = 0;
@@ -321,8 +404,10 @@ int mapFrameBufferLocked(struct private_module_t* module)
               info.yres_virtual, info.yres*2);
     }
 
-    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1)
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &info) == -1) {
+        ALOGE("%s can't get VSCREENINFO for fb name=%s", __func__, fd_name);
         return -errno;
+    }
 
     if (int(info.width) <= 0 || int(info.height) <= 0) {
         // the driver doesn't return that information
@@ -378,11 +463,15 @@ int mapFrameBufferLocked(struct private_module_t* module)
          );
 
 
-    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
+    if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        ALOGE("%s can't get FSCREENINFO for fb name=%s", __func__, fd_name);
         return -errno;
+    }
 
-    if (finfo.smem_len <= 0)
+    if (finfo.smem_len <= 0 && !module->automotive) {
+        ALOGE("%s smem_len is 0 fb name=%s", __func__, fd_name);
         return -errno;
+    }
 
     module->flags = flags;
     module->info = info;
@@ -405,25 +494,27 @@ int mapFrameBufferLocked(struct private_module_t* module)
     size_t fbSize = roundUpToPageSize(finfo.line_length * info.yres)*
                     module->numBuffers;
     module->framebuffer = new private_handle_t(fd, fbSize,
-                                        private_handle_t::PRIV_FLAGS_USES_ION,
-                                        BUFFER_TYPE_UI,
-                                        module->fbFormat, info.xres, info.yres);
-    void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-    if (vaddr == MAP_FAILED) {
-        ALOGE("Error mapping the framebuffer (%s)", strerror(errno));
-        return -errno;
+                                    private_handle_t::PRIV_FLAGS_USES_ION,
+                                    BUFFER_TYPE_UI,
+                                    module->fbFormat, info.xres, info.yres);
+    /* Don't map framebuffer since driver will use overlay APIs.*/
+    if (!module->automotive) {
+        void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+        if (vaddr == MAP_FAILED) {
+            ALOGE("Error mapping the framebuffer (%s)", strerror(errno));
+            return -errno;
+        }
+        module->framebuffer->base = intptr_t(vaddr);
+        memset(vaddr, 0, fbSize);
+        module->currentOffset = 0;
+        //Enable vsync
+        int enable = 1;
+        ioctl(module->framebuffer->fd, MSMFB_OVERLAY_VSYNC_CTRL, &enable);
     }
-    module->framebuffer->base = intptr_t(vaddr);
-    memset(vaddr, 0, fbSize);
-    module->currentOffset = 0;
-    //Enable vsync
-    int enable = 1;
-    ioctl(module->framebuffer->fd, MSMFB_OVERLAY_VSYNC_CTRL,
-             &enable);
     return 0;
 }
 
-static int mapFrameBuffer(struct private_module_t* module)
+static int mapFrameBuffer(struct private_module_t* module, const char* name)
 {
     int err = -1;
     char property[PROPERTY_VALUE_MAX];
@@ -436,9 +527,9 @@ static int mapFrameBuffer(struct private_module_t* module)
         (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) ||
        module->automotive) {
         pthread_mutex_lock(&module->lock);
-        err = mapFrameBufferLocked(module);
+        err = mapFrameBufferLocked(module, name);
         if (err != 0)
-            ALOGE("mapFrameBufferLocked error=%d", err);
+            ALOGE("mapFrameBufferLocked error=%d, name=%s", err, name);
         pthread_mutex_unlock(&module->lock);
     }
     return err;
@@ -472,7 +563,12 @@ int fb_device_open(hw_module_t const* module, const char* name,
                    hw_device_t** device)
 {
     int status = -EINVAL;
-    if (!strcmp(name, GRALLOC_HARDWARE_FB0)) {
+    if (strcmp(name, GRALLOC_HARDWARE_FB_PRIMARY) &&
+        strcmp(name, GRALLOC_HARDWARE_FB_SECONDARY) &&
+        strcmp(name, GRALLOC_HARDWARE_FB_TERTIARY)) {
+        ALOGE("%s not support fb device=%s", __func__, name);
+        status = -ENOENT;
+    } else {
         alloc_device_t* gralloc_device;
         status = gralloc_open(module, &gralloc_device);
         if (status < 0)
@@ -493,7 +589,7 @@ int fb_device_open(hw_module_t const* module, const char* name,
         dev->device.compositionComplete = fb_compositionComplete;
 
         private_module_t* m = (private_module_t*)module;
-        status = mapFrameBuffer(m);
+        status = mapFrameBuffer(m, name);
         if (status >= 0) {
             int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
             const_cast<uint32_t&>(dev->device.flags) = 0;
@@ -512,6 +608,9 @@ int fb_device_open(hw_module_t const* module, const char* name,
             dev->device.setUpdateRect = 0;
 
             *device = &dev->device.common;
+        } else {
+            ALOGE("%s mapFrameBuffer error=%d for fb=%s",
+                    __func__, status, name);
         }
 
         // Close the gralloc module

@@ -143,6 +143,14 @@ bool Overlay::commit(utils::eDest dest) {
     if(mPipeBook[index].mPipe->commit()) {
         ret = true;
         PipeBook::setUse((int)dest);
+        /* Since Tertiary display goes to DMA_S, which has no scaling
+         * capability, it always use GPU compositin and parameters, such
+         * as format, width, height, etc, are never changed. If other
+         * client, such as framebuffer, opens DMA_S and changes the
+         * parameters, HWC needs to change it back for next commit.
+         * Use forceSet to do this.*/
+        if (mPipeBook[index].mDisplay == DPY_TERTIARY)
+            mPipeBook[index].mPipe->forceSet();
     } else {
         int dpy = mPipeBook[index].mDisplay;
         for(int i = 0; i < PipeBook::NUM_PIPES; i++)
