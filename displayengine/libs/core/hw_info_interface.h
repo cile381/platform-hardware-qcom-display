@@ -22,34 +22,25 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <utils/constants.h>
+#ifndef __HW_INFO_INTERFACE_H__
+#define __HW_INFO_INTERFACE_H__
 
-#include "hw_interface.h"
-#include "hw_framebuffer.h"
+#include <inttypes.h>
+#include <private/hw_info_types.h>
 
 namespace sde {
 
-DisplayError HWInterface::Create(HWInterface **intf, BufferSyncHandler *buffer_sync_handler) {
-  DisplayError error = kErrorNone;
-  HWFrameBuffer *hw_frame_buffer = NULL;
+class HWInfoInterface {
+ public:
+  static DisplayError Create(HWInfoInterface **intf);
+  static DisplayError Destroy(HWInfoInterface *intf);
+  virtual DisplayError GetHWResourceInfo(HWResourceInfo *hw_resource) = 0;
 
-  hw_frame_buffer = new HWFrameBuffer(buffer_sync_handler);
-  error = hw_frame_buffer->Init();
-  if (UNLIKELY(error != kErrorNone)) {
-    delete hw_frame_buffer;
-  } else {
-    *intf = hw_frame_buffer;
-  }
-
-  return error;
-}
-
-DisplayError HWInterface::Destroy(HWInterface *intf) {
-  HWFrameBuffer *hw_frame_buffer = static_cast<HWFrameBuffer *>(intf);
-  hw_frame_buffer->Deinit();
-  delete hw_frame_buffer;
-  return kErrorNone;
-}
+ protected:
+  virtual ~HWInfoInterface() { }
+};
 
 }  // namespace sde
+
+#endif  // __HW_INFO_INTERFACE_H__
 
