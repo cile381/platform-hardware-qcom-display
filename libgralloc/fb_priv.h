@@ -35,6 +35,11 @@ enum {
     PRIV_MAX_SWAP_INTERVAL = 1,
 };
 
+struct fb_display_mapping {
+    const char *fb_name;
+    const char *display_id;
+};
+
 struct private_module_t {
     gralloc_module_t base;
     struct private_handle_t* framebuffer;
@@ -55,6 +60,8 @@ struct private_module_t {
     mdp_overlay overlay;
     uint32_t setOverlay;
     uint32_t automotive;
+    uint32_t logKPI;
+    const char *display_id;
 };
 
 
