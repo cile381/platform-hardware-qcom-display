@@ -59,6 +59,9 @@ public:
     static void setIdleTimeout(const uint32_t& timeout);
     static int setPartialUpdatePref(hwc_context_t *ctx, bool enable);
     static int getPartialUpdatePref(hwc_context_t *ctx);
+    static void enablePartialUpdate(bool enable)
+                                          { sIsPartialUpdateActive = enable; };
+
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
 
