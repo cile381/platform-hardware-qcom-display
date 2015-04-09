@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -432,6 +432,12 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
                 ALOGE("%s: display commit fail for external!", __FUNCTION__);
                 ret = -1;
             }
+        }
+        value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
+        if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, value) < 0 ) {
+            ALOGE("%s: Failed to handle blank event(%d) for display=%d!!",
+                  __FUNCTION__, blank, dpy);
+            return -1;
         }
         ctx->dpyAttr[dpy].isActive = !blank;
         break;
