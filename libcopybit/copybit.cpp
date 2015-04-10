@@ -603,7 +603,7 @@ static int sw_blit_copybit(
             dst_base = (void *)dst_hnd->base;
         }
     }
-    if (ctx->mFlags != COPYBIT_TRANSFORM_FLIP_V) {
+    if (ctx->mFlags != 0 && ctx->mFlags != COPYBIT_TRANSFORM_FLIP_V) {
         ALOGE("%s, Invalid operation flag=0x%08x. "
               "sw_blit only supports V flip",
               __FUNCTION__, ctx->mFlags);
@@ -614,26 +614,31 @@ static int sw_blit_copybit(
         memset(dst_base, ctx->mBGColor, dst_stride * dst->h);
     }
     while ((status == 0) && region->next(region, &clip)) {
-        intersect(&src_bounds, src_rect, &clip);
+        /* clip refers to dst_rect, which means it has to be within bound of
+         * dst_rect */
         intersect(&dst_bounds, dst_rect, &clip);
+        src_bounds.l = clip.l - dst_rect->l + src_rect->l;
+        src_bounds.t = clip.t - dst_rect->t + src_rect->t;
+        src_bounds.r = clip.r - dst_rect->r + src_rect->r;
+        src_bounds.b = clip.b - dst_rect->b + src_rect->b;
         /* SW copy */
         if (ctx->mFlags == COPYBIT_TRANSFORM_FLIP_V) {
             /* Vertical flip */
-            for (i = clip.t; i < clip.b; i++) {
+            for (i = 0; i < (clip.b - clip.t); i++) {
                 memcpy((void *)((int)dst_base+dst_stride*(i+dst_bounds.t)+
-                                (clip.l+dst_bounds.l)*bpp),
-                       (void *)((int)src_base+(src->h-i-1-src_bounds.t)*
-                                src_stride+(clip.l+src_bounds.l)*bpp),
-                       clip.r*bpp);
+                                dst_bounds.l*bpp),
+                       (void *)((int)src_base+(src_bounds.b-i-1)*
+                                src_stride+src_bounds.l*bpp),
+                       (clip.r-clip.l)*bpp);
             }
         } else {
             /* Normal operation*/
-            for (i = clip.t; i < clip.b; i++) {
+            for (i = 0; i < (clip.b - clip.t); i++) {
                 memcpy((void *)((int)dst_base+dst_stride*(i+dst_bounds.t)+
-                                (clip.l+dst_bounds.l)*bpp),
+                                dst_bounds.l*bpp),
                        (void *)((int)src_base+src_stride*(i+src_bounds.t)+
-                                (clip.l+src_bounds.l)*bpp),
-                       clip.r*bpp);
+                                src_bounds.l*bpp),
+                       (clip.r-clip.l)*bpp);
             }
         }
     }
