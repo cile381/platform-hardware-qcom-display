@@ -73,8 +73,8 @@ public:
     };
 
     enum {
-        PREF_PARTIAL_UPDATE,
         PREF_POST_PROCESSING,
+        PREF_PARTIAL_UPDATE,
         ENABLE_PARTIAL_UPDATE,
     };
 
