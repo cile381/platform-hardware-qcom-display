@@ -69,6 +69,7 @@ struct HWResourceInfo {
   uint32_t max_sde_clk;
   float clk_fudge_factor;
   bool has_bwc;
+  bool has_ubwc;
   bool has_decimation;
   bool has_macrotile;
   bool has_rotator_downscale;
@@ -80,22 +81,28 @@ struct HWResourceInfo {
       num_cursor_pipe(0), num_blending_stages(0), num_rotator(0), num_control(0),
       num_mixer_to_disp(0), smp_total(0), smp_size(0), num_smp_per_pipe(0), max_scale_up(1),
       max_scale_down(1), max_bandwidth_low(0), max_bandwidth_high(0), max_mixer_width(2048),
-      max_pipe_bw(0), max_sde_clk(0), clk_fudge_factor(1.0f), has_bwc(false),
+      max_pipe_bw(0), max_sde_clk(0), clk_fudge_factor(1.0f), has_bwc(false), has_ubwc(false),
       has_decimation(false), has_macrotile(false), has_rotator_downscale(false),
       has_non_scalar_rgb(false), is_src_split(false) { }
 
   void Reset() { *this = HWResourceInfo(); }
 };
 
-/*! @brief This enumeration holds the all possible panel types. */
-enum HWPanelType {
-  kNoPanel,
-  kCommandModePanel,
-  kVideoModePanel,
-  kDTvPanel,
-  kWriteBackPanel,
-  kLVDSPanel,
-  kEDPPanel,
+/*! @brief This enumeration holds the possible display modes. */
+enum HWDisplayMode {
+  kModeDefault,
+  kModeVideo,
+  kModeCommand,
+};
+
+/*! @brief This enumeration holds the all possible display port types. */
+enum HWDisplayPort {
+  kPortDefault,
+  kPortDSI,
+  kPortDTv,
+  kPortWriteBack,
+  kPortLVDS,
+  kPortEDP,
 };
 
 /*! @brief This structure describes the split configuration of a display panel. */
@@ -103,12 +110,14 @@ struct HWSplitInfo {
   uint32_t left_split;
   uint32_t right_split;
   bool always_src_split;
+
   HWSplitInfo() : left_split(0), right_split(0), always_src_split(false) { }
 };
 
 /*! @brief This structure describes properties of a display panel. */
 struct HWPanelInfo {
-  HWPanelType type;        //!< Panel type
+  HWDisplayPort port;      //!< Display port
+  HWDisplayMode mode;      //!< Display mode
   bool partial_update;     //!< Partial update feature
   int left_align;          //!< ROI left alignment restriction
   int width_align;         //!< ROI width alignment restriction
@@ -123,8 +132,8 @@ struct HWPanelInfo {
   bool is_primary_panel;   //!< Panel is primary display
   HWSplitInfo split_info;  //!< Panel split configuration
 
-  HWPanelInfo() : type(kNoPanel), partial_update(false), left_align(false), width_align(false),
-    top_align(false), height_align(false), min_roi_width(0), min_roi_height(0),
+  HWPanelInfo() : port(kPortDefault), mode(kModeDefault), partial_update(false), left_align(false),
+    width_align(false), top_align(false), height_align(false), min_roi_width(0), min_roi_height(0),
     needs_roi_merge(false), dynamic_fps(false), min_fps(0), max_fps(0) { }
 };
 
