@@ -40,7 +40,7 @@ class CompManager : public DumpImpl {
                     BufferSyncHandler *buffer_sync_handler_);
   DisplayError Deinit();
   DisplayError RegisterDisplay(DisplayType type, const HWDisplayAttributes &attributes,
-                               Handle *res_mgr_hnd);
+                               const HWPanelInfo &hw_panel_info, Handle *res_mgr_hnd);
   DisplayError UnregisterDisplay(Handle res_mgr_hnd);
   void PrePrepare(Handle display_ctx, HWLayers *hw_layers);
   DisplayError Prepare(Handle display_ctx, HWLayers *hw_layers);
@@ -48,12 +48,15 @@ class CompManager : public DumpImpl {
   DisplayError PostCommit(Handle display_ctx, HWLayers *hw_layers);
   void Purge(Handle display_ctx);
   bool ProcessIdleTimeout(Handle display_ctx);
+  void ProcessThermalEvent(Handle display_ctx, int64_t thermal_level);
   DisplayError SetMaxMixerStages(Handle display_ctx, uint32_t max_mixer_stages);
 
   // DumpImpl method
   virtual void AppendDump(char *buffer, uint32_t length);
 
  private:
+  static const int kMaxThermalLevel = 3;
+
   void PrepareStrategyConstraints(Handle display_ctx, HWLayers *hw_layers);
 
   struct DisplayCompositionContext {
@@ -65,10 +68,12 @@ class CompManager : public DumpImpl {
     uint32_t remaining_strategies;
     bool idle_fallback;
     bool handle_idle_timeout;
+    bool fallback_;
 
     DisplayCompositionContext()
       : display_resource_ctx(NULL), display_type(kPrimary), max_strategies(0),
-        remaining_strategies(0), idle_fallback(false), handle_idle_timeout(true) { }
+        remaining_strategies(0), idle_fallback(false), handle_idle_timeout(true),
+        fallback_(false) { }
   };
 
   Locker locker_;
@@ -81,6 +86,7 @@ class CompManager : public DumpImpl {
   bool safe_mode_;                      // Flag to notify all displays to be in resource crunch
                                         // mode, where strategy manager chooses the best strategy
                                         // that uses optimal number of pipes for each display
+  HWResourceInfo hw_res_info_;
 };
 
 }  // namespace sde

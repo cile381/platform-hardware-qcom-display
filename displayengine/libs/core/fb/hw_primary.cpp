@@ -75,7 +75,8 @@ DisplayError HWPrimary::Init() {
   DisplayError error = kErrorNone;
   char node_path[kMaxStringLength] = {0};
   char data[kMaxStringLength] = {0};
-  const char* event_name[kNumDisplayEvents] = {"vsync_event", "show_blank_event", "idle_notify"};
+  const char* event_name[kNumDisplayEvents] = {"vsync_event", "show_blank_event", "idle_notify",
+                                              "msm_fb_thermal_level"};
 
   error = HWDevice::Init();
   if (error != kErrorNone) {
@@ -190,6 +191,8 @@ DisplayError HWPrimary::GetDisplayAttributes(HWDisplayAttributes *display_attrib
   display_attributes->y_pixels = var_screeninfo.yres;
   display_attributes->v_total = var_screeninfo.yres + var_screeninfo.lower_margin +
       var_screeninfo.upper_margin + var_screeninfo.vsync_len;
+  display_attributes->h_total = var_screeninfo.xres + var_screeninfo.right_margin +
+      var_screeninfo.left_margin + var_screeninfo.hsync_len;
   display_attributes->x_dpi =
       (FLOAT(var_screeninfo.xres) * 25.4f) / FLOAT(var_screeninfo.width);
   display_attributes->y_dpi =
@@ -285,7 +288,8 @@ void* HWPrimary::DisplayEventThreadHandler() {
   typedef void (HWPrimary::*EventHandler)(char*);
   EventHandler event_handler[kNumDisplayEvents] = { &HWPrimary::HandleVSync,
                                                     &HWPrimary::HandleBlank,
-                                                    &HWPrimary::HandleIdleTimeout };
+                                                    &HWPrimary::HandleIdleTimeout,
+                                                    &HWPrimary::HandleThermal };
 
   while (!exit_threads_) {
     int error = poll_(poll_fds_, kNumDisplayEvents, -1);
@@ -328,6 +332,17 @@ void HWPrimary::HandleBlank(char *data) {
 
 void HWPrimary::HandleIdleTimeout(char *data) {
   event_handler_->IdleTimeout();
+}
+
+void HWPrimary::HandleThermal(char *data) {
+  int64_t thermal_level = 0;
+  if (!strncmp(data, "thermal_level=", strlen("thermal_level="))) {
+    thermal_level = strtoull(data + strlen("thermal_level="), NULL, 0);
+  }
+
+  DLOGI("Received thermal notification with thermal level = %d",thermal_level);
+
+  event_handler_->ThermalEvent(thermal_level);
 }
 
 void HWPrimary::SetIdleTimeoutMs(uint32_t timeout_ms) {
