@@ -45,6 +45,7 @@
 #include <hardware/hwcomposer.h>
 
 #define EDID_RAW_DATA_SIZE 640
+#define MAX_SYSFS_FILE_PATH 255
 
 int getEdidRawData(char *buffer);
 
