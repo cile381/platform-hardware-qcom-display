@@ -1,4 +1,5 @@
 # Copyright (C) 2008 The Android Open Source Project
+# Copyright (C) 2012-2015, The Linux Foundation. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +20,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := lights.c
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog libcutils
 LOCAL_CFLAGS := $(common_flags) -DLOG_TAG=\"qdlights\"
 LOCAL_MODULE := lights.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_TAGS := optional
