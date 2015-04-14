@@ -42,7 +42,7 @@ class ResManager : public DumpImpl {
                     BufferSyncHandler *buffer_sync_handler);
   DisplayError Deinit();
   DisplayError RegisterDisplay(DisplayType type, const HWDisplayAttributes &attributes,
-                               Handle *display_ctx);
+                               const HWPanelInfo &hw_panel_info, Handle *display_ctx);
   DisplayError UnregisterDisplay(Handle display_ctx);
   DisplayError Start(Handle display_ctx);
   DisplayError Stop(Handle display_ctx);
@@ -120,6 +120,7 @@ class ResManager : public DumpImpl {
     BufferManager *buffer_manager;
     DisplayType display_type;
     HWBlockType hw_block_id;
+    HWPanelInfo hw_panel_info_;
     uint64_t frame_count;
     int32_t session_id;  // applicable for virtual display sessions only
     uint32_t rotate_count;
@@ -224,6 +225,7 @@ class ResManager : public DumpImpl {
   float bw_claimed_;  // Bandwidth claimed by other display
   float clk_claimed_;  // Clock claimed by other display
   float last_primary_bw_;
+  float max_system_bw_;
   uint32_t virtual_count_;
   struct HWRotator rotators_[kMaxNumRotator];
   BufferAllocator *buffer_allocator_;
