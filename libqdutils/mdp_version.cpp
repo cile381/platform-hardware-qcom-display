@@ -29,6 +29,7 @@
 #include <cutils/log.h>
 #include <linux/msm_mdp.h>
 #include "mdp_version.h"
+#include "qd_utils.h"
 
 #define DEBUG 0
 
@@ -113,7 +114,6 @@ int MDPVersion::tokenizeParams(char *inputParams, const char *delim,
 void  MDPVersion::updatePanelInfo() {
     FILE *displayDeviceFP = NULL;
     FILE *panelInfoNodeFP = NULL;
-    const int MAX_FRAME_BUFFER_NAME_SIZE = 128;
     char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
     char panelInfo[MAX_FRAME_BUFFER_NAME_SIZE];
     const char *strCmdPanel = "mipi dsi cmd panel";
@@ -188,6 +188,7 @@ void  MDPVersion::updatePanelInfo() {
             }
         }
         fclose(panelInfoNodeFP);
+        free(readLine);
     } else {
         ALOGE("Failed to open msm_fb_panel_info node");
     }
