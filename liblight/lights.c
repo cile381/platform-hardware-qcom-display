@@ -336,7 +336,7 @@ qm8626_turn_on_blink_led(unsigned int ledDevice, unsigned int led,
 {
     int fd;
     static int already_warned_open;
-    char program[40];
+    char program[50];
     unsigned int num_484_ms, num_999_ms = 0;
     unsigned int num_15_625_ms = 0;
     unsigned int prog_count = 0;
