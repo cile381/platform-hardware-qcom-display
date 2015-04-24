@@ -35,6 +35,7 @@
 #include <fcntl.h> // open, O_RDWR, etc
 #include <hardware/hardware.h>
 #include <hardware/gralloc.h> // buffer_handle_t
+#include <sys/ioctl.h>
 #include <linux/msm_mdp.h> // flags
 #include <linux/msm_rotator.h>
 #include <stdio.h>
@@ -82,6 +83,7 @@
 #endif
 
 #define FB_DEVICE_TEMPLATE "/dev/graphics/fb%u"
+#define ARB_DEVICE_TEMPLATE "/dev/mdp_arb"
 
 namespace overlay {
 
@@ -759,6 +761,11 @@ public:
     bool open(const char* const dev,
             int flags = O_RDWR);
 
+    /* Open MAP ARB fd using the path given by dev.
+     * If fails, uses FB's fd.*/
+    void bindArb(const char* const dev, uint32_t fbnum,
+            int flags = O_RDWR);
+
     /* populate path */
     void setPath(const char* const dev);
 
@@ -768,11 +775,16 @@ public:
     /* returns underlying fd.*/
     int getFD() const;
 
+    /* return MDP arb fd.*/
+    int getArbFD() const;
+
     /* returns true if fd is valid */
     bool valid() const;
 
     /* like operator= */
     void copy(int fd);
+
+    void copyArb(int fd);
 
     /* dump the state of the instance */
     void dump() const;
@@ -783,6 +795,9 @@ private:
     /* actual os fd */
     int mFD;
 
+    /* MDP arb fd */
+    int mArbFD;
+
     /* path, for debugging */
     char mPath[utils::MAX_PATH_LEN];
 };
@@ -791,12 +806,20 @@ private:
 
 inline bool open(OvFD& fd, uint32_t fbnum, const char* const dev, int flags)
 {
-    char dev_name[64] = {0};
+    const int MAX_OPEN_LEN = 64;
+    char dev_name[MAX_OPEN_LEN] = {0};
+    bool ret = false;
     snprintf(dev_name, sizeof(dev_name), dev, fbnum);
-    return fd.open(dev_name, flags);
+    ret = fd.open(dev_name, flags);
+    if (ret) {
+        memset(dev_name, 0x00, MAX_OPEN_LEN);
+        strlcpy(dev_name, ARB_DEVICE_TEMPLATE, sizeof(dev_name));
+        fd.bindArb(dev_name, fbnum, flags);
+    }
+    return ret;
 }
 
-inline OvFD::OvFD() : mFD (INVAL) {
+inline OvFD::OvFD() : mFD (INVAL), mArbFD (INVAL) {
     mPath[0] = 0;
 }
 
@@ -813,7 +836,30 @@ inline bool OvFD::open(const char* const dev, int flags)
         return false;
     }
     setPath(dev);
+    if (mArbFD == INVAL) {
+        mArbFD = mFD;
+    }
     return true;
+}
+
+inline void OvFD::bindArb(const char* const dev, uint32_t fbnum, int flags)
+{
+    struct mdp_arb_bind bind;
+    int fd = ::open(dev, flags, 0);
+    int rc = 0;
+    if (fd < 0) {
+        ALOGE("Can't open mdp arb device %s err=%d", dev, errno);
+        return;
+    }
+    memset(&bind, 0x00, sizeof(bind));
+    strlcpy(bind.name, "hwc", MDP_ARB_NAME_LEN);
+    bind.fb_index = fbnum;
+    rc = ioctl(fd, MSMFB_ARB_BIND, &bind);
+    if (rc < 0) {
+        ALOGE("Can't bind mdp arb to client hwc, error=%d", rc);
+        return;
+    }
+    mArbFD = fd;
 }
 
 inline void OvFD::setPath(const char* const dev)
@@ -824,6 +870,14 @@ inline void OvFD::setPath(const char* const dev)
 inline bool OvFD::close()
 {
     int ret = 0;
+    if ((mArbFD != INVAL) && (mArbFD != mFD)) {
+        ret = ioctl(mArbFD, MSMFB_ARB_UNBIND, NULL);
+        if (ret < 0) {
+            ALOGE("Can't unbind mdp arb to client hwc, error=%d", ret);
+        }
+        ret = ::close(mArbFD);
+    }
+    mArbFD = INVAL;
     if(valid()) {
         ret = ::close(mFD);
         mFD = INVAL;
@@ -838,14 +892,16 @@ inline bool OvFD::valid() const
 
 inline int OvFD::getFD() const { return mFD; }
 
+inline int OvFD::getArbFD() const { return mArbFD; }
+
 inline void OvFD::copy(int fd) {
     mFD = fd;
 }
 
 inline void OvFD::dump() const
 {
-    ALOGE("== Dump OvFD fd=%d path=%s start/end ==",
-            mFD, mPath);
+    ALOGE("== Dump OvFD fd=%d path=%s arbFd start/end ==",
+            mFD, mPath, mArbFD);
 }
 
 //--------------- class OvFD stuff ends ---------------------

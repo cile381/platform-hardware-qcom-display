@@ -181,7 +181,7 @@ bool MDPComp::setupBasePipe(hwc_context_t *ctx) {
     int fb_stride = ctx->dpyAttr[dpy].stride;
     int fb_width = ctx->dpyAttr[dpy].xres;
     int fb_height = ctx->dpyAttr[dpy].yres;
-    int fb_fd = ctx->dpyAttr[dpy].fd;
+    int arb_fd = ctx->dpyAttr[dpy].arb_fd;
 
     mdp_overlay ovInfo;
     msmfb_overlay_data ovData;
@@ -197,14 +197,14 @@ bool MDPComp::setupBasePipe(hwc_context_t *ctx) {
     ovInfo.dst_rect.h = fb_height;
     ovInfo.id = MSMFB_NEW_REQUEST;
 
-    if (ioctl(fb_fd, MSMFB_OVERLAY_SET, &ovInfo) < 0) {
+    if (ioctl(arb_fd, MSMFB_OVERLAY_SET, &ovInfo) < 0) {
         ALOGE("Failed to call ioctl MSMFB_OVERLAY_SET err=%s",
               strerror(errno));
         return false;
     }
 
     ovData.id = ovInfo.id;
-    if (ioctl(fb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
+    if (ioctl(arb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
         ALOGE("Failed to call ioctl MSMFB_OVERLAY_PLAY err=%s",
               strerror(errno));
         return false;
@@ -891,6 +891,11 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return ret;
     } else {
         ctx->mAnimationState[mDpy] = ANIMATION_STOPPED;
+    }
+
+    //If current display is in optimize mode, don't do MDP comp
+    if(ctx->dpyAttr[mDpy].inOptimizeMode) {
+        return -1;
     }
 
     //Hard conditions, if not met, cannot do MDP comp

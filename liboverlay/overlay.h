@@ -156,6 +156,7 @@ private:
     /* Singleton Instance*/
     static Overlay *sInstance;
     static int sDpyFbMap[DPY_MAX];
+    static bool mAutomotiveModeOn;
 };
 
 inline void Overlay::validate(int index) {

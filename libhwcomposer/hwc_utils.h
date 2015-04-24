@@ -37,6 +37,7 @@
 #define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
 #define MAX_NUM_APP_LAYERS 32
 #define MAX_DISPLAY_DIM 2048
+#define MDP_ARB_DEV_PATH "/dev/mdp_arb"
 
 //Fwrd decls
 struct hwc_context_t;
@@ -77,6 +78,8 @@ struct DisplayAttributes {
     float ydpi;
     bool secure;
     int fd;
+    int fb_idx;
+    int arb_fd;
     bool connected; //Applies only to pluggable disp.
     //Connected does not mean it ready to use.
     //It should be active also. (UNBLANKED)
@@ -91,6 +94,9 @@ struct DisplayAttributes {
     bool mDownScaleMode;
     // Ext dst Rect
     hwc_rect_t mDstRect;
+    // In optimize mode, don't do MDP comp, save MDP overlay
+    // for other applications.
+    bool inOptimizeMode;
 };
 
 struct ListStats {
@@ -118,6 +124,10 @@ struct LayerProp {
 struct VsyncState {
     bool enable;
     bool fakevsync;
+};
+
+struct KPILog {
+    bool MdpArb; //Enable/disable MDP Arbitrator related KPI logs
 };
 
 // LayerProp::flag values
@@ -367,14 +377,26 @@ inline void getLayerResolution(const hwc_layer_1_t* layer,
     height = displayFrame.bottom - displayFrame.top;
 }
 
-static inline int openFb(int dpy) {
+static inline int openMdpArb(void) {
     int fd = -1;
-    const char *devtmpl = "/dev/graphics/fb%u";
-    char name[64] = {0};
-    snprintf(name, 64, devtmpl, dpy);
-    fd = open(name, O_RDWR);
+    const char *devtmpl = MDP_ARB_DEV_PATH;
+    fd = open(devtmpl, O_RDWR);
     return fd;
 }
+
+static inline void place_marker(const char* str) {
+    FILE *fp;
+    fp = fopen( "/proc/bootkpi/marker_entry" , "w" );
+    if (fp) {
+        fwrite(str , 1 , strlen(str) , fp );
+        fclose(fp);
+    }
+}
+
+// Global flag to control HWC debug on/off.
+static bool mHwcDebugLogs;
+
+static bool isDebug() { return mHwcDebugLogs ? true : false; };
 
 template <class T>
 inline void swap(T& a, T& b) {
@@ -461,6 +483,10 @@ struct hwc_context_t {
     bool mPanelResetStatus;
     // flag to indicate automotive mode is on/off
     bool mAutomotiveModeOn;
+    // flag to indicate MDP arb is enabled/disabled
+    bool mMDPArbSuppport;
+    // flag to enable/disable KPI logs
+    qhwc::KPILog mKpiLog;
 };
 
 namespace qhwc {

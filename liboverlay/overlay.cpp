@@ -284,6 +284,14 @@ int Overlay::initOverlay() {
         }
     }
 
+    /*Read the automotive mode on flag from the property.*/
+    mAutomotiveModeOn = false;
+    char value[PROPERTY_VALUE_MAX];
+    if(property_get("sys.hwc.automotive_mode_enabled", value, "false")
+            && !strcmp(value, "true")) {
+        mAutomotiveModeOn = true;
+    }
+
     FILE *displayDeviceFP = NULL;
     const int MAX_FRAME_BUFFER_NAME_SIZE = 128;
     char fbType[MAX_FRAME_BUFFER_NAME_SIZE];
@@ -312,7 +320,7 @@ int Overlay::initOverlay() {
             fclose(displayDeviceFP);
         }
     }
-    if (mdpVersion < qdutils::MDSS_V5) {
+    if (mdpVersion < qdutils::MDSS_V5 && !mAutomotiveModeOn) {
         msmfb_mixer_info_req  req;
         mdp_mixer_info *minfo = NULL;
         char name[64];
@@ -428,6 +436,7 @@ void Overlay::PipeBook::destroy() {
 
 Overlay* Overlay::sInstance = 0;
 int Overlay::sDpyFbMap[DPY_MAX] = {0, -1, -1, -1};
+bool Overlay::mAutomotiveModeOn = false;
 int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
 int Overlay::PipeBook::sLastUsageBitmap = 0;

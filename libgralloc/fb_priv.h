@@ -62,6 +62,7 @@ struct private_module_t {
     uint32_t automotive;
     uint32_t logKPI;
     const char *display_id;
+    int mdpArbFd;
 };
 
 

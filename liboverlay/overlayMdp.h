@@ -357,7 +357,7 @@ inline MdpCtrl3D::MdpCtrl3D() { reset(); }
 inline bool MdpCtrl3D::close() {
     if (m3DOVInfo.is_3d) {
         m3DOVInfo.is_3d = 0;
-        if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
+        if(!mdp_wrapper::set3D(mFd.getArbFD(), m3DOVInfo)) {
             ALOGE("MdpCtrl3D close failed set3D with 0");
             return false;
         }
@@ -383,7 +383,7 @@ inline void MdpCtrl3D::setWh(const utils::Whf& whf) {
 inline bool MdpCtrl3D::useVirtualFB() {
     if(!m3DOVInfo.is_3d) {
         m3DOVInfo.is_3d = 1;
-        if(!mdp_wrapper::set3D(mFd.getFD(), m3DOVInfo)) {
+        if(!mdp_wrapper::set3D(mFd.getArbFD(), m3DOVInfo)) {
             ALOGE("MdpCtrl3D close failed set3D with 0");
             return false;
         }
@@ -427,7 +427,7 @@ inline int MdpData::getFd() const { return mFd.getFD(); }
 inline bool MdpData::play(int fd, uint32_t offset) {
     mOvData.data.memory_id = fd;
     mOvData.data.offset = offset;
-    if(!mdp_wrapper::play(mFd.getFD(), mOvData)){
+    if(!mdp_wrapper::play(mFd.getArbFD(), mOvData)){
         ALOGE("MdpData failed to play");
         dump();
         return false;

@@ -140,7 +140,7 @@ bool MdssRot::queueBuffer(int fd, uint32_t offset) {
         mMem.curr().mCurrOffset =
                 (mMem.curr().mCurrOffset + 1) % mMem.curr().m.numBufs();
 
-        if(!overlay::mdp_wrapper::play(mFd.getFD(), mRotData)) {
+        if(!overlay::mdp_wrapper::play(mFd.getArbFD(), mRotData)) {
             ALOGE("MdssRot play failed!");
             dump();
             return false;
@@ -208,7 +208,7 @@ bool MdssRot::remap(uint32_t numbufs) {
 bool MdssRot::close() {
     bool success = true;
     if(mFd.valid() && (getSessId() != (uint32_t) MSMFB_NEW_REQUEST)) {
-        if(!mdp_wrapper::unsetOverlay(mFd.getFD(), getSessId())) {
+        if(!mdp_wrapper::unsetOverlay(mFd.getArbFD(), getSessId())) {
             ALOGE("MdssRot::close unsetOverlay failed, fd=%d sessId=%d",
                   mFd.getFD(), getSessId());
             success = false;

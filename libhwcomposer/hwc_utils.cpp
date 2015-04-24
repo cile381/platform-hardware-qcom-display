@@ -46,6 +46,55 @@ namespace ovutils = overlay::utils;
 
 #define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
 namespace qhwc {
+#define HWC_FB_DEV_PATH "/dev/graphics/fb%u"
+#define HWC_FB_DISP_ID_SYS_PATH "/sys/class/graphics/fb%d/msm_fb_disp_id"
+#define HWC_MDP_ARB_CLIENT_NAME "hwc"
+#define HWC_MDP_ARB_EVENT_NAME "switch-reverse"
+
+static void openFb(int dpy, int *fd, int *fb_idx) {
+    const int MAX_OPEN_FB_LEN = 64;
+    const char *devtmpl = HWC_FB_DEV_PATH;
+    char name[MAX_OPEN_FB_LEN] = {0};
+    char disp_id_str[MAX_OPEN_FB_LEN] = {0};
+    const char *disp_id_path = HWC_FB_DISP_ID_SYS_PATH;
+    const char *disp_id[] = {
+        "PRIMARY\n",
+        "SECONDARY\n",
+        "TERTIARY\n",
+        "WRITEBACK\n",
+    };
+    int num = sizeof(disp_id)/sizeof(char *);
+    int i = 0;
+    FILE *fp = NULL;
+    if (!fd || !fb_idx) {
+        ALOGE("%s, fd=0x%08x or fb_idx=0x%08x is NULL", __FUNCTION__, (int)fd,
+            (int)fb_idx);
+    }
+    *fd = -1;
+    if (dpy >= num)
+        return;
+    for (i = 0; i < num; i++) {
+        snprintf(name, MAX_OPEN_FB_LEN, disp_id_path, i);
+        fp = fopen(name, "r");
+        if (!fp) {
+            ALOGE("%s can't open %s", __FUNCTION__, name);
+            return;
+        } else {
+            memset(disp_id_str, 0, sizeof(disp_id_str));
+            fread(disp_id_str, sizeof(char), MAX_OPEN_FB_LEN, fp);
+            if (!strcmp(disp_id[dpy], disp_id_str))
+                break;
+        }
+    }
+    if (i == num) {
+        ALOGE("%s can't find correct fb for name=%s", __FUNCTION__, name);
+        return;
+    }
+    *fb_idx = i;
+    snprintf(name, MAX_OPEN_FB_LEN, devtmpl, i);
+    *fd = open(name, O_RDWR);
+    return;
+}
 
 static int openFramebufferDevice(hwc_context_t *ctx)
 {
@@ -57,7 +106,8 @@ static int openFramebufferDevice(hwc_context_t *ctx)
          ctx->dpyAttr[i].fd = -1;
     }
 
-    int fb_fd = openFb(HWC_DISPLAY_PRIMARY);
+    int fb_fd = -1, fb_idx = 0;
+    openFb(HWC_DISPLAY_PRIMARY, &fb_fd, &fb_idx);
     if(fb_fd < 0) {
         ALOGE("%s: Error Opening FB : %s", __FUNCTION__, strerror(errno));
         return -errno;
@@ -107,6 +157,7 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     }
 
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd = fb_fd;
+    ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fb_idx = fb_idx;
     //xres, yres may not be 32 aligned
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].stride = finfo.line_length /(info.xres/8);
     ctx->dpyAttr[HWC_DISPLAY_PRIMARY].xres = info.xres;
@@ -118,17 +169,88 @@ static int openFramebufferDevice(hwc_context_t *ctx)
 
     if(ctx->mAutomotiveModeOn) {
         //Open framebuffer for secondary display
-        fb_fd = openFb(HWC_DISPLAY_SECONDARY);
+        openFb(HWC_DISPLAY_SECONDARY, &fb_fd, &fb_idx);
         if(fb_fd < 0) {
             ALOGE("%s: Error Opening FB for display=%d : %s",
                   __FUNCTION__, HWC_DISPLAY_SECONDARY, strerror(errno));
             return -errno;
         }
         ctx->dpyAttr[HWC_DISPLAY_SECONDARY].fd = fb_fd;
+        ctx->dpyAttr[HWC_DISPLAY_SECONDARY].fb_idx = fb_idx;
 
+        //Open framebuffer for tertiary display
+        openFb(HWC_DISPLAY_TERTIARY, &fb_fd, &fb_idx);
+        if(fb_fd < 0) {
+            ALOGE("%s: Error Opening FB for display=%d : %s",
+                  __FUNCTION__, HWC_DISPLAY_TERTIARY, strerror(errno));
+            return -errno;
+        }
+        ctx->dpyAttr[HWC_DISPLAY_TERTIARY].fd = fb_fd;
+        ctx->dpyAttr[HWC_DISPLAY_TERTIARY].fb_idx = fb_idx;
     }
 
     return 0;
+}
+
+static int registerMdpArbitrator(hwc_context_t *ctx)
+{
+    int i = 0, ret = 0;
+    int fd = -1;
+    mdp_arb_register arbReg;
+    mdp_arb_event event;
+    int upState[2] = {0, 1};
+
+    for (i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i++) {
+        ctx->dpyAttr[i].arb_fd = -1;
+        fd = openMdpArb();
+        if (fd < 0) {
+            ALOGI("MDP arbitrator is disabled! display id=%d", i);
+            ctx->dpyAttr[i].arb_fd = ctx->dpyAttr[i].fd;
+            continue;
+        }
+        if (!ctx->mMDPArbSuppport) {
+            ctx->mMDPArbSuppport = true;
+        }
+        ctx->dpyAttr[i].arb_fd = fd;
+        memset(&arbReg, 0x00, sizeof(arbReg));
+        memset(&event, 0x00, sizeof(event));
+        strlcpy(arbReg.name, HWC_MDP_ARB_CLIENT_NAME, MDP_ARB_NAME_LEN);
+        arbReg.fb_index = ctx->dpyAttr[i].fb_idx;
+        arbReg.num_of_events = 1;
+        strlcpy(event.name, HWC_MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+        event.event.register_state.num_of_down_state_value = 0;
+        event.event.register_state.down_state_value = NULL;
+        event.event.register_state.num_of_up_state_value = 2;
+        event.event.register_state.up_state_value = upState;
+        arbReg.event = &event;
+        arbReg.priority = 1;
+        arbReg.notification_support_mask = (MDP_ARB_NOTIFICATION_DOWN |
+            MDP_ARB_NOTIFICATION_UP | MDP_ARB_NOTIFICATION_OPTIMIZE);
+        ret = ioctl(fd, MSMFB_ARB_REGISTER, &arbReg);
+        if (ret) {
+            ALOGE("%s MDP_ARB_REGISTER fails=%d, display=%d", __FUNCTION__,
+                ret, i);
+            break;
+        }
+    }
+    return ret;
+}
+
+static int deregisterMdpArbitrator(hwc_context_t *ctx)
+{
+    int i = 0, ret = 0;
+
+    for (i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i++) {
+        if (ctx->dpyAttr[i].arb_fd < 0)
+            continue;
+        ret = ioctl(ctx->dpyAttr[i].arb_fd, MSMFB_ARB_DEREGISTER, NULL);
+        if (ret)
+            ALOGE("%s MDP_ARB_DEREGISTER fails=%d, display=%d", __FUNCTION__,
+                ret, i);
+        close(ctx->dpyAttr[i].arb_fd);
+        ctx->dpyAttr[i].arb_fd = -1;
+    }
+    return ret;
 }
 
 void setupObject(hwc_context_t* ctx, int dpy)
@@ -202,6 +324,10 @@ void initContext(hwc_context_t *ctx)
         ALOGE("%s: failed to open framebuffer!!", __FUNCTION__);
     }
 
+    if (registerMdpArbitrator(ctx) < 0) {
+        ALOGE("%s: failed to open MDP arbitrator!!", __FUNCTION__);
+    }
+
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
     ctx->mMDP.hasOverlay = qdutils::MDPVersion::getInstance().hasOverlay();
     ctx->mMDP.panel = qdutils::MDPVersion::getInstance().getPanelType();
@@ -213,10 +339,12 @@ void initContext(hwc_context_t *ctx)
     ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_SECONDARY].connected = false;
     ctx->dpyAttr[HWC_DISPLAY_SECONDARY].mDownScaleMode = false;
+    ctx->dpyAttr[HWC_DISPLAY_SECONDARY].isPause = false;
 
     ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_TERTIARY].connected = false;
     ctx->dpyAttr[HWC_DISPLAY_TERTIARY].mDownScaleMode = false;
+    ctx->dpyAttr[HWC_DISPLAY_TERTIARY].isPause = false;
 
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].isActive = false;
     ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected = false;
@@ -273,7 +401,9 @@ void initContext(hwc_context_t *ctx)
             ALOGE("%s: Error!! Configuraion failed for third display",
                 __FUNCTION__);
         }
-        updateReverseCameraState(ctx);
+        if (!ctx->mMDPArbSuppport) {
+            updateReverseCameraState(ctx);
+        }
     }
     for(int dpy = 0; dpy < HWC_NUM_PHYSICAL_DISPLAY_TYPES; dpy++) {
         setupObject(ctx, dpy);
@@ -300,6 +430,8 @@ void closeContext(hwc_context_t *ctx)
     for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         clearObject(ctx, i);
     }
+
+    deregisterMdpArbitrator(ctx);
 
     if(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd) {
         close(ctx->dpyAttr[HWC_DISPLAY_PRIMARY].fd);
@@ -1343,7 +1475,7 @@ bool setupBasePipe(hwc_context_t *ctx) {
     int fb_stride = ctx->dpyAttr[dpy].stride;
     int fb_width = ctx->dpyAttr[dpy].xres;
     int fb_height = ctx->dpyAttr[dpy].yres;
-    int fb_fd = ctx->dpyAttr[dpy].fd;
+    int arb_fd = ctx->dpyAttr[dpy].arb_fd;
 
     mdp_overlay ovInfo;
     msmfb_overlay_data ovData;
@@ -1359,14 +1491,14 @@ bool setupBasePipe(hwc_context_t *ctx) {
     ovInfo.dst_rect.h = fb_height;
     ovInfo.id = MSMFB_NEW_REQUEST;
 
-    if (ioctl(fb_fd, MSMFB_OVERLAY_SET, &ovInfo) < 0) {
+    if (ioctl(arb_fd, MSMFB_OVERLAY_SET, &ovInfo) < 0) {
         ALOGE("Failed to call ioctl MSMFB_OVERLAY_SET err=%s",
                 strerror(errno));
         return false;
     }
 
     ovData.id = ovInfo.id;
-    if (ioctl(fb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
+    if (ioctl(arb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
         ALOGE("Failed to call ioctl MSMFB_OVERLAY_PLAY err=%s",
                 strerror(errno));
         return false;

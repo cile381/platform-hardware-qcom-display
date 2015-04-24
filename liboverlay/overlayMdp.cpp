@@ -75,7 +75,7 @@ void MdpCtrl::reset() {
 bool MdpCtrl::close() {
     bool result = true;
     if(MSMFB_NEW_REQUEST != static_cast<int>(mOVInfo.id)) {
-        if(!mdp_wrapper::unsetOverlay(mFd.getFD(), mOVInfo.id)) {
+        if(!mdp_wrapper::unsetOverlay(mFd.getArbFD(), mOVInfo.id)) {
             ALOGE("MdpCtrl close error in unset");
             result = false;
         }
@@ -154,7 +154,7 @@ bool MdpCtrl::set() {
 
     if(this->ovChanged() || mForceSet) {
         mForceSet = false;
-        if(!mdp_wrapper::setOverlay(mFd.getFD(), mOVInfo)) {
+        if(!mdp_wrapper::setOverlay(mFd.getArbFD(), mOVInfo)) {
             ALOGE("MdpCtrl failed to setOverlay, restoring last known "
                   "good ov info");
             mdp_wrapper::dump("== Bad OVInfo is: ", mOVInfo);
@@ -171,7 +171,7 @@ bool MdpCtrl::set() {
 bool MdpCtrl::get() {
     mdp_overlay ov;
     ov.id = mOVInfo.id;
-    if (!mdp_wrapper::getOverlay(mFd.getFD(), ov)) {
+    if (!mdp_wrapper::getOverlay(mFd.getArbFD(), ov)) {
         ALOGE("MdpCtrl get failed");
         return false;
     }

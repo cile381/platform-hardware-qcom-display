@@ -162,16 +162,248 @@ static bool getReverseCameraState(const char* strUdata,
     return false;
 }
 
+static void handleMdpArbEvent(hwc_context_t* ctx,
+                              const mdp_arb_notification_event event,
+                              int *fbIdx,
+                              int numFbIdx,
+                              int eventState)
+{
+    ctx->mDrawLock.lock();
+    int dpy = HWC_DISPLAY_PRIMARY;
+    int ret = 0;
+    int i = 0;
+    bool invalidate = false, waitDrawLock = false, needCommit = false;
+
+    if (ctx->mKpiLog.MdpArb) {
+        char kpiLog[24] = {0};
+        snprintf(kpiLog, sizeof(kpiLog), "hwc arb[%d:%d] in",
+            event, eventState);
+        place_marker(kpiLog);
+    }
+    for (i = 0; i < numFbIdx; i++) {
+        if (fbIdx[i] < 0) {
+            continue;
+        }
+        for (dpy = 0; dpy < HWC_NUM_DISPLAY_TYPES; dpy++) {
+            if (ctx->dpyAttr[dpy].fb_idx == fbIdx[i]) {
+                break;
+            }
+        }
+        if (dpy == HWC_NUM_DISPLAY_TYPES) {
+            ALOGE("%s can't find i=%d fd_idx=%d", __FUNCTION__, i, fbIdx[i]);
+            ctx->mDrawLock.unlock();
+            return;
+        }
+        ALOGD_IF(isDebug(), "%s event=%d,dpy=%d,state=%d,pause=%d,optimize=%d",
+            __FUNCTION__, event, dpy, eventState, ctx->dpyAttr[dpy].isPause,
+            ctx->dpyAttr[dpy].inOptimizeMode);
+        switch(event) {
+            case MDP_ARB_NOTIFICATION_UP:
+                if (ctx->dpyAttr[dpy].isPause) {
+                    ctx->dpyAttr[dpy].isPause = false;
+                    invalidate = true;
+                }
+                if ((eventState == 0) && (ctx->dpyAttr[dpy].inOptimizeMode)) {
+                    // Clear optimize mode when there is event change
+                    ctx->dpyAttr[dpy].inOptimizeMode = false;
+                    invalidate = true;
+                }
+                if ((eventState == 1) && (!ctx->dpyAttr[dpy].inOptimizeMode)) {
+                    ctx->dpyAttr[dpy].inOptimizeMode = true;
+                    invalidate = true;
+                    waitDrawLock= true;
+                    needCommit = true;
+                }
+                break;
+            case MDP_ARB_NOTIFICATION_DOWN:
+                if (!ctx->dpyAttr[dpy].isPause) {
+                    // Change the primary display state to pause not to
+                    // configure the overlay from next draw cycle and trigger
+                    // new draw cycle
+                    ctx->dpyAttr[dpy].isPause = true;
+                    if (ctx->dpyAttr[dpy].inOptimizeMode) {
+                        // Clear optimize mode when there is event change
+                        ctx->dpyAttr[dpy].inOptimizeMode = false;
+                    }
+                    invalidate = true;
+                    waitDrawLock= true;
+                    needCommit = true;
+                }
+                break;
+            case MDP_ARB_NOTIFICATION_OPTIMIZE:
+                if (!ctx->dpyAttr[dpy].inOptimizeMode) {
+                    ctx->dpyAttr[dpy].inOptimizeMode = true;
+                    invalidate = true;
+                    waitDrawLock= true;
+                    needCommit = true;
+                }
+                break;
+            default:
+                ALOGE("%s: Invalid reverse camera state %d", __FUNCTION__,
+                    event);
+                break;
+        }
+    }
+
+    if (invalidate) {
+        ctx->proc->invalidate(ctx->proc);
+    }
+    if (waitDrawLock) {
+        // Wait for draw thread to signal the completion of overlay unset
+        ctx->mDrawLock.wait();
+    }
+    if (needCommit) {
+        // Call display commit to release the layer's fence and the
+        // pipes assoiciated with the layers
+        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].arb_fd, 1)) {
+            ALOGE("%s,%d: display commit fail for dpy=%d!",
+                __FUNCTION__, __LINE__, dpy);
+        }
+    }
+    for (i = 0; i < numFbIdx; i++) {
+        if (fbIdx[i] < 0) {
+            continue;
+        }
+        for (dpy = 0; dpy < HWC_NUM_DISPLAY_TYPES; dpy++) {
+            if (ctx->dpyAttr[dpy].fb_idx == fbIdx[i]) {
+                break;
+            }
+        }
+        // Acknowledge the MDP arb
+        ret = ioctl(ctx->dpyAttr[dpy].arb_fd, MSMFB_ARB_ACKNOWLEDGE, &event);
+        if (ret) {
+            ALOGE("%s mdp arb ack fails=%d", __FUNCTION__, ret);
+        } else {
+             ALOGD_IF(isDebug(), "%s set mdp arb ack dpy=%d, event=%d",
+                __FUNCTION__, dpy, event);
+        }
+    }
+    if (ctx->mKpiLog.MdpArb) {
+        char kpiLog[24] = {0};
+        snprintf(kpiLog, sizeof(kpiLog), "hwc arb[%d:%d] out",
+            event, eventState);
+        place_marker(kpiLog);
+    }
+    ctx->mDrawLock.unlock();
+}
+
+/* Parse uevent data for action requested for the display */
+static bool getMdpArbNotification(const char* strUdata,
+                                  int len,
+                                  mdp_arb_notification_event& event,
+                                  int *fbIdx,
+                                  int numFbIdx,
+                                  int& eventState)
+{
+    const char* iter_str = strUdata;
+    char iter_temp[128];
+    char *p = NULL;
+    bool found = false;
+    char *token = NULL, *last = NULL;
+    const char *delimit = ", ";
+    int idx = 0, l = 0, c = 0;
+    char* pstr = NULL;
+    int i = 0, j = 0;
+
+    if (strcasestr("change@/devices/virtual/mdp_arb/mdp_arb", strUdata)) {
+        while(((iter_str - strUdata) <= len)) {
+            memset(iter_temp, 0x00, sizeof(iter_temp));
+            strlcpy(iter_temp, iter_str, 128);
+            if ((strstr(iter_temp, "hwc")) != NULL) {
+                if ((pstr = strstr(iter_temp, "optimize=")) != NULL) {
+                    event = MDP_ARB_NOTIFICATION_OPTIMIZE;
+                    p = pstr + strlen("optimize=");
+                } else if ((pstr = strstr(iter_temp, "down=")) != NULL) {
+                    event = MDP_ARB_NOTIFICATION_DOWN;
+                    p = pstr + strlen("down=");
+                } else if ((pstr = strstr(iter_temp, "up=")) != NULL) {
+                    event = MDP_ARB_NOTIFICATION_UP;
+                    p = pstr + strlen("up=");
+                } else {
+                    ALOGE("%s can't find notification string, u=%s",
+                        __FUNCTION__, iter_temp);
+                    continue;
+                }
+                l = strlen(p);
+                token = strtok_r(p, delimit, &last);
+                i = 0;
+                c =  strlen(token);
+                while((NULL != token) && (c <= l)) {
+                    if (!strncmp(token, "hwc", strlen("hwc"))) {
+                        fbIdx[idx] = i;
+                        idx++;
+                        if (idx > numFbIdx) {
+                            ALOGI("%s idx=%d is bigger than numFbIdx=%d",
+                                __FUNCTION__, idx, numFbIdx);
+                            break;
+                        }
+                    }
+                    c += strlen(token);
+                    token = strtok_r(NULL, delimit, &last);
+                    i++;
+                }
+                found = true;
+            }
+            if ((pstr = strstr(iter_temp, "fb_idx=")) != NULL) {
+                p = pstr + strlen("fb_idx=");
+                l = strlen(p);
+                token = strtok_r(p, delimit, &last);
+                i = 0;
+                j = 0;
+                c = strlen(token);
+                while((token) && (j < idx) && (c <= l)) {
+                    if (i == fbIdx[j]) {
+                        if (token) {
+                            fbIdx[j] = atoi(token);
+                        } else {
+                            ALOGI("%s token is NULL, iter_str=%s,i=%d,j=%d,"\
+                                "idx=%d", __FUNCTION__, iter_str, i, j, idx);
+                        }
+                        j++;
+                    }
+                    c += strlen(token);
+                    token = strtok_r(NULL, delimit, &last);
+                    i++;
+                }
+            }
+            if ((pstr = strstr(iter_temp, "state=")) != NULL) {
+                p = pstr + strlen("state=");
+                eventState = atoi(p);
+            }
+            iter_str += strlen(iter_str)+1;
+        }
+    }
+    return found;
+}
+
 static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
     // do not handle uevent of hdmi or wfd, if automotive mode is on
     if(ctx->mAutomotiveModeOn) {
-        eReverseCameraState reverseCameraState;
-        bool state_update = getReverseCameraState(udata, len,
-                                                  reverseCameraState);
-        // Handle the state transition, if there is any state update
-        if(state_update)
-            handleReverseCameraState(ctx, reverseCameraState);
+        char value[PROPERTY_VALUE_MAX];
+        if(property_get("sys.hwc.mdp_arb_kpi_enabled", value, "false")
+                            && !strcmp(value, "true")) {
+             ctx->mKpiLog.MdpArb = true;
+         } else {
+             ctx->mKpiLog.MdpArb = false;
+         }
+        if (ctx->mMDPArbSuppport) {
+            mdp_arb_notification_event event;
+            int fb_idx[HWC_NUM_DISPLAY_TYPES] = {-1, -1, -1, -1};
+            int state = -1;
+            bool update = getMdpArbNotification(udata, len, event, fb_idx,
+                            HWC_NUM_DISPLAY_TYPES, state);
+            if (update)
+                handleMdpArbEvent(ctx, event, fb_idx, HWC_NUM_DISPLAY_TYPES,
+                    state);
+        } else {
+            eReverseCameraState reverseCameraState;
+            bool state_update = getReverseCameraState(udata, len,
+                                                      reverseCameraState);
+            // Handle the state transition, if there is any state update
+            if(state_update)
+                handleReverseCameraState(ctx, reverseCameraState);
+        }
         return;
     }
 

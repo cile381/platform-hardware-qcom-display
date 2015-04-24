@@ -43,6 +43,7 @@
 #include <profiler.h>
 
 #define EVEN_OUT(x) if (x & 0x0001) {x--;}
+#define MDP_ARB_SYS_PATH "/dev/mdp_arb"
 /** min of int a, b */
 static inline int min(int a, int b) {
     return (a<b) ? a : b;
@@ -163,9 +164,10 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         m->overlay.transp_mask = MDP_TRANSP_NOP;
         m->overlay.flags       = 0;
         m->overlay.is_fg       = 0;
-        if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_SET, &(m->overlay))) {
-            ALOGE("%s: MSMFB_OVERLAY_SET for display=%d failed, str=%s",
-                    __FUNCTION__, m->display_id, strerror(errno));
+        if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_SET, &(m->overlay))) {
+            ALOGE("%s: MSMFB_OVERLAY_SET for display=%s failed, str=%s",
+                    __FUNCTION__, (m->display_id)?(m->display_id):"NULL",
+                    strerror(errno));
             return -errno;
         }
         m->setOverlay = 1;
@@ -174,9 +176,10 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     overlay_data.id = m->overlay.id;
     overlay_data.data.memory_id = hnd->fd;
     overlay_data.data.offset = hnd->offset;
-    if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_PLAY, &overlay_data)) {
-        ALOGE("%s: MSMFB_OVERLAY_PLAY for display=%d failed, str: %s",
-                __FUNCTION__, m->display_id, strerror(errno));
+    if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_PLAY, &overlay_data)) {
+        ALOGE("%s: MSMFB_OVERLAY_PLAY for display=%s failed, str: %s",
+                __FUNCTION__, (m->display_id)?(m->display_id):"NULL",
+                strerror(errno));
         return -errno;
     }
 
@@ -184,9 +187,10 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     memset(&commit, 0x00, sizeof(commit));
     commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
     commit.wait_for_finish = true;
-    if(ioctl(m->framebuffer->fd, MSMFB_DISPLAY_COMMIT, &commit)) {
-        ALOGE("%s: MSMFB_DISPLAY_COMMIT for display=%d failed, str: %s",
-                __FUNCTION__, m->display_id, strerror(errno));
+    if(ioctl(m->mdpArbFd, MSMFB_DISPLAY_COMMIT, &commit)) {
+        ALOGE("%s: MSMFB_DISPLAY_COMMIT for display=%s failed, str: %s",
+                __FUNCTION__, (m->display_id)?(m->display_id):"NULL",
+                strerror(errno));
         return -errno;
     } else if(m->automotive) {
         /* Log KPI message for first fb post */
@@ -219,21 +223,51 @@ static int fb_compositionComplete(struct framebuffer_device_t* dev)
     return 0;
 }
 
-int mapFrameBufferLocked(struct private_module_t* module, const char* name)
+static const char *getDisplayId(int idx)
 {
-    // already initialized...
-    if (module->framebuffer) {
-        return 0;
-    }
-    char const * const device_template[] = {
-        "/dev/graphics/fb%u",
-        "/dev/fb%u",
-        0 };
-
+    int status = 0;
     int fd = -1;
     int i = 0;
     char fd_name[LENGTH_OF_NAME_MAX];
-    char property[PROPERTY_VALUE_MAX];
+    const char *display_id = NULL;
+    FILE *fp = NULL;
+    char fb_display_id[LENGTH_OF_NAME_MAX];
+    int fb_id = -1;
+
+    memset(fd_name, 0x00, LENGTH_OF_NAME_MAX);
+    snprintf(fd_name, LENGTH_OF_NAME_MAX, FB_ATTRIBUTE_DISPLAY_ID_PATH, idx);
+    fp = fopen(fd_name, "r");
+    if (!fp) {
+        ALOGW("%s can't open display id fb path=%s", __func__, fd_name);
+        return display_id;
+    } else {
+        memset(fb_display_id, 0x00, LENGTH_OF_NAME_MAX);
+        fread(fb_display_id, sizeof(char), LENGTH_OF_NAME_MAX, fp);
+        fclose(fp);
+    }
+
+    for (i = 0; i < mFbDisplayMappingLen; i++) {
+        if (!strncmp(fb_display_id, mFbDisplayMapping[i].display_id,
+                    strlen(mFbDisplayMapping[i].display_id))) {
+            display_id = mFbDisplayMapping[i].display_id;
+            break;
+        }
+    }
+
+    if (i == mFbDisplayMappingLen) {
+        ALOGE("%s can't find display_id for fb_idx=%d", __func__, idx);
+        return NULL;
+    }
+
+    return display_id;
+}
+
+static int getFbIdx(struct private_module_t* module, const char* name, int *idx)
+{
+    int status = 0;
+    int fd = -1;
+    int i = 0;
+    char fd_name[LENGTH_OF_NAME_MAX];
     const char *display_id = NULL;
     FILE *fp = NULL;
     char fb_display_id[LENGTH_OF_NAME_MAX];
@@ -266,23 +300,48 @@ int mapFrameBufferLocked(struct private_module_t* module, const char* name)
             fread(fb_display_id, sizeof(char), LENGTH_OF_NAME_MAX, fp);
             if (!strncmp(display_id, fb_display_id, strlen(display_id))) {
                 fb_id = i;
-                module->display_id = display_id;
+                if (module) {
+                    module->display_id = display_id;
+                }
                 fclose(fp);
                 break;
             }
             fclose(fp);
         }
     }
+    *idx = fb_id;
+    return status;
+}
+
+int mapFrameBufferLocked(struct private_module_t* module, int fb_idx)
+{
+    // already initialized...
+    if (module->framebuffer) {
+        return 0;
+    }
+    char const * const device_template[] = {
+        "/dev/graphics/fb%u",
+        "/dev/fb%u",
+        0 };
+
+    int fd = -1;
+    int i = 0;
+    char fd_name[LENGTH_OF_NAME_MAX];
+    char property[PROPERTY_VALUE_MAX];
 
     i = 0;
     while ((fd < 0) && device_template[i]) {
-        snprintf(fd_name, LENGTH_OF_NAME_MAX, device_template[i], fb_id);
+        snprintf(fd_name, LENGTH_OF_NAME_MAX, device_template[i], fb_idx);
         fd = open(fd_name, O_RDWR, 0);
         i++;
     }
     if (fd < 0) {
         ALOGE("%s can't open fb, name=%s", __func__, fd_name);
         return -errno;
+    }
+
+    if (module->mdpArbFd < 0) {
+        module->mdpArbFd = fd;
     }
 
     memset(&module->commit, 0, sizeof(struct mdp_display_commit));
@@ -514,7 +573,7 @@ int mapFrameBufferLocked(struct private_module_t* module, const char* name)
     return 0;
 }
 
-static int mapFrameBuffer(struct private_module_t* module, const char* name)
+static int mapFrameBuffer(struct private_module_t* module, int fb_idx)
 {
     int err = -1;
     char property[PROPERTY_VALUE_MAX];
@@ -527,12 +586,59 @@ static int mapFrameBuffer(struct private_module_t* module, const char* name)
         (!strncasecmp(property,"true", PROPERTY_VALUE_MAX )))) ||
        module->automotive) {
         pthread_mutex_lock(&module->lock);
-        err = mapFrameBufferLocked(module, name);
+        err = mapFrameBufferLocked(module, fb_idx);
         if (err != 0)
-            ALOGE("mapFrameBufferLocked error=%d, name=%s", err, name);
+            ALOGE("mapFrameBufferLocked error=%d, fb_idx=%d", err, fb_idx);
         pthread_mutex_unlock(&module->lock);
     }
     return err;
+}
+
+static int bindMdpArb(struct private_module_t* module, const char *name,
+                      int fb_idx)
+{
+    int status = -EINVAL;
+    struct mdp_arb_bind bind;
+    int fd = -1;
+
+    fd = open(MDP_ARB_SYS_PATH, O_RDWR);
+    if (fd < 0) {
+        ALOGE("%s can't open mdp_arb", __FUNCTION__);
+        return status;
+    }
+
+    memset(&bind, 0x00, sizeof(bind));
+    strlcpy(bind.name, name, MDP_ARB_NAME_LEN);
+    bind.fb_index = fb_idx;
+    status = ioctl(fd, MSMFB_ARB_BIND, &bind);
+    if (status < 0) {
+        ALOGE("%s Can't bind mdp arb to client hwc, error=%d",
+              __FUNCTION__, status);
+        close(fd);
+    } else {
+        module->mdpArbFd = fd;
+    }
+
+    return status;
+}
+
+static int unbindMdpArb(struct private_module_t* module)
+{
+    int status = -EINVAL;
+
+    if ((module->mdpArbFd >= 0) &&
+        ((!module->framebuffer) ||
+         (module->mdpArbFd != module->framebuffer->fd))) {
+        status = ioctl(module->mdpArbFd, MSMFB_ARB_UNBIND, NULL);
+        if (status < 0) {
+            ALOGE("%s Can't unbind mdp arb to client hwc, error=%d",
+                  __FUNCTION__, status);
+        }
+        close(module->mdpArbFd);
+        module->mdpArbFd = -1;
+    }
+
+    return status;
 }
 
 /*****************************************************************************/
@@ -544,21 +650,23 @@ static int fb_close(struct hw_device_t *dev)
     if (ctx) {
         private_module_t* m = (private_module_t*)ctx->device.common.module;
         int overlay_id = m->overlay.id;
-        if(m && m->framebuffer && (m->framebuffer->fd >= 0) &&
+        if(m && m->framebuffer && (m->mdpArbFd >= 0) &&
             (overlay_id >= 0)) {
-            if(ioctl(m->framebuffer->fd, MSMFB_OVERLAY_UNSET,
+            if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_UNSET,
                 &(m->overlay.id))) {
                 ALOGE("Error unset overlay");
             }
             memset(&commit, 0x00, sizeof(commit));
             commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
             commit.wait_for_finish = true;
-            if(ioctl(m->framebuffer->fd, MSMFB_DISPLAY_COMMIT, &commit)) {
-                ALOGE("%s: MSMFB_DISPLAY_COMMIT for display=%d failed, str: %s",
-                        __FUNCTION__, m->display_id, strerror(errno));
+            if(ioctl(m->mdpArbFd, MSMFB_DISPLAY_COMMIT, &commit)) {
+                ALOGE("%s: MSMFB_DISPLAY_COMMIT for display=%s failed, str: %s",
+                        __FUNCTION__, (m->display_id)?(m->display_id):"NULL",
+                        strerror(errno));
             }
         }
         if (m) {
+            unbindMdpArb(m);
             if (m->framebuffer) {
                 delete m->framebuffer;
                 m->framebuffer = NULL;
@@ -568,6 +676,28 @@ static int fb_close(struct hw_device_t *dev)
         free(ctx);
     }
     return 0;
+}
+
+int framebuffer_getDisplayFbIdx(const char *fb_name, int *fb_idx)
+{
+    int status = -EINVAL;
+    if ((fb_name == NULL) || (fb_idx == NULL)) {
+        ALOGE("%s fb_name=0x%08x or fb_idx=0x%08x is NULL", __FUNCTION__,
+            (int)fb_name, (int)fb_idx);
+        status = -EINVAL;
+    } else if (strcmp(fb_name, GRALLOC_HARDWARE_FB_PRIMARY) &&
+               strcmp(fb_name, GRALLOC_HARDWARE_FB_SECONDARY) &&
+               strcmp(fb_name, GRALLOC_HARDWARE_FB_TERTIARY)) {
+        ALOGE("%s not support fb device=%s", __func__, fb_name);
+        status = -ENOENT;
+    } else {
+        status = getFbIdx(NULL, fb_name, fb_idx);
+        if (status) {
+            ALOGE("%s getFbIdx return error=%d, fb_name=%s",
+                  __FUNCTION__, status, fb_name);
+        }
+    }
+    return status;
 }
 
 int fb_device_open(hw_module_t const* module, const char* name,
@@ -583,6 +713,7 @@ int fb_device_open(hw_module_t const* module, const char* name,
         alloc_device_t* gralloc_device = NULL;
         fb_context_t *dev = NULL;
         private_module_t *m = NULL;
+        int fb_idx = 0;
         status = gralloc_open(module, &gralloc_device);
         if (status < 0) {
             ALOGE("%s gralloc_open fails, status=%d", __FUNCTION__, status);
@@ -613,8 +744,15 @@ int fb_device_open(hw_module_t const* module, const char* name,
         dev->device.post            = fb_post;
         dev->device.setUpdateRect   = 0;
         dev->device.compositionComplete = fb_compositionComplete;
+        m->mdpArbFd = -1;
 
-        status = mapFrameBuffer(m, name);
+        status = getFbIdx(m, name, &fb_idx);
+        if (status) {
+            ALOGE("%s getFbIdx returns error=%d, name=%s", __FUNCTION__,
+                  status, name);
+            goto err;
+        }
+        status = mapFrameBuffer(m, fb_idx);
         if (status == 0) {
             int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
             const_cast<uint32_t&>(dev->device.flags) = 0;
@@ -650,3 +788,89 @@ err:
     }
     return status;
 }
+
+int framebuffer_open_ex(const struct hw_module_t* module, const char *name,
+                        int fb_idx, struct framebuffer_device_t** device)
+{
+    int status = -EINVAL;
+    alloc_device_t* gralloc_device = NULL;
+    fb_context_t *dev = NULL;
+    private_module_t *m = NULL;
+    status = gralloc_open(module, &gralloc_device);
+    if (status < 0) {
+        ALOGE("%s gralloc_open fails, status=%d", __FUNCTION__, status);
+        return status;
+    }
+
+    /* initialize our state here */
+    dev = (fb_context_t*)malloc(sizeof(*dev));
+    if (!dev) {
+        ALOGE("%s out of memory, dev is NULL", __FUNCTION__);
+        goto err;
+    }
+    memset(dev, 0, sizeof(*dev));
+
+    m = (private_module_t *)malloc(sizeof(*m));
+    if (!m) {
+        ALOGE("%s out of memory, m is NULL", __FUNCTION__);
+        goto err;
+    }
+    memset(m, 0x00, sizeof(*m));
+    memcpy(&m->base.common, module, sizeof(hw_module_t));
+    /* initialize the procs */
+    dev->device.common.tag      = HARDWARE_DEVICE_TAG;
+    dev->device.common.version  = 0;
+    dev->device.common.module   = reinterpret_cast<hw_module_t*>(m);
+    dev->device.common.close    = fb_close;
+    dev->device.setSwapInterval = fb_setSwapInterval;
+    dev->device.post            = fb_post;
+    dev->device.setUpdateRect   = 0;
+    dev->device.compositionComplete = fb_compositionComplete;
+    m->display_id = getDisplayId(fb_idx);
+    m->mdpArbFd = -1;
+
+    status = bindMdpArb(m, name, fb_idx);
+    if (status) {
+        ALOGE("%s bindMdpArb fails=%d, name=%s, fb_idx=%d", __FUNCTION__,
+              status, name, fb_idx);
+        /* Don't exit, just fallback to legacy framebuffer when MDP arb is not
+         * there*/
+    }
+    status = mapFrameBuffer(m, fb_idx);
+    if (status == 0) {
+        int stride = m->finfo.line_length / (m->info.bits_per_pixel >> 3);
+        const_cast<uint32_t&>(dev->device.flags) = 0;
+        const_cast<uint32_t&>(dev->device.width) = m->info.xres;
+        const_cast<uint32_t&>(dev->device.height) = m->info.yres;
+        const_cast<int&>(dev->device.stride) = stride;
+        const_cast<int&>(dev->device.format) = m->fbFormat;
+        const_cast<float&>(dev->device.xdpi) = m->xdpi;
+        const_cast<float&>(dev->device.ydpi) = m->ydpi;
+        const_cast<float&>(dev->device.fps) = m->fps;
+        const_cast<int&>(dev->device.minSwapInterval) =
+                                                    PRIV_MIN_SWAP_INTERVAL;
+        const_cast<int&>(dev->device.maxSwapInterval) =
+                                                    PRIV_MAX_SWAP_INTERVAL;
+        const_cast<int&>(dev->device.numFramebuffers) = m->numBuffers;
+        dev->device.setUpdateRect = 0;
+
+        *device = (struct framebuffer_device_t*)&dev->device.common;
+        gralloc_close(gralloc_device);
+        return status;
+    } else {
+        ALOGE("%s mapFrameBuffer error=%d for fb=%s",
+                __func__, status, name);
+    }
+
+err:
+    if (m) {
+        unbindMdpArb(m);
+        free(m);
+    }
+    if (dev)
+        free(dev);
+    // Close the gralloc module
+    gralloc_close(gralloc_device);
+    return status;
+}
+

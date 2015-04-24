@@ -61,9 +61,14 @@ extern int gralloc_unregister_buffer(gralloc_module_t const* module,
 extern int gralloc_perform(struct gralloc_module_t const* module,
                            int operation, ... );
 
+extern int framebuffer_getDisplayFbIdx(const char *fb_name, int *fb_idx);
+
+extern int framebuffer_open_ex(const struct hw_module_t* module,
+        const char *name, int fb_idx, struct framebuffer_device_t** device);
+
 // HAL module methods
 static struct hw_module_methods_t gralloc_module_methods = {
-    open: gralloc_device_open
+    open: gralloc_device_open,
 };
 
 // HAL module initialize
@@ -85,6 +90,11 @@ struct private_module_t HAL_MODULE_INFO_SYM = {
         unlock: gralloc_unlock,
         perform: gralloc_perform,
         lock_ycbcr: gralloc_lock_ycbcr,
+        lockAsync: NULL,
+        unlockAsync: NULL,
+        lockAsync_ycbcr: NULL,
+        getDisplayFbIdx: framebuffer_getDisplayFbIdx,
+        framebufferOpenEx: framebuffer_open_ex,
     },
     framebuffer: 0,
     fbFormat: 0,
@@ -110,6 +120,9 @@ int gralloc_device_open(const hw_module_t* module, const char* name,
         status = 0;
     } else {
         status = fb_device_open(module, name, device);
+        if (status) {
+            ALOGE("%s fb_device_open returns error=%d", __FUNCTION__, status);
+        }
     }
     return status;
 }
