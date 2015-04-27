@@ -562,17 +562,13 @@ bool  CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
     mDirtyLayerIndex =  checkDirtyRect(ctx, list, dpy);
     ALOGD_IF (DEBUG_COPYBIT, "%s:Dirty Layer Index: %d",
                                        __FUNCTION__, mDirtyLayerIndex);
-    // repetitive frame will have mDirtyLayerIndex as NO_UPDATING_LAYER
-    if (mDirtyLayerIndex == NO_UPDATING_LAYER) {
-        ALOGD_IF (DEBUG_COPYBIT, "%s: No Updating Layers", __FUNCTION__);
-        return true;
-    }
 
     hwc_rect_t clearRegion = {0,0,0,0};
     mDirtyRect = list->hwLayers[last].displayFrame;
 
-    if (CBUtils::getuiClearRegion(list, clearRegion, layerProp,
-                                                       mDirtyLayerIndex)) {
+    if (mDirtyLayerIndex != NO_UPDATING_LAYER &&
+            CBUtils::getuiClearRegion(list, clearRegion, layerProp,
+                                                    mDirtyLayerIndex)) {
        int clear_w =  clearRegion.right -  clearRegion.left;
        int clear_h =  clearRegion.bottom - clearRegion.top;
        //mdp can't handle solid fill for one line
@@ -584,8 +580,13 @@ bool  CopyBit::draw(hwc_context_t *ctx, hwc_display_contents_1_t *list,
        }else
            clear(renderBuffer, clearRegion);
     }
-    if (mDirtyLayerIndex != -1)
-           mDirtyRect = list->hwLayers[mDirtyLayerIndex].displayFrame;
+    if (mDirtyLayerIndex != -1) {
+        if (mDirtyLayerIndex == NO_UPDATING_LAYER) {
+            mDirtyRect = clearRegion;
+        } else {
+            mDirtyRect = list->hwLayers[mDirtyLayerIndex].displayFrame;
+        }
+    }
 
     // numAppLayers-1, as we iterate from 0th layer index with HWC_COPYBIT flag
     for (int i = 0; i <= (ctx->listStats[dpy].numAppLayers-1); i++) {

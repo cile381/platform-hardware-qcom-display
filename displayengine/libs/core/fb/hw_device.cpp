@@ -214,6 +214,7 @@ DisplayError HWDevice::Validate(HWLayers *hw_layers) {
     HWPipeInfo *left_pipe = &hw_layers->config[i].left_pipe;
     HWPipeInfo *right_pipe = &hw_layers->config[i].right_pipe;
     HWRotatorSession *hw_rotator_session = &hw_layers->config[i].hw_rotator_session;
+    bool is_rotator_used = (hw_rotator_session->hw_block_count != 0);
     mdp_input_layer mdp_layer;
 
     for (uint32_t count = 0; count < 2; count++) {
@@ -246,18 +247,7 @@ DisplayError HWDevice::Validate(HWLayers *hw_layers) {
 
         SetRect(pipe_info->src_roi, &mdp_layer.src_rect);
         SetRect(pipe_info->dst_roi, &mdp_layer.dst_rect);
-
-        // Flips will be taken care by rotator, if layer requires 90 rotation. So Dont use MDP for
-        // flip operation, if layer transform is 90.
-        if (!layer.transform.rotation) {
-          if (layer.transform.flip_vertical) {
-            mdp_layer.flags |= MDP_LAYER_FLIP_UD;
-          }
-
-          if (layer.transform.flip_horizontal) {
-            mdp_layer.flags |= MDP_LAYER_FLIP_LR;
-          }
-        }
+        SetMDPFlags(layer, is_rotator_used, &mdp_layer.flags);
 
         mdp_scale_data* mdp_scale = GetScaleDataRef(mdp_layer_count);
 #ifdef USES_SCALAR
@@ -328,9 +318,9 @@ DisplayError HWDevice::Validate(HWLayers *hw_layers) {
   return kErrorNone;
 }
 
-void HWDevice::DumpLayerCommit(mdp_layer_commit &layer_commit) {
-  mdp_layer_commit_v1 &mdp_commit = layer_commit.commit_v1;
-  mdp_input_layer *mdp_layers = mdp_commit.input_layers;
+void HWDevice::DumpLayerCommit(const mdp_layer_commit &layer_commit) {
+  const mdp_layer_commit_v1 &mdp_commit = layer_commit.commit_v1;
+  const mdp_input_layer *mdp_layers = mdp_commit.input_layers;
 
   DLOGE("mdp_commit: flags = %x, release fence = %x", mdp_commit.flags, mdp_commit.release_fence);
   DLOGE("left_roi: x = %d, y = %d, w = %d, h = %d", mdp_commit.left_roi.x, mdp_commit.left_roi.y,
@@ -340,10 +330,10 @@ void HWDevice::DumpLayerCommit(mdp_layer_commit &layer_commit) {
   for (uint32_t i = 0; i < mdp_commit.input_layer_cnt; i++) {
     DLOGE("mdp_commit: layer_cnt = %d, pipe_ndx = %x, zorder = %d, flags = %x",
           i, mdp_layers[i].pipe_ndx, mdp_layers[i].z_order, mdp_layers[i].flags);
-    mdp_rect &src_rect = mdp_layers[i].src_rect;
+    const mdp_rect &src_rect = mdp_layers[i].src_rect;
     DLOGE("src rect: x = %d, y = %d, w = %d, h = %d",
           src_rect.x, src_rect.y, src_rect.w, src_rect.h);
-    mdp_rect &dst_rect = mdp_layers[i].dst_rect;
+    const mdp_rect &dst_rect = mdp_layers[i].dst_rect;
     DLOGE("dst rect: x = %d, y = %d, w = %d, h = %d",
           dst_rect.x, dst_rect.y, dst_rect.w, dst_rect.h);
   }
@@ -523,6 +513,7 @@ DisplayError HWDevice::SetFormat(const LayerBufferFormat &source, uint32_t *targ
   case kFormatYCbCr422H2V1Packed:       *target = MDP_YCBYCR_H2V1;       break;
   case kFormatYCbCr420SemiPlanarVenus:  *target = MDP_Y_CBCR_H2V2_VENUS; break;
   case kFormatRGBA8888Ubwc:             *target = MDP_RGBA_8888_UBWC;    break;
+  case kFormatRGBX8888Ubwc:             *target = MDP_RGBX_8888_UBWC;    break;
   case kFormatRGB565Ubwc:               *target = MDP_RGB_565_UBWC;      break;
   case kFormatYCbCr420SPVenusUbwc:      *target = MDP_Y_CBCR_H2V2_UBWC;  break;
   default:
@@ -548,6 +539,8 @@ DisplayError HWDevice::SetStride(HWDeviceType device_type, LayerBufferFormat for
   case kFormatBGRA8888:
   case kFormatRGBX8888:
   case kFormatBGRX8888:
+  case kFormatRGBA8888Ubwc:
+  case kFormatRGBX8888Ubwc:
     *target = width * 4;
     break;
   case kFormatRGB888:
@@ -555,7 +548,8 @@ DisplayError HWDevice::SetStride(HWDeviceType device_type, LayerBufferFormat for
     *target = width * 3;
     break;
   case kFormatRGB565:
-    *target = width * 3;
+  case kFormatRGB565Ubwc:
+    *target = width * 2;
     break;
   case kFormatYCbCr420SemiPlanarVenus:
   case kFormatYCbCr420SPVenusUbwc:
@@ -595,6 +589,35 @@ void HWDevice::SetRect(const LayerRect &source, mdp_rect *target) {
   target->y = UINT32(source.top);
   target->w = UINT32(source.right) - target->x;
   target->h = UINT32(source.bottom) - target->y;
+}
+
+void HWDevice::SetMDPFlags(const Layer &layer, const bool &is_rotator_used,
+                           uint32_t *mdp_flags) {
+  LayerBuffer *input_buffer = layer.input_buffer;
+
+  // Flips will be taken care by rotator, if layer uses rotator for downscale/rotation. So ignore
+  // flip flags for MDP.
+  if (!is_rotator_used) {
+    if (layer.transform.flip_vertical) {
+      *mdp_flags |= MDP_LAYER_FLIP_UD;
+    }
+
+    if (layer.transform.flip_horizontal) {
+      *mdp_flags |= MDP_LAYER_FLIP_LR;
+    }
+  }
+
+  if (input_buffer->flags.interlace) {
+    *mdp_flags |= MDP_LAYER_DEINTERLACE;
+  }
+
+  if (input_buffer->flags.secure) {
+    *mdp_flags |= MDP_LAYER_SECURE_SESSION;
+  }
+
+  if (input_buffer->flags.secure_display) {
+    *mdp_flags |= MDP_SECURE_DISPLAY_OVERLAY_SESSION;
+  }
 }
 
 void HWDevice::SyncMerge(const int &fd1, const int &fd2, int *target) {

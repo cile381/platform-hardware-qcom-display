@@ -40,20 +40,18 @@ ResManager::ResManager()
 }
 
 DisplayError ResManager::Init(const HWResourceInfo &hw_res_info) {
-  hw_res_info_ = hw_res_info;
-
-  if (!hw_res_info_.max_mixer_width)
-    hw_res_info_.max_mixer_width = kMaxSourcePipeWidth;
-
   DisplayError error = kErrorNone;
+  uint32_t num_pipe = 0;
 
-  num_pipe_ = hw_res_info_.num_vig_pipe + hw_res_info_.num_rgb_pipe + hw_res_info_.num_dma_pipe;
+  num_pipe = hw_res_info.num_vig_pipe + hw_res_info.num_rgb_pipe + hw_res_info.num_dma_pipe;
 
-  if (num_pipe_ > kPipeIdMax) {
-    DLOGE("Number of pipe is over the limit! %d", num_pipe_);
+  if (num_pipe > kPipeIdMax) {
+    DLOGE("Number of pipe is over the limit! %d", num_pipe);
     return kErrorParameters;
   }
 
+  num_pipe_ = num_pipe;
+  hw_res_info_ = hw_res_info;
   // Init pipe info
   vig_pipes_ = &src_pipes_[0];
   rgb_pipes_ = &src_pipes_[hw_res_info_.num_vig_pipe];
@@ -1043,9 +1041,17 @@ void ResManager::SetRotatorOutputFormat(const LayerBufferFormat &input_format,
     break;
   }
 
-  // TODO(user): UBWC RGB formats will be handled separately
   if (downscale) {
     switch (input_format) {
+    case kFormatRGBA8888Ubwc:
+      *output_format = is_opaque ? kFormatRGB888 : kFormatRGBA8888;
+      break;
+    case kFormatRGBX8888Ubwc:
+      *output_format = kFormatRGB888;
+      break;
+    case kFormatRGB565Ubwc:
+      *output_format = kFormatRGB565;
+      break;
     case kFormatYCbCr420SPVenusUbwc:
       *output_format = kFormatYCbCr420SemiPlanar;
       break;
@@ -1055,6 +1061,15 @@ void ResManager::SetRotatorOutputFormat(const LayerBufferFormat &input_format,
   } else {
     if (hw_res_info_.has_ubwc) {
       switch (input_format) {
+      case kFormatRGBA8888:
+        *output_format = kFormatRGBA8888Ubwc;
+        break;
+      case kFormatRGBX8888:
+        *output_format = kFormatRGBX8888Ubwc;
+        break;
+      case kFormatRGB565:
+        *output_format = kFormatRGB565Ubwc;
+        break;
       case kFormatYCrCb420SemiPlanar:
       case kFormatYCbCr420SemiPlanar:
       case kFormatYCbCr420SemiPlanarVenus:

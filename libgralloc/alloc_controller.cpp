@@ -108,6 +108,16 @@ AdrenoMemInfo::AdrenoMemInfo()
         *(void **)&LINK_adreno_isUBWCSupportedByGpu =
                 ::dlsym(libadreno_utils, "isUBWCSupportedByGpu");
     }
+
+    // Check if the overriding property debug.gralloc.gfx_ubwc_disable
+    // that disables UBWC allocations for the graphics stack is set
+    gfx_ubwc_disable = 0;
+    char property[PROPERTY_VALUE_MAX];
+    property_get("debug.gralloc.gfx_ubwc_disable", property, "0");
+    if(!(strncmp(property, "1", PROPERTY_VALUE_MAX)) ||
+       !(strncmp(property, "true", PROPERTY_VALUE_MAX))) {
+        gfx_ubwc_disable = 1;
+    }
 }
 
 AdrenoMemInfo::~AdrenoMemInfo()
@@ -282,7 +292,7 @@ void AdrenoMemInfo::getGpuAlignedWidthHeight(int width, int height, int format,
 
 int AdrenoMemInfo::isUBWCSupportedByGPU(int format)
 {
-    if (libadreno_utils) {
+    if (!gfx_ubwc_disable && libadreno_utils) {
         if (LINK_adreno_isUBWCSupportedByGpu) {
             ADRENOPIXELFORMAT gpu_format = getGpuPixelFormat(format);
             return LINK_adreno_isUBWCSupportedByGpu(gpu_format);
@@ -296,6 +306,8 @@ ADRENOPIXELFORMAT AdrenoMemInfo::getGpuPixelFormat(int hal_format)
     switch (hal_format) {
         case HAL_PIXEL_FORMAT_RGBA_8888:
             return ADRENO_PIXELFORMAT_R8G8B8A8;
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+            return ADRENO_PIXELFORMAT_R8G8B8X8;
         case HAL_PIXEL_FORMAT_RGB_565:
             return ADRENO_PIXELFORMAT_B5G6R5;
         case HAL_PIXEL_FORMAT_sRGB_A_8888:
@@ -787,6 +799,7 @@ static bool isUBwcSupported(int format)
     {
         case HAL_PIXEL_FORMAT_RGB_565:
         case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
         case HAL_PIXEL_FORMAT_sRGB_A_8888:
         case HAL_PIXEL_FORMAT_NV12_ENCODEABLE:
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
@@ -893,6 +906,7 @@ static unsigned int getUBwcSize(int width, int height, int format,
             size += getUBwcMetaBufferSize(width, height, 2);
             break;
         case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
         case HAL_PIXEL_FORMAT_sRGB_A_8888:
             size = alignedw * alignedh * 4;
             size += getUBwcMetaBufferSize(width, height, 4);
@@ -907,4 +921,39 @@ static unsigned int getUBwcSize(int width, int height, int format,
             break;
     }
     return size;
+}
+
+int getRgbDataAddress(private_handle_t* hnd, void* rgb_data)
+{
+    int err = 0;
+
+    // This api is for RGB* formats
+    if (hnd->format > HAL_PIXEL_FORMAT_sRGB_X_8888) {
+        return -EINVAL;
+    }
+
+    // linear buffer
+    if (!(hnd->flags & private_handle_t::PRIV_FLAGS_UBWC_ALIGNED)) {
+        rgb_data = (void*)hnd->base;
+        return err;
+    }
+
+    unsigned int meta_size = 0;
+    switch (hnd->format) {
+        case HAL_PIXEL_FORMAT_RGB_565:
+            meta_size = getUBwcMetaBufferSize(hnd->width, hnd->height, 2);
+            break;
+        case HAL_PIXEL_FORMAT_RGBA_8888:
+        case HAL_PIXEL_FORMAT_RGBX_8888:
+        case HAL_PIXEL_FORMAT_sRGB_A_8888:
+            meta_size = getUBwcMetaBufferSize(hnd->width, hnd->height, 4);
+            break;
+        default:
+            ALOGE("%s:Unsupported RGB format: 0x%x", __FUNCTION__, hnd->format);
+            err = -EINVAL;
+            break;
+    }
+
+    rgb_data = (void*)(hnd->base + meta_size);
+    return err;
 }

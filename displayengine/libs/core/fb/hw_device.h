@@ -72,12 +72,13 @@ class HWDevice {
   static const int kNumPhysicalDisplays = 2;
   static const int kNumDisplayEvents = 4;
 
-  void DumpLayerCommit(mdp_layer_commit &layer_commit);
+  void DumpLayerCommit(const mdp_layer_commit &layer_commit);
   DisplayError SetFormat(const LayerBufferFormat &source, uint32_t *target);
   DisplayError SetStride(HWDeviceType device_type, LayerBufferFormat format,
                          uint32_t width, uint32_t *target);
   void SetBlending(const LayerBlending &source, mdss_mdp_blend_op *target);
   void SetRect(const LayerRect &source, mdp_rect *target);
+  void SetMDPFlags(const Layer &layer, const bool &is_rotator_used, uint32_t *mdp_flags);
   void SyncMerge(const int &fd1, const int &fd2, int *target);
 
   // Retrieves HW FrameBuffer Node Index

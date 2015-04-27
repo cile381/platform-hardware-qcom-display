@@ -63,11 +63,6 @@ DisplayError HWCBufferAllocator::AllocateBuffer(BufferInfo *buffer_info) {
   int height = INT(buffer_config.height);
   int format;
 
-  error = SetHALFormat(buffer_config.format, &format);
-  if (error != 0) {
-    return kErrorParameters;
-  }
-
   if (buffer_config.secure) {
     alloc_flags = GRALLOC_USAGE_PRIVATE_MM_HEAP;
     alloc_flags |= GRALLOC_USAGE_PROTECTED;
@@ -81,11 +76,16 @@ DisplayError HWCBufferAllocator::AllocateBuffer(BufferInfo *buffer_info) {
     alloc_flags |= GRALLOC_USAGE_PRIVATE_UNCACHED;
   }
 
+  error = SetBufferInfo(buffer_config.format, &format, &alloc_flags);
+  if (error != 0) {
+    return kErrorParameters;
+  }
+
   int aligned_width = 0, aligned_height = 0;
   uint32_t buffer_size = getBufferSizeAndDimensions(width, height, format, alloc_flags,
                                                     aligned_width, aligned_height);
 
-  buffer_size = ROUND_UP((buffer_size * buffer_config.buffer_count), data.align);
+  buffer_size = ROUND_UP(buffer_size, data.align) * buffer_config.buffer_count;
 
   data.base = 0;
   data.fd = -1;
@@ -116,8 +116,9 @@ DisplayError HWCBufferAllocator::FreeBuffer(BufferInfo *buffer_info) {
 
   AllocatedBufferInfo *alloc_buffer_info = &buffer_info->alloc_buffer_info;
   MetaBufferInfo *meta_buffer_info = static_cast<MetaBufferInfo *> (buffer_info->private_data);
-  if ((alloc_buffer_info->fd < 0) || (meta_buffer_info->base_addr == NULL)) {
-    return kErrorNone;
+  if (alloc_buffer_info->fd < 0) {
+    DLOGE("Invalid parameters: fd %d", alloc_buffer_info->fd);
+    return kErrorParameters;
   }
 
   gralloc::IMemAlloc *memalloc = alloc_controller_->getAllocator(meta_buffer_info->alloc_type);
@@ -147,7 +148,7 @@ DisplayError HWCBufferAllocator::FreeBuffer(BufferInfo *buffer_info) {
   return kErrorNone;
 }
 
-int HWCBufferAllocator::SetHALFormat(LayerBufferFormat format, int *target) {
+int HWCBufferAllocator::SetBufferInfo(LayerBufferFormat format, int *target, int *flags) {
   switch (format) {
   case kFormatRGBA8888:                 *target = HAL_PIXEL_FORMAT_RGBA_8888;             break;
   case kFormatRGBX8888:                 *target = HAL_PIXEL_FORMAT_RGBX_8888;             break;
@@ -163,7 +164,18 @@ int HWCBufferAllocator::SetHALFormat(LayerBufferFormat format, int *target) {
   case kFormatYCbCr420SPVenusUbwc:    *target = HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC; break;
   case kFormatRGBA5551:                 *target = HAL_PIXEL_FORMAT_RGBA_5551;             break;
   case kFormatRGBA4444:                 *target = HAL_PIXEL_FORMAT_RGBA_4444;             break;
-
+  case kFormatRGBA8888Ubwc:
+    *target = HAL_PIXEL_FORMAT_RGBA_8888;
+    *flags |= GRALLOC_USAGE_PRIVATE_ALLOC_UBWC;
+    break;
+  case kFormatRGBX8888Ubwc:
+    *target = HAL_PIXEL_FORMAT_RGBX_8888;
+    *flags |= GRALLOC_USAGE_PRIVATE_ALLOC_UBWC;
+    break;
+  case kFormatRGB565Ubwc:
+    *target = HAL_PIXEL_FORMAT_RGB_565;
+    *flags |= GRALLOC_USAGE_PRIVATE_ALLOC_UBWC;
+    break;
   default:
     DLOGE("Unsupported format = 0x%x", format);
     return -EINVAL;

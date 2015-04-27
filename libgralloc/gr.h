@@ -71,6 +71,7 @@ int decideBufferHandlingMechanism(int format, const char *compositionUsed,
 int alloc_buffer(private_handle_t **pHnd, int w, int h, int format, int usage);
 void free_buffer(private_handle_t *hnd);
 int getYUVPlaneInfo(private_handle_t* pHnd, struct android_ycbcr* ycbcr);
+int getRgbDataAddress(private_handle_t* pHnd, void* rgb_data);
 
 // To query if UBWC is enabled, based on format and usage flags
 bool isUBwcEnabled(int format, int usage);
@@ -148,6 +149,8 @@ class AdrenoMemInfo : public android::Singleton <AdrenoMemInfo>
     ADRENOPIXELFORMAT getGpuPixelFormat(int hal_format);
 
     private:
+        // Overriding flag to disable UBWC alloc for graphics stack
+        int  gfx_ubwc_disable;
         // Pointer to the padding library.
         void *libadreno_utils;
 
