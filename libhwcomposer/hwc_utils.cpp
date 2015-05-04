@@ -19,6 +19,8 @@
  */
 #define HWC_UTILS_DEBUG 0
 #include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/prctl.h>
 #include <binder/IServiceManager.h>
 #include <EGL/egl.h>
 #include <cutils/properties.h>
@@ -37,6 +39,9 @@
 #include "QService.h"
 #include "comptype.h"
 
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
+
 using namespace qClient;
 using namespace qService;
 using namespace android;
@@ -50,6 +55,8 @@ namespace qhwc {
 #define HWC_FB_DISP_ID_SYS_PATH "/sys/class/graphics/fb%d/msm_fb_disp_id"
 #define HWC_MDP_ARB_CLIENT_NAME "hwc"
 #define HWC_MDP_ARB_EVENT_NAME "switch-reverse"
+#define HWC_WATCHPROPS_THREAD_NAME "hwcWatchpropsThread"
+bool mHwcDebugLogs = false;
 
 static void openFb(int dpy, int *fd, int *fb_idx) {
     const int MAX_OPEN_FB_LEN = 64;
@@ -319,6 +326,8 @@ void initContext(hwc_context_t *ctx)
             && !strcmp(value, "true")) {
         ctx->mAutomotiveModeOn = true;
     }
+
+    initWatchpropsThread(ctx);
 
     if(openFramebufferDevice(ctx) < 0) {
         ALOGE("%s: failed to open framebuffer!!", __FUNCTION__);
@@ -1817,6 +1826,68 @@ int getSocIdFromSystem() {
         fclose(device);
     }
     return soc_id;
+}
+
+static void handleProperty(hwc_context_t *ctx)
+{
+    char value[PROPERTY_VALUE_MAX];
+
+    if (!ctx) {
+        return;
+    }
+
+    if(property_get("sys.hwc.mdp_arb_kpi_enabled", value, "false")
+            && !strcmp(value, "true")) {
+        ctx->mKpiLog.MdpArb = true;
+    } else {
+        ctx->mKpiLog.MdpArb = false;
+    }
+
+    if(property_get("sys.hwc.debug_log_enabled", value, "false")
+            && !strcmp(value, "true")) {
+        qhwc::mHwcDebugLogs = true;
+    } else {
+        qhwc::mHwcDebugLogs = false;
+    }
+}
+
+static void *watchPropsLoop(void *param)
+{
+    unsigned serial = 0;
+    hwc_context_t * ctx = reinterpret_cast<hwc_context_t *>(param);
+    char thread_name[64] = HWC_WATCHPROPS_THREAD_NAME;
+    prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
+    setpriority(PRIO_PROCESS, 0, PRIORITY_BACKGROUND);
+
+    if (!param) {
+        ALOGE("%s param is NULL", __FUNCTION__);
+        return NULL;
+    }
+
+    while(1) {
+        serial = __system_property_wait_any(serial);
+        handleProperty(ctx);
+    }
+
+    return NULL;
+}
+
+void initWatchpropsThread(hwc_context_t* ctx)
+{
+    pthread_t watchPropsThread;
+    int ret;
+
+    if (!ctx) {
+        ALOGE("%s ctx is NULL", __FUNCTION__);
+        return;
+    }
+
+    ALOGI("Initializing WatchProps Thread");
+    ret = pthread_create(&watchPropsThread, NULL, watchPropsLoop, (void*)ctx);
+    if (ret) {
+        ALOGE("%s: failed to create %s: %s", __FUNCTION__,
+            HWC_WATCHPROPS_THREAD_NAME, strerror(ret));
+    }
 }
 
 };//namespace qhwc

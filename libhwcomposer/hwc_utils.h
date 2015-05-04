@@ -394,7 +394,7 @@ static inline void place_marker(const char* str) {
 }
 
 // Global flag to control HWC debug on/off.
-static bool mHwcDebugLogs;
+extern bool mHwcDebugLogs;
 
 static bool isDebug() { return mHwcDebugLogs ? true : false; };
 
@@ -405,6 +405,7 @@ inline void swap(T& a, T& b) {
     b = tmp;
 }
 int getSocIdFromSystem();
+void initWatchpropsThread(hwc_context_t* ctx);
 }; //qhwc namespace
 
 enum eAnimationState{

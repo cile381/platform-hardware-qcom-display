@@ -380,13 +380,6 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
 {
     // do not handle uevent of hdmi or wfd, if automotive mode is on
     if(ctx->mAutomotiveModeOn) {
-        char value[PROPERTY_VALUE_MAX];
-        if(property_get("sys.hwc.mdp_arb_kpi_enabled", value, "false")
-                            && !strcmp(value, "true")) {
-             ctx->mKpiLog.MdpArb = true;
-         } else {
-             ctx->mKpiLog.MdpArb = false;
-         }
         if (ctx->mMDPArbSuppport) {
             mdp_arb_notification_event event;
             int fb_idx[HWC_NUM_DISPLAY_TYPES] = {-1, -1, -1, -1};
