@@ -28,14 +28,19 @@
 */
 
 #include <core/dump_interface.h>
+#include <core/buffer_allocator.h>
 #include <utils/constants.h>
 #include <utils/String16.h>
+#include <cutils/properties.h>
 #include <hardware_legacy/uevent.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
 #include <binder/Parcel.h>
 #include <QService.h>
+#include <gr.h>
+#include <gralloc_priv.h>
 #include <core/buffer_allocator.h>
+#include <display_config.h>
 
 #include "hwc_buffer_allocator.h"
 #include "hwc_buffer_sync_handler.h"
@@ -153,6 +158,8 @@ int HWCSession::Init() {
     return -errno;
   }
 
+  SetFrameBufferResolution(HWC_DISPLAY_PRIMARY, NULL);
+
   return 0;
 }
 
@@ -240,10 +247,13 @@ int HWCSession::Prepare(hwc_composer_device_1 *device, size_t num_displays,
       }
       break;
     case HWC_DISPLAY_VIRTUAL:
+      if (hwc_session->display_external_) {
+        break;
+      }
       if (hwc_session->ValidateContentList(content_list)) {
-        hwc_session->CreateVirtualDisplay(hwc_session, content_list);
+        hwc_session->CreateVirtualDisplay(content_list);
       } else {
-        hwc_session->DestroyVirtualDisplay(hwc_session);
+        hwc_session->DestroyVirtualDisplay();
       }
 
       if (hwc_session->display_virtual_) {
@@ -284,6 +294,21 @@ int HWCSession::Set(hwc_composer_device_1 *device, size_t num_displays,
       }
       break;
     case HWC_DISPLAY_VIRTUAL:
+      if (hwc_session->display_external_) {
+        if (content_list) {
+          for (size_t i = 0; i < content_list->numHwLayers; i++) {
+            if (content_list->hwLayers[i].acquireFenceFd >= 0) {
+              close(content_list->hwLayers[i].acquireFenceFd);
+              content_list->hwLayers[i].acquireFenceFd = -1;
+            }
+          }
+          if (content_list->outbufAcquireFenceFd >= 0) {
+            close(content_list->outbufAcquireFenceFd);
+            content_list->outbufAcquireFenceFd = -1;
+          }
+          content_list->retireFenceFd = -1;
+        }
+      }
       if (hwc_session->display_virtual_) {
         hwc_session->display_virtual_->Commit(content_list);
       }
@@ -514,49 +539,50 @@ bool HWCSession::ValidateContentList(hwc_display_contents_1_t *content_list) {
   return (content_list && content_list->numHwLayers > 0 && content_list->outbuf);
 }
 
-int HWCSession::CreateVirtualDisplay(HWCSession *hwc_session,
-                                     hwc_display_contents_1_t *content_list) {
+int HWCSession::CreateVirtualDisplay(hwc_display_contents_1_t *content_list) {
   int status = 0;
 
-  if (!hwc_session->display_virtual_) {
+  if (!display_virtual_) {
     // Create virtual display device
-    hwc_session->display_virtual_ = new HWCDisplayVirtual(hwc_session->core_intf_,
-                                                          &hwc_session->hwc_procs_);
-    if (!hwc_session->display_virtual_) {
+    display_virtual_ = new HWCDisplayVirtual(core_intf_, &hwc_procs_);
+    if (!display_virtual_) {
       // This is not catastrophic. Leave a warning message for now.
       DLOGW("Virtual Display creation failed");
       return -ENOMEM;
     }
 
-    status = hwc_session->display_virtual_->Init();
+    status = display_virtual_->Init();
     if (status) {
       goto CleanupOnError;
     }
 
-    status = hwc_session->display_virtual_->SetPowerMode(HWC_POWER_MODE_NORMAL);
+    status = display_virtual_->SetPowerMode(HWC_POWER_MODE_NORMAL);
     if (status) {
       goto CleanupOnError;
     }
   }
 
-  if (hwc_session->display_virtual_) {
-    status = hwc_session->display_virtual_->SetActiveConfig(content_list);
+  if (display_virtual_) {
+    SetFrameBufferResolution(HWC_DISPLAY_VIRTUAL, content_list);
+    status = display_virtual_->SetActiveConfig(content_list);
   }
 
   return status;
 
 CleanupOnError:
-  return hwc_session->DestroyVirtualDisplay(hwc_session);
+  return DestroyVirtualDisplay();
 }
 
-int HWCSession::DestroyVirtualDisplay(HWCSession *hwc_session) {
+int HWCSession::DestroyVirtualDisplay() {
   int status = 0;
 
-  if (hwc_session->display_virtual_) {
-    status = hwc_session->display_virtual_->Deinit();
+  if (display_virtual_) {
+    status = display_virtual_->Deinit();
     if (!status) {
-      delete hwc_session->display_virtual_;
-      hwc_session->display_virtual_ = NULL;
+      delete display_virtual_;
+      display_virtual_ = NULL;
+      // Signal the HotPlug thread to continue with the external display connection
+      locker_.Signal();
     }
   }
 
@@ -600,6 +626,13 @@ android::status_t HWCSession::notifyCallback(uint32_t command, const android::Pa
   case qService::IQService::SET_DISPLAY_MODE:
     status = SetDisplayMode(input_parcel);
     break;
+  case qService::IQService::SET_SECONDARY_DISPLAY_STATUS:
+    status = SetSecondaryDisplayStatus(input_parcel);
+    break;
+
+  case qService::IQService::CONFIGURE_DYN_REFRESH_RATE:
+    status = ConfigureRefreshRate(input_parcel);
+    break;
 
   default:
     DLOGW("QService command = %d is not supported", command);
@@ -607,6 +640,55 @@ android::status_t HWCSession::notifyCallback(uint32_t command, const android::Pa
   }
 
   return status;
+}
+
+android::status_t HWCSession::SetSecondaryDisplayStatus(const android::Parcel *input_parcel) {
+  uint32_t display_id = UINT32(input_parcel->readInt32());
+  uint32_t display_status = UINT32(input_parcel->readInt32());
+  HWCDisplay *display = NULL;
+
+  DLOGI("Display %d Status %d", display_id, display_status);
+  switch (display_id) {
+  case HWC_DISPLAY_EXTERNAL:
+    display = display_external_;
+    break;
+  case HWC_DISPLAY_VIRTUAL:
+    display = display_virtual_;
+    break;
+  default:
+    DLOGW("Not supported for display %d", display_id);
+    return -EINVAL;
+  }
+
+  return display->SetDisplayStatus(display_status);
+}
+
+android::status_t HWCSession::ConfigureRefreshRate(const android::Parcel *input_parcel) {
+  uint32_t operation = UINT32(input_parcel->readInt32());
+
+  switch (operation) {
+  case qdutils::DISABLE_METADATA_DYN_REFRESH_RATE:
+    display_primary_->SetMetaDataRefreshRateFlag(false);
+    break;
+
+  case qdutils::ENABLE_METADATA_DYN_REFRESH_RATE:
+    display_primary_->SetMetaDataRefreshRateFlag(true);
+    break;
+
+  case qdutils::SET_BINDER_DYN_REFRESH_RATE:
+  {
+    uint32_t refresh_rate = UINT32(input_parcel->readInt32());
+
+    display_primary_->SetRefreshRate(refresh_rate);
+    break;
+  }
+
+  default:
+    DLOGW("Invalid operation %d", operation);
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 android::status_t HWCSession::SetDisplayMode(const android::Parcel *input_parcel) {
@@ -753,8 +835,9 @@ void* HWCSession::HWCUeventThreadHandler() {
         if (hwc_procs_) {
           reset_panel_ = true;
           hwc_procs_->invalidate(hwc_procs_);
-        } else
+        } else {
           DLOGW("Ignore resetpanel - hwc_proc not registered");
+        }
       }
     }
   }
@@ -782,19 +865,19 @@ void HWCSession::ResetPanel() {
   DLOGI("Powering off primary");
   status = display_primary_->SetPowerMode(HWC_POWER_MODE_OFF);
   if (status) {
-    DLOGE("power-off on primary failed with error = %d",status);
+    DLOGE("power-off on primary failed with error = %d", status);
   }
 
   DLOGI("Restoring power mode on primary");
   uint32_t mode = display_primary_->GetLastPowerMode();
   status = display_primary_->SetPowerMode(mode);
   if (status) {
-    DLOGE("Setting power mode = %d on primary failed with error = %d", mode,status);
+    DLOGE("Setting power mode = %d on primary failed with error = %d", mode, status);
   }
 
   status = display_primary_->EventControl(HWC_EVENT_VSYNC, 1);
   if (status) {
-    DLOGE("enabling vsync failed for primary with error = %d",status);
+    DLOGE("enabling vsync failed for primary with error = %d", status);
   }
 
   reset_panel_ = false;
@@ -808,6 +891,14 @@ int HWCSession::HotPlugHandler(bool connected) {
 
   if (connected) {
     SEQUENCE_WAIT_SCOPE_LOCK(locker_);
+    if (display_virtual_) {
+      // Wait for the virtual display to tear down
+      int status = locker_.WaitFinite(kExternalConnectionTimeoutMs);
+      if (status != 0) {
+        DLOGE("Timed out while waiting for virtual display to tear down.");
+        return -1;
+      }
+    }
     if (display_external_) {
      DLOGE("HDMI already connected");
      return -1;
@@ -823,6 +914,7 @@ int HWCSession::HotPlugHandler(bool connected) {
       display_external_ = NULL;
       return -1;
     }
+    SetFrameBufferResolution(HWC_DISPLAY_EXTERNAL, NULL);
   } else {
     SEQUENCE_WAIT_SCOPE_LOCK(locker_);
     if (!display_external_) {
@@ -840,6 +932,73 @@ int HWCSession::HotPlugHandler(bool connected) {
   hwc_procs_->invalidate(hwc_procs_);
 
   return 0;
+}
+
+void HWCSession::SetFrameBufferResolution(int disp, hwc_display_contents_1_t *content_list) {
+  char property[PROPERTY_VALUE_MAX];
+  uint32_t primary_width = 0;
+  uint32_t primary_height = 0;
+
+  switch (disp) {
+  case HWC_DISPLAY_PRIMARY:
+  {
+    display_primary_->GetPanelResolution(&primary_width, &primary_height);
+    if (property_get("debug.hwc.fbsize", property, NULL) > 0) {
+      char *yptr = strcasestr(property, "x");
+      primary_width = atoi(property);
+      primary_height = atoi(yptr + 1);
+    }
+    display_primary_->SetFrameBufferResolution(primary_width, primary_height);
+    break;
+  }
+
+  case HWC_DISPLAY_EXTERNAL:
+  {
+    uint32_t external_width = 0;
+    uint32_t external_height = 0;
+    display_external_->GetPanelResolution(&external_width, &external_height);
+
+    if (property_get("sys.hwc.mdp_downscale_enabled", property, "false") &&
+        !strcmp(property, "true")) {
+      display_primary_->GetFrameBufferResolution(&primary_width, &primary_height);
+      uint32_t primary_area = primary_width * primary_height;
+      uint32_t external_area = external_width * external_height;
+
+      if (primary_area > external_area) {
+        if (primary_height > primary_width) {
+          Swap(primary_height, primary_width);
+        }
+        AdjustSourceResolution(primary_width, primary_height,
+                               &external_width, &external_height);
+      }
+    }
+    display_external_->SetFrameBufferResolution(external_width, external_height);
+    break;
+  }
+
+  case HWC_DISPLAY_VIRTUAL:
+  {
+    if (ValidateContentList(content_list)) {
+      const private_handle_t *output_handle =
+              static_cast<const private_handle_t *>(content_list->outbuf);
+      int virtual_width = 0;
+      int virtual_height = 0;
+      getBufferSizeAndDimensions(output_handle->width, output_handle->height, output_handle->format,
+                                 virtual_width, virtual_height);
+      display_virtual_->SetFrameBufferResolution(virtual_width, virtual_height);
+    }
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
+void HWCSession::AdjustSourceResolution(uint32_t dst_width, uint32_t dst_height,
+                                        uint32_t *src_width, uint32_t *src_height) {
+  *src_height = (dst_width * (*src_height)) / (*src_width);
+  *src_width = dst_width;
 }
 
 }  // namespace sde

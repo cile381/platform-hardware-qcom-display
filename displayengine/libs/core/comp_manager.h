@@ -41,6 +41,8 @@ class CompManager : public DumpImpl {
   DisplayError RegisterDisplay(DisplayType type, const HWDisplayAttributes &attributes,
                                const HWPanelInfo &hw_panel_info, Handle *res_mgr_hnd);
   DisplayError UnregisterDisplay(Handle res_mgr_hnd);
+  void ReconfigureDisplay(Handle display_ctx, const HWDisplayAttributes &attributes,
+                          const HWPanelInfo &hw_panel_info);
   void PrePrepare(Handle display_ctx, HWLayers *hw_layers);
   DisplayError Prepare(Handle display_ctx, HWLayers *hw_layers);
   DisplayError PostPrepare(Handle display_ctx, HWLayers *hw_layers);
@@ -49,6 +51,7 @@ class CompManager : public DumpImpl {
   bool ProcessIdleTimeout(Handle display_ctx);
   void ProcessThermalEvent(Handle display_ctx, int64_t thermal_level);
   DisplayError SetMaxMixerStages(Handle display_ctx, uint32_t max_mixer_stages);
+  DisplayError ValidateScaling(const LayerRect &crop, const LayerRect &dst, bool rotate90);
 
   // DumpImpl method
   virtual void AppendDump(char *buffer, uint32_t length);

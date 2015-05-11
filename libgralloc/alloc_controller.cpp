@@ -153,15 +153,17 @@ void AdrenoMemInfo::getAlignedWidthAndHeight(int width, int height, int format,
                             int usage, int& aligned_w, int& aligned_h)
 {
 
+    bool ubwc_enabled = isUBwcEnabled(format, usage);
+
     // Currently surface padding is only computed for RGB* surfaces.
     if (format <= HAL_PIXEL_FORMAT_sRGB_X_8888) {
-        int tileEnabled = isMacroTileEnabled(format, usage);
+        int tileEnabled = ubwc_enabled || isMacroTileEnabled(format, usage);
         AdrenoMemInfo::getInstance().getGpuAlignedWidthHeight(width,
             height, format, tileEnabled, aligned_w, aligned_h);
         return;
     }
 
-    if (isUBwcEnabled(format, usage)) {
+    if (ubwc_enabled) {
         getUBwcWidthAndHeight(width, height, format, aligned_w, aligned_h);
         return;
     }
@@ -172,8 +174,10 @@ void AdrenoMemInfo::getAlignedWidthAndHeight(int width, int height, int format,
     {
         case HAL_PIXEL_FORMAT_YCrCb_420_SP:
         case HAL_PIXEL_FORMAT_YCrCb_420_SP_ADRENO:
-        case HAL_PIXEL_FORMAT_RAW_SENSOR:
             aligned_w = ALIGN(width, 32);
+            break;
+        case HAL_PIXEL_FORMAT_RAW_SENSOR:
+            aligned_w = ALIGN(width, 16);
             break;
         case HAL_PIXEL_FORMAT_RAW10:
             aligned_w = ALIGN(width * 10 /8, 16);
@@ -627,9 +631,9 @@ unsigned int getBufferSizeAndDimensions(int width, int height, int format,
 
 
 void getBufferAttributes(int width, int height, int format, int usage,
-        int& alignedw, int &alignedh, int& tileEnabled, unsigned int& size)
+        int& alignedw, int &alignedh, int& tiled, unsigned int& size)
 {
-    tileEnabled = isMacroTileEnabled(format, usage);
+    tiled = isUBwcEnabled(format, usage) || isMacroTileEnabled(format, usage);
 
     AdrenoMemInfo::getInstance().getAlignedWidthAndHeight(width,
             height,

@@ -95,13 +95,13 @@ struct DisplayConfigVariableInfo {
   uint32_t y_pixels;          //!< Total number of pixels in Y-direction on the display panel.
   float x_dpi;                //!< Dots per inch in X-direction.
   float y_dpi;                //!< Dots per inch in Y-direction.
-  float fps;                  //!< Frame rate per second.
+  uint32_t fps;               //!< Frame rate per second.
   uint32_t vsync_period_ns;   //!< VSync period in nanoseconds.
-  uint32_t v_total;           //!< Total lines in Y-direction (vActive + vFP + vBP + vPulseWidth).
+  uint32_t v_total;           //!< Total height of panel (vActive + vFP + vBP + vPulseWidth).
   uint32_t h_total;           //!< Total width of panel (hActive + hFP + hBP + hPulseWidth).
 
   DisplayConfigVariableInfo() : x_pixels(0), y_pixels(0), x_dpi(0.0f), y_dpi(0.0f),
-                               fps(0.0f), vsync_period_ns(0), v_total(0), h_total(0) { }
+                                fps(0), vsync_period_ns(0), v_total(0), h_total(0) { }
 };
 
 /*! @brief Event data associated with VSync event.
@@ -333,6 +333,21 @@ class DisplayInterface {
     @return \link DisplayError \endlink
   */
   virtual DisplayError SetDisplayMode(uint32_t mode) = 0;
+
+  /*! @brief Method to determine whether scaling for a custom resolution is valid.
+
+    @return \link DisplayError \endlink
+  */
+  virtual DisplayError IsScalingValid(const LayerRect &crop, const LayerRect &dst,
+                                      bool rotate90) = 0;
+
+  /*! @brief Method to set the refresh rate of a display.
+
+    @param[in] new refresh rate of the display.
+
+    @return \link DisplayError \endlink
+  */
+  virtual DisplayError SetRefreshRate(uint32_t refresh_rate) = 0;
 
  protected:
   virtual ~DisplayInterface() { }

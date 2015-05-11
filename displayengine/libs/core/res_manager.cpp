@@ -197,6 +197,17 @@ DisplayError ResManager::UnregisterDisplay(Handle display_ctx) {
   return kErrorNone;
 }
 
+void ResManager::ReconfigureDisplay(Handle display_ctx, const HWDisplayAttributes &attributes,
+                                    const HWPanelInfo &hw_panel_info) {
+  SCOPE_LOCK(locker_);
+
+  DisplayResourceContext *display_resource_ctx =
+                          reinterpret_cast<DisplayResourceContext *>(display_ctx);
+
+  display_resource_ctx->display_attributes = attributes;
+  display_resource_ctx->hw_panel_info_ = hw_panel_info;
+}
+
 DisplayError ResManager::Start(Handle display_ctx) {
   locker_.Lock();
 
@@ -492,7 +503,7 @@ float ResManager::GetPipeBw(DisplayResourceContext *display_ctx, HWPipeInfo *pip
   float decimation = powf(2.0f, pipe->vertical_decimation);
   src_h /= decimation;
 
-  float bw = src_w * src_h * bpp * display_attributes.fps;
+  float bw = src_w * src_h * bpp * FLOAT(display_attributes.fps);
 
   // Consider panel dimension
   // (v_total / v_active) * (v_active / dst_h)
@@ -522,7 +533,7 @@ float ResManager::GetPipeBw(DisplayResourceContext *display_ctx, HWPipeInfo *pip
 float ResManager::GetClockForPipe(DisplayResourceContext *display_ctx, HWPipeInfo *pipe) {
   HWDisplayAttributes &display_attributes = display_ctx->display_attributes;
   float v_total = FLOAT(display_attributes.v_total);
-  float fps = display_attributes.fps;
+  float fps = FLOAT(display_attributes.fps);
 
   float src_h = pipe->src_roi.bottom - pipe->src_roi.top;
   float dst_h = pipe->dst_roi.bottom - pipe->dst_roi.top;
@@ -619,6 +630,8 @@ float ResManager::GetBpp(LayerBufferFormat format) {
     case kFormatXRGB8888:
     case kFormatRGBX8888:
     case kFormatBGRX8888:
+    case kFormatRGBA8888Ubwc:
+    case kFormatRGBX8888Ubwc:
       return 4.0f;
     case kFormatRGB888:
     case kFormatBGR888:
@@ -626,6 +639,7 @@ float ResManager::GetBpp(LayerBufferFormat format) {
     case kFormatRGB565:
     case kFormatRGBA5551:
     case kFormatRGBA4444:
+    case kFormatRGB565Ubwc:
     case kFormatYCbCr422H2V1Packed:
     case kFormatYCrCb422H2V1SemiPlanar:
     case kFormatYCrCb422H1V2SemiPlanar:
