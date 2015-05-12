@@ -454,6 +454,14 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
         ALOGD_IF(isDebug(),"%s: MDP Comp. video transition padding round",
                 __FUNCTION__);
         ret = false;
+    } else if((qdutils::MDPVersion::getInstance().is8x26() ||
+               qdutils::MDPVersion::getInstance().is8x16() ||
+               qdutils::MDPVersion::getInstance().is8x39()) &&
+              !mDpy && isSecondaryAnimating(ctx) &&
+              isYuvPresent(ctx,HWC_DISPLAY_VIRTUAL)) {
+        ALOGD_IF(isDebug(),"%s: Display animation in progress",
+                 __FUNCTION__);
+        ret = false;
     } else if(qdutils::MDPVersion::getInstance().getTotalPipes() < 8) {
        /* TODO: freeing up all the resources only for the targets having total
                 number of pipes < 8. Need to analyze number of VIG pipes used
@@ -732,6 +740,14 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         return false;
     }
 
+    if(!mDpy && isSecondaryAnimating(ctx) &&
+       (isYuvPresent(ctx,HWC_DISPLAY_EXTERNAL) ||
+       isYuvPresent(ctx,HWC_DISPLAY_VIRTUAL)) ) {
+        ALOGD_IF(isDebug(),"%s: Display animation in progress",
+                 __FUNCTION__);
+        return false;
+    }
+
     // if secondary is configuring or Padding round, fall back to video only
     // composition and release all assigned non VIG pipes from primary.
     if(isSecondaryConfiguring(ctx)) {
@@ -823,6 +839,15 @@ bool MDPComp::fullMDPComp(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         }
     }
 
+    if(!mDpy && isSecondaryConnected(ctx) &&
+           (qdutils::MDPVersion::getInstance().is8x16() ||
+            qdutils::MDPVersion::getInstance().is8x26() ||
+            qdutils::MDPVersion::getInstance().is8x39()) &&
+           isYuvPresent(ctx, HWC_DISPLAY_VIRTUAL)) {
+        ALOGD_IF(isDebug(), "%s: YUV layer present on secondary", __FUNCTION__);
+        return false;
+    }
+
     mCurrentFrame.fbCount = 0;
     memcpy(&mCurrentFrame.isFBComposed, &mCurrentFrame.drop,
            sizeof(mCurrentFrame.isFBComposed));
@@ -875,6 +900,15 @@ bool MDPComp::fullMDPCompWithPTOR(hwc_context_t *ctx,
             ALOGD_IF(isDebug(), "%s: Unsupported layer in list",__FUNCTION__);
             return false;
         }
+    }
+
+    if(!mDpy && isSecondaryConnected(ctx) &&
+           (qdutils::MDPVersion::getInstance().is8x16() ||
+            qdutils::MDPVersion::getInstance().is8x26() ||
+            qdutils::MDPVersion::getInstance().is8x39()) &&
+           isYuvPresent(ctx, HWC_DISPLAY_VIRTUAL)) {
+        ALOGD_IF(isDebug(), "%s: YUV layer present on secondary", __FUNCTION__);
+        return false;
     }
 
     /* We cannot use this composition mode, if:
