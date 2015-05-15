@@ -2677,7 +2677,8 @@ void BwcPM::setBwc(const hwc_context_t *ctx, const int& dpy,
         swap(src_w, src_h);
     }
     //src width > MAX mixer supported dim
-    if(src_w > (int) qdutils::MDPVersion::getInstance().getMaxMixerWidth()) {
+    if(src_w > (int) qdutils::MDPVersion::getInstance().getMaxMixerWidth() ||
+            src_h > (int) qdutils::MDPVersion::getInstance().getMaxMixerWidth()) {
         return;
     }
     //Decimation necessary, cannot use BWC. H/W requirement.
