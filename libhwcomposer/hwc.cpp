@@ -154,8 +154,8 @@ static int hwc_prepare_primary(hwc_composer_device_1 *dev,
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     const int dpy = HWC_DISPLAY_PRIMARY;
     int ret = -1;
-    if(UNLIKELY(!ctx->mBasePipeSetup))
-        setupBasePipe(ctx);
+    if(UNLIKELY(!ctx->mBasePipeSetup[dpy]))
+        setupBasePipe(ctx, dpy);
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive) {
         reset_layer_prop(ctx, dpy, list->numHwLayers - 1);
@@ -190,6 +190,8 @@ static int hwc_prepare_external(hwc_composer_device_1 *dev,
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     int ret = -1;
 
+    if((dpy == HWC_DISPLAY_SECONDARY) && UNLIKELY(!ctx->mBasePipeSetup[dpy]))
+        setupBasePipe(ctx, dpy);
     if (LIKELY(list && list->numHwLayers > 1) &&
             ctx->dpyAttr[dpy].isActive &&
             ctx->dpyAttr[dpy].connected) {

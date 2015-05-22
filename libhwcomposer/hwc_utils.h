@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C)2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C)2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -209,7 +209,7 @@ bool isSecureModePolicy(int mdpVersion);
 bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
-bool setupBasePipe(hwc_context_t *ctx);
+bool setupBasePipe(hwc_context_t *ctx, const int dpy);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 int getBlending(int blending);
 
@@ -465,7 +465,7 @@ struct hwc_context_t {
     //MDP rotater needed
     bool mNeedsRotator;
     //Check if base pipe is set up
-    bool mBasePipeSetup;
+    bool mBasePipeSetup[HWC_NUM_DISPLAY_TYPES];
     //Lock to protect drawing data structures
     mutable Locker mDrawLock;
     //Drawing round when we use GPU

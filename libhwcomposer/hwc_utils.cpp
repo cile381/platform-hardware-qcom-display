@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -369,11 +369,11 @@ void initContext(hwc_context_t *ctx)
         ctx->mAnimationState[i] = ANIMATION_STOPPED;
         ctx->mHwcDebug[i] = new HwcDebug(i);
         ctx->mPrevHwLayerCount[i] = 0;
+        ctx->mBasePipeSetup[i] = false;
     }
 
     ctx->vstate.enable = false;
     ctx->vstate.fakevsync = false;
-    ctx->mBasePipeSetup = false;
     ctx->mExtOrientation = 0;
 
     //Right now hwc starts the service but anybody could do it, or it could be
@@ -1479,8 +1479,7 @@ inline int configRotator(Rotator *rot, Whf& whf,
  * Sets up BORDERFILL as default base pipe and detaches RGB0.
  * Framebuffer is always updated using PLAY ioctl.
  */
-bool setupBasePipe(hwc_context_t *ctx) {
-    const int dpy = HWC_DISPLAY_PRIMARY;
+bool setupBasePipe(hwc_context_t *ctx, const int dpy) {
     int fb_stride = ctx->dpyAttr[dpy].stride;
     int fb_width = ctx->dpyAttr[dpy].xres;
     int fb_height = ctx->dpyAttr[dpy].yres;
@@ -1512,7 +1511,7 @@ bool setupBasePipe(hwc_context_t *ctx) {
                 strerror(errno));
         return false;
     }
-    ctx->mBasePipeSetup = true;
+    ctx->mBasePipeSetup[dpy] = true;
     return true;
 }
 
