@@ -38,6 +38,7 @@
 #define MAX_NUM_APP_LAYERS 32
 #define MAX_DISPLAY_DIM 2048
 #define MDP_ARB_DEV_PATH "/dev/mdp_arb"
+#define HWC_FB_DISP_ID_SYS_PATH "/sys/class/graphics/fb%d/msm_fb_disp_id"
 
 //Fwrd decls
 struct hwc_context_t;
@@ -395,6 +396,20 @@ static inline void place_marker(const char* str) {
 
 // Global flag to control HWC debug on/off.
 extern bool mHwcDebugLogs;
+
+static inline const char *getHwcFbDispId(int dpy) {
+    const char *dispId[] = {
+        "PRIMARY\n",
+        "SECONDARY\n",
+        "TERTIARY\n",
+        "WRITEBACK\n",
+    };
+    const int num = sizeof(dispId)/sizeof(char *);
+    if (dpy >= num)
+        return "NULL";
+    else
+        return dispId[dpy];
+}
 
 static bool isDebug() { return mHwcDebugLogs ? true : false; };
 

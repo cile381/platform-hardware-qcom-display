@@ -52,7 +52,6 @@ namespace ovutils = overlay::utils;
 #define REVERSE_CAMERA_PATH "/sys/class/switch/reverse/state"
 namespace qhwc {
 #define HWC_FB_DEV_PATH "/dev/graphics/fb%u"
-#define HWC_FB_DISP_ID_SYS_PATH "/sys/class/graphics/fb%d/msm_fb_disp_id"
 #define HWC_MDP_ARB_CLIENT_NAME "hwc"
 #define HWC_MDP_ARB_EVENT_NAME "switch-reverse"
 #define HWC_WATCHPROPS_THREAD_NAME "hwcWatchpropsThread"
@@ -64,13 +63,6 @@ static void openFb(int dpy, int *fd, int *fb_idx) {
     char name[MAX_OPEN_FB_LEN] = {0};
     char disp_id_str[MAX_OPEN_FB_LEN] = {0};
     const char *disp_id_path = HWC_FB_DISP_ID_SYS_PATH;
-    const char *disp_id[] = {
-        "PRIMARY\n",
-        "SECONDARY\n",
-        "TERTIARY\n",
-        "WRITEBACK\n",
-    };
-    int num = sizeof(disp_id)/sizeof(char *);
     int i = 0;
     FILE *fp = NULL;
     if (!fd || !fb_idx) {
@@ -78,9 +70,9 @@ static void openFb(int dpy, int *fd, int *fb_idx) {
             (int)fb_idx);
     }
     *fd = -1;
-    if (dpy >= num)
+    if (dpy >= HWC_NUM_DISPLAY_TYPES)
         return;
-    for (i = 0; i < num; i++) {
+    for (i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         snprintf(name, MAX_OPEN_FB_LEN, disp_id_path, i);
         fp = fopen(name, "r");
         if (!fp) {
@@ -89,11 +81,12 @@ static void openFb(int dpy, int *fd, int *fb_idx) {
         } else {
             memset(disp_id_str, 0, sizeof(disp_id_str));
             fread(disp_id_str, sizeof(char), MAX_OPEN_FB_LEN, fp);
-            if (!strcmp(disp_id[dpy], disp_id_str))
+            fclose(fp);
+            if (!strcmp(getHwcFbDispId(dpy), disp_id_str))
                 break;
         }
     }
-    if (i == num) {
+    if (i == HWC_NUM_DISPLAY_TYPES) {
         ALOGE("%s can't find correct fb for name=%s", __FUNCTION__, name);
         return;
     }

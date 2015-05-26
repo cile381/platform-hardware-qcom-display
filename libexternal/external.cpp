@@ -53,14 +53,41 @@ ExternalDisplay::ExternalDisplay(hwc_context_t* ctx, int dpy):mFd(-1),
 
 bool ExternalDisplay::openFrameBuffer()
 {
+    FILE *fp = NULL;
+    const int MAX_OPEN_FB_LEN = 64;
+    char name[MAX_OPEN_FB_LEN] = {0};
+    char disp_id_str[MAX_OPEN_FB_LEN] = {0};
+    bool openFb = true;
+
     if (mFd == -1) {
         if(0 > mHwcContext->dpyAttr[mDpy].fd) {
-            char strDevPath[MAX_SYSFS_FILE_PATH];
-            snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d", mFbNum);
-            mFd = open(strDevPath, O_RDWR);
-            if (mFd < 0)
-                ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
-            mHwcContext->dpyAttr[mDpy].fd = mFd;
+            /* Look for display id first */
+            snprintf(name, MAX_OPEN_FB_LEN, HWC_FB_DISP_ID_SYS_PATH, mDpy);
+            fp = fopen(name, "r");
+            if (!fp) {
+                ALOGW("%s can't open %s", __FUNCTION__, name);
+                /* If disp_id path is not existing, then fall back to legacy
+                 * way, which opens fb. */
+            } else {
+                memset(disp_id_str, 0, sizeof(disp_id_str));
+                fread(disp_id_str, sizeof(char), MAX_OPEN_FB_LEN, fp);
+                /* Don't open this FB if it's not for external displays */
+                if (strcmp(getHwcFbDispId(mDpy), disp_id_str)) {
+                    ALOGI("%s disp_id=%s is not for external display",
+                          __FUNCTION__, disp_id_str);
+                    openFb = false;
+                }
+                fclose(fp);
+            }
+            if (openFb) {
+                char strDevPath[MAX_SYSFS_FILE_PATH];
+                snprintf(strDevPath, MAX_SYSFS_FILE_PATH, "/dev/graphics/fb%d",
+                         mFbNum);
+                mFd = open(strDevPath, O_RDWR);
+                if (mFd < 0)
+                    ALOGE("%s: %s is not available", __FUNCTION__, strDevPath);
+                mHwcContext->dpyAttr[mDpy].fd = mFd;
+            }
         } else {
             mFd = mHwcContext->dpyAttr[mDpy].fd;
         }
