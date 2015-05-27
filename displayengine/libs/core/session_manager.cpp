@@ -177,7 +177,7 @@ DisplayError SessionManager::GetNextBuffer(const int &client_id,
   BufferInfo *buffer_info = &session->buffer_info;
   if (buffer_info->alloc_buffer_info.fd < 0) {
     const uint32_t &buffer_count = buffer_info->buffer_config.buffer_count;
-    uint32_t &buffer_size = buffer_info->alloc_buffer_info.size;
+    const size_t &buffer_size = buffer_info->alloc_buffer_info.size;
 
     error = buffer_allocator_->AllocateBuffer(buffer_info);
     if (error != kErrorNone) {
