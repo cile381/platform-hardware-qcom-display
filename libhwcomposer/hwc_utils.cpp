@@ -199,6 +199,7 @@ static int registerMdpArbitrator(hwc_context_t *ctx)
     mdp_arb_register arbReg;
     mdp_arb_event event;
     int upState[2] = {0, 1};
+    int optState = 1;
 
     for (i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i++) {
         ctx->dpyAttr[i].arb_fd = -1;
@@ -220,8 +221,12 @@ static int registerMdpArbitrator(hwc_context_t *ctx)
         strlcpy(event.name, HWC_MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
         event.event.register_state.num_of_down_state_value = 0;
         event.event.register_state.down_state_value = NULL;
-        event.event.register_state.num_of_up_state_value = 2;
+        event.event.register_state.num_of_up_state_value =
+            sizeof(upState)/sizeof(int);
         event.event.register_state.up_state_value = upState;
+        event.event.register_state.num_of_opt_state_value =
+            sizeof(optState)/sizeof(int);
+        event.event.register_state.opt_state_value = &optState;
         arbReg.event = &event;
         arbReg.priority = 1;
         arbReg.notification_support_mask = (MDP_ARB_NOTIFICATION_DOWN |
