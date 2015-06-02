@@ -31,6 +31,8 @@
 #include <ctype.h>
 #include <math.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -43,23 +45,12 @@
 
 #define __CLASS__ "HWDevice"
 
-#ifdef DISPLAY_CORE_VIRTUAL_DRIVER
-extern int virtual_ioctl(int fd, int cmd, ...);
-extern int virtual_open(const char *file_name, int access, ...);
-extern int virtual_close(int fd);
-extern int virtual_poll(struct pollfd *fds,  nfds_t num, int timeout);
-extern ssize_t virtual_pread(int fd, void *data, size_t count, off_t offset);
-extern ssize_t virtual_pwrite(int fd, const void *data, size_t count, off_t offset);
-extern FILE* virtual_fopen(const char *fname, const char *mode);
-extern int virtual_fclose(FILE* fileptr);
-extern ssize_t virtual_getline(char **lineptr, size_t *linelen, FILE *stream);
-#endif
-
 namespace sdm {
 
 HWDevice::HWDevice(BufferSyncHandler *buffer_sync_handler)
   : fb_node_index_(-1), fb_path_("/sys/devices/virtual/graphics/fb"), hotplug_enabled_(false),
     buffer_sync_handler_(buffer_sync_handler), synchronous_commit_(false) {
+#ifndef SDM_VIRTUAL_DRIVER
   // Pointer to actual driver interfaces.
   ioctl_ = ::ioctl;
   open_ = ::open;
@@ -70,20 +61,27 @@ HWDevice::HWDevice(BufferSyncHandler *buffer_sync_handler)
   fopen_ = ::fopen;
   fclose_ = ::fclose;
   getline_ = ::getline;
+#else
+  // Point to virtual driver interfaces.
+  extern int virtual_ioctl(int fd, int cmd, ...);
+  extern int virtual_open(const char *file_name, int access, ...);
+  extern int virtual_close(int fd);
+  extern int virtual_poll(struct pollfd *fds,  nfds_t num, int timeout);
+  extern ssize_t virtual_pread(int fd, void *data, size_t count, off_t offset);
+  extern ssize_t virtual_pwrite(int fd, const void *data, size_t count, off_t offset);
+  extern FILE* virtual_fopen(const char *fname, const char *mode);
+  extern int virtual_fclose(FILE* fileptr);
+  extern ssize_t virtual_getline(char **lineptr, size_t *linelen, FILE *stream);
 
-#ifdef DISPLAY_CORE_VIRTUAL_DRIVER
-  // If debug property to use virtual driver is set, point to virtual driver interfaces.
-  if (Debug::IsVirtualDriver()) {
-    ioctl_ = virtual_ioctl;
-    open_ = virtual_open;
-    close_ = virtual_close;
-    poll_ = virtual_poll;
-    pread_ = virtual_pread;
-    pwrite_ = virtual_pwrite;
-    fopen_ = virtual_fopen;
-    fclose_ = virtual_fclose;
-    getline_ = virtual_getline;
-  }
+  ioctl_ = virtual_ioctl;
+  open_ = virtual_open;
+  close_ = virtual_close;
+  poll_ = virtual_poll;
+  pread_ = virtual_pread;
+  pwrite_ = virtual_pwrite;
+  fopen_ = virtual_fopen;
+  fclose_ = virtual_fclose;
+  getline_ = virtual_getline;
 #endif
 }
 
@@ -444,23 +442,14 @@ DisplayError HWDevice::Commit(HWLayers *hw_layers) {
     uint32_t layer_index = hw_layer_info.index[i];
     LayerBuffer *input_buffer = stack->layers[layer_index].input_buffer;
     HWRotatorSession *hw_rotator_session = &hw_layers->config[i].hw_rotator_session;
-    HWRotateInfo *left_rotate = &hw_rotator_session->hw_rotate_info[0];
-    HWRotateInfo *right_rotate = &hw_rotator_session->hw_rotate_info[1];
 
-    if (!left_rotate->valid && !right_rotate->valid) {
-      input_buffer->release_fence_fd = dup(mdp_commit.release_fence);
-      continue;
+    if (hw_rotator_session->hw_block_count) {
+      input_buffer = &hw_rotator_session->output_buffer;
+      close_(input_buffer->acquire_fence_fd);
+      input_buffer->acquire_fence_fd = -1;
     }
 
-    for (uint32_t count = 0; count < 2; count++) {
-      HWRotateInfo *hw_rotate_info = &hw_rotator_session->hw_rotate_info[count];
-      if (hw_rotate_info->valid) {
-        input_buffer = &hw_rotator_session->output_buffer;
-        input_buffer->release_fence_fd = dup(mdp_commit.release_fence);
-        close_(input_buffer->acquire_fence_fd);
-        input_buffer->acquire_fence_fd = -1;
-      }
-    }
+    input_buffer->release_fence_fd = dup(mdp_commit.release_fence);
   }
   DLOGI_IF(kTagDriverConfig, "*************************** %s Commit Input ************************",
            device_name_);

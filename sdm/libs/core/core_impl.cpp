@@ -37,12 +37,11 @@
 
 namespace sdm {
 
-CoreImpl::CoreImpl(CoreEventHandler *event_handler, BufferAllocator *buffer_allocator,
+CoreImpl::CoreImpl(BufferAllocator *buffer_allocator,
                    BufferSyncHandler *buffer_sync_handler)
-  : event_handler_(event_handler), buffer_allocator_(buffer_allocator),
-    buffer_sync_handler_(buffer_sync_handler), hw_resource_(NULL), hw_info_intf_(NULL),
-    rotator_intf_(NULL), extension_lib_(NULL), extension_intf_(NULL),
-    create_extension_intf_(NULL), destroy_extension_intf_(NULL) {
+  : buffer_allocator_(buffer_allocator), buffer_sync_handler_(buffer_sync_handler),
+    hw_resource_(NULL), hw_info_intf_(NULL), rotator_intf_(NULL), extension_lib_(NULL),
+    extension_intf_(NULL), create_extension_intf_(NULL), destroy_extension_intf_(NULL) {
 }
 
 DisplayError CoreImpl::Init() {
@@ -65,7 +64,7 @@ DisplayError CoreImpl::Init() {
     }
 
     error = create_extension_intf_(EXTENSION_VERSION_TAG, &extension_intf_);
-    if(error != kErrorNone) {
+    if (error != kErrorNone) {
       DLOGE("Unable to create interface");
       ::dlclose(extension_lib_);
       return error;
@@ -99,8 +98,7 @@ DisplayError CoreImpl::Init() {
     error = extension_intf_->CreateRotator(buffer_allocator_, buffer_sync_handler_,
                                            &rotator_intf_);
     if (error != kErrorNone) {
-      comp_mgr_.Deinit();
-      goto CleanupOnError;
+      DLOGW("rotation is not supported");
     }
   }
 

@@ -69,7 +69,8 @@ MDPComp* MDPComp::getObject(hwc_context_t *ctx, const int& dpy) {
     return new MDPCompNonSplit(dpy);
 }
 
-MDPComp::MDPComp(int dpy):mDpy(dpy){};
+MDPComp::MDPComp(int dpy) : mDpy(dpy), mModeOn(false), mPrevModeOn(false) {
+};
 
 void MDPComp::dump(android::String8& buf, hwc_context_t *ctx)
 {
@@ -1813,6 +1814,14 @@ void MDPComp::dropNonAIVLayers(hwc_context_t* ctx,
 void MDPComp::updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
         bool secureOnly, FrameInfo& frame) {
     int nYuvCount = ctx->listStats[mDpy].yuvCount;
+    int nVGpipes = qdutils::MDPVersion::getInstance().getVGPipes();
+
+    /* If number of YUV layers in the layer list is more than the number of
+       VG pipes available in the target (non-split), try to program maximum
+       possible number of YUV layers to MDP, instead of falling back to GPU
+       completely.*/
+    nYuvCount = (nYuvCount > nVGpipes) ? nVGpipes : nYuvCount;
+
     for(int index = 0;index < nYuvCount; index++){
         int nYuvIndex = ctx->listStats[mDpy].yuvIndices[index];
         hwc_layer_1_t* layer = &list->hwLayers[nYuvIndex];

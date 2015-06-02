@@ -45,7 +45,7 @@ namespace sdm {
 HWCDisplay::HWCDisplay(CoreInterface *core_intf, hwc_procs_t const **hwc_procs, DisplayType type,
                        int id)
   : core_intf_(core_intf), hwc_procs_(hwc_procs), type_(type), id_(id), display_intf_(NULL),
-    flush_(false), output_buffer_(NULL), dump_frame_count_(0), dump_frame_index_(0),
+    flush_(false), dump_frame_count_(0), dump_frame_index_(0),
     dump_input_layers_(false), swap_interval_zero_(false), framebuffer_config_(NULL),
     display_paused_(false), use_metadata_refresh_rate_(false), metadata_refresh_rate_(0) {
 }
@@ -211,10 +211,6 @@ int HWCDisplay::GetActiveConfig() {
   }
 
   return index;
-}
-
-int HWCDisplay::SetActiveConfig(hwc_display_contents_1_t *content_list) {
-  return 0;
 }
 
 int HWCDisplay::SetActiveConfig(int index) {
@@ -409,7 +405,11 @@ int HWCDisplay::PrepareLayerStack(hwc_display_contents_1_t *content_list) {
 
     layer.plane_alpha = hwc_layer.planeAlpha;
     layer.flags.skip = ((hwc_layer.flags & HWC_SKIP_LAYER) > 0);
-    layer.flags.updating = (layer_stack_cache_.layer_cache[i].handle != hwc_layer.handle);
+    if (num_hw_layers <= kMaxLayerCount) {
+      layer.flags.updating = (layer_stack_cache_.layer_cache[i].handle != hwc_layer.handle);
+    } else {
+      layer.flags.updating = true;
+    }
 
     if (hwc_layer.flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
       layer_stack_.flags.animating = true;
@@ -616,6 +616,10 @@ bool HWCDisplay::NeedsFrameBufferRefresh(hwc_display_contents_1_t *content_list)
 
 void HWCDisplay::CacheLayerStackInfo(hwc_display_contents_1_t *content_list) {
   uint32_t layer_count = layer_stack_.layer_count;
+
+  if (layer_count > kMaxLayerCount) {
+    return;
+  }
 
   for (uint32_t i = 0; i < layer_count; i++) {
     Layer &layer = layer_stack_.layers[i];
