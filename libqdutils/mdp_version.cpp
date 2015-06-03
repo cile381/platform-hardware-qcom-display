@@ -192,7 +192,7 @@ void  MDPVersion::updatePanelInfo() {
                           mPanelInfo.mPartialUpdateEnable? "Enabled" :
                           "Disabled");
                 }
-                if(!strncmp(tokens[0], "xalign", strlen("xalign"))) {
+                if(!strncmp(tokens[0], "xstart", strlen("xstart"))) {
                     mPanelInfo.mLeftAlign = atoi(tokens[1]);
                     ALOGI("Left Align: %d", mPanelInfo.mLeftAlign);
                 }
