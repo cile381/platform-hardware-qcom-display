@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
  *
@@ -895,6 +895,9 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     //If current display is in optimize mode, don't do MDP comp
     if(ctx->dpyAttr[mDpy].inOptimizeMode) {
+        ALOGD_IF(isDebug(), "%s: current display=%d is in optimize mode",
+                __FUNCTION__, mDpy);
+        reset(numLayers, list);
         return -1;
     }
 
