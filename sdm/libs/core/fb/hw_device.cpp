@@ -445,8 +445,6 @@ DisplayError HWDevice::Commit(HWLayers *hw_layers) {
 
     if (hw_rotator_session->hw_block_count) {
       input_buffer = &hw_rotator_session->output_buffer;
-      close_(input_buffer->acquire_fence_fd);
-      input_buffer->acquire_fence_fd = -1;
     }
 
     input_buffer->release_fence_fd = dup(mdp_commit.release_fence);
@@ -714,7 +712,7 @@ void HWDevice::GetHWPanelInfoByNode(int device_node, HWPanelInfo *panel_info) {
       } else if (!strncmp(tokens[0], "min_fps", strlen("min_fps"))) {
         panel_info->min_fps = atoi(tokens[1]);
       } else if (!strncmp(tokens[0], "max_fps", strlen("max_fps"))) {
-        panel_info->max_fps= atoi(tokens[1]);
+        panel_info->max_fps = atoi(tokens[1]);
       } else if (!strncmp(tokens[0], "primary_panel", strlen("primary_panel"))) {
         panel_info->is_primary_panel = atoi(tokens[1]);
       }
