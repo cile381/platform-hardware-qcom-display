@@ -37,19 +37,61 @@
 
 namespace sdm {
 
-HWCDisplayExternal::HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs)
-  : HWCDisplay(core_intf, hwc_procs, kHDMI, HWC_DISPLAY_EXTERNAL) {
+static void AdjustSourceResolution(uint32_t dst_width, uint32_t dst_height, uint32_t *src_width,
+                                   uint32_t *src_height) {
+  *src_height = (dst_width * (*src_height)) / (*src_width);
+  *src_width = dst_width;
 }
 
-int HWCDisplayExternal::Init() {
-  int status = 0;
+int HWCDisplayExternal::Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                               uint32_t primary_width, uint32_t primary_height,
+                               HWCDisplay **hwc_display) {
+  uint32_t external_width = 0;
+  uint32_t external_height = 0;
+  char property[PROPERTY_VALUE_MAX];
 
-  status = HWCDisplay::Init();
-  if (status != 0) {
+  HWCDisplay *hwc_display_external = new HWCDisplayExternal(core_intf, hwc_procs);
+  int status = hwc_display_external->Init();
+  if (status) {
+    delete hwc_display_external;
     return status;
   }
 
+  hwc_display_external->GetPanelResolution(&external_width, &external_height);
+
+  int downscale_enabled = 0;
+  HWCDebugHandler::Get()->GetProperty("sdm.debug.sde_downscale_enabled", &downscale_enabled);
+  if (downscale_enabled == 1) {
+    uint32_t primary_area = primary_width * primary_height;
+    uint32_t external_area = external_width * external_height;
+
+    if (primary_area > external_area) {
+      if (primary_height > primary_width) {
+        Swap(primary_height, primary_width);
+      }
+      AdjustSourceResolution(primary_width, primary_height,
+                             &external_width, &external_height);
+    }
+  }
+
+  status = hwc_display_external->SetFrameBufferResolution(external_width, external_height);
+  if (status) {
+    Destroy(hwc_display_external);
+    return status;
+  }
+
+  *hwc_display = hwc_display_external;
+
   return status;
+}
+
+void HWCDisplayExternal::Destroy(HWCDisplay *hwc_display) {
+  hwc_display->Deinit();
+  delete hwc_display;
+}
+
+HWCDisplayExternal::HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs)
+  : HWCDisplay(core_intf, hwc_procs, kHDMI, HWC_DISPLAY_EXTERNAL) {
 }
 
 int HWCDisplayExternal::Prepare(hwc_display_contents_1_t *content_list) {
@@ -109,11 +151,11 @@ void HWCDisplayExternal::ApplyScanAdjustment(hwc_rect_t *display_frame) {
   }
 
   // Read user defined width and height ratio
-  char property[PROPERTY_VALUE_MAX];
-  property_get("persist.sys.actionsafe.width", property, "0");
-  float width_ratio = FLOAT(atoi(property)) / 100.0f;
-  property_get("persist.sys.actionsafe.height", property, "0");
-  float height_ratio = FLOAT(atoi(property)) / 100.0f;
+  int width = 0, height = 0;
+  HWCDebugHandler::Get()->GetProperty("sdm.external_action_safe_width", &width);
+  float width_ratio = FLOAT(width) / 100.0f;
+  HWCDebugHandler::Get()->GetProperty("sdm.external_action_safe_height", &height);
+  float height_ratio = FLOAT(height) / 100.0f;
 
   if (width_ratio == 0.0f ||  height_ratio == 0.0f) {
     return;

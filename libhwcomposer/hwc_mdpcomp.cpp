@@ -589,13 +589,6 @@ bool MDPComp::isFrameDoable(hwc_context_t *ctx) {
                      __FUNCTION__,mDpy);
             ret = false;
         }
-    } else if (ctx->isDMAStateChanging) {
-        // Bail out if a padding round has been invoked in order to switch DMA
-        // state to block mode. We need this to cater for the case when a layer
-        // requires rotation in the current frame.
-        ALOGD_IF(isDebug(), "%s: padding round invoked to switch DMA state",
-                __FUNCTION__);
-        return false;
     }
 
     return ret;
@@ -2186,7 +2179,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
                 __FUNCTION__);
         mCachedFrame.reset();
 #ifdef DYNAMIC_FPS
-        setDynRefreshRate(ctx, list);
+        // Reset refresh rate
+        setRefreshRate(ctx, mDpy, ctx->dpyAttr[mDpy].refreshRate);
 #endif
         freeHwCursor(ctx->dpyAttr[mDpy].fd, mDpy);
         return -1;
@@ -2203,7 +2197,8 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         setMDPCompLayerFlags(ctx, list);
         mCachedFrame.updateCounts(mCurrentFrame);
 #ifdef DYNAMIC_FPS
-        setDynRefreshRate(ctx, list);
+        // Reset refresh rate
+        setRefreshRate(ctx, mDpy, ctx->dpyAttr[mDpy].refreshRate);
 #endif
         freeHwCursor(ctx->dpyAttr[mDpy].fd, mDpy);
         ret = -1;
@@ -3117,8 +3112,14 @@ int MDPCompSrcSplit::configure(hwc_context_t *ctx, hwc_layer_1_t *layer,
             BwcPM::setBwc(ctx, mDpy, hnd, crop, dst, transform, downscale,
                     mdpFlags);
         }
+        uint32_t frame_rate = ctx->dpyAttr[HWC_DISPLAY_PRIMARY].refreshRate;
+        if(!mDpy && !isSecondaryConnected(ctx)) {
+            if(metadata && (metadata->operation & UPDATE_REFRESH_RATE))
+                frame_rate = metadata->refreshrate;
+        }
         //Configure rotator for pre-rotation
-        if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale) < 0) {
+        if(configRotator(*rot, whf, crop, mdpFlags, orient, downscale,
+                    frame_rate) < 0) {
             ALOGE("%s: configRotator failed!", __FUNCTION__);
             return -1;
         }
