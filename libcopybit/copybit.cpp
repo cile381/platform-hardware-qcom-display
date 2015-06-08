@@ -134,6 +134,8 @@ static int get_format(int format) {
         case HAL_PIXEL_FORMAT_BGRA_8888:     return MDP_BGRA_8888;
         case HAL_PIXEL_FORMAT_YCrCb_422_I:   return MDP_YCRYCB_H2V1;
         case HAL_PIXEL_FORMAT_YCbCr_422_I:   return MDP_YCBYCR_H2V1;
+        case HAL_PIXEL_FORMAT_CrYCbY_422_I:  return MDP_CRYCBY_H2V1;
+        case HAL_PIXEL_FORMAT_CbYCrY_422_I:  return MDP_CBYCRY_H2V1;
         case HAL_PIXEL_FORMAT_YCrCb_422_SP:  return MDP_Y_CRCB_H2V1;
         case HAL_PIXEL_FORMAT_YCrCb_420_SP:  return MDP_Y_CRCB_H2V2;
         case HAL_PIXEL_FORMAT_YCbCr_422_SP:  return MDP_Y_CBCR_H2V1;
@@ -547,7 +549,7 @@ static int sw_blit_copybit(
 {
     int status = 0;
 
-    if ((dev == NULL ) || (dst == NULL) || (src == NULL) || 
+    if ((dev == NULL) || (dst == NULL) || (src == NULL) ||
         (dst_rect == NULL) || (src_rect == NULL) || (region == NULL)) {
         ALOGE("%s, Invalid input parameters", __FUNCTION__);
         status = -EINVAL;

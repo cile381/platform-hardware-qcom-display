@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -120,6 +120,10 @@ int getMdpFormat(int format) {
             return MDP_YCBYCR_H2V1;
         case HAL_PIXEL_FORMAT_YCrCb_422_I:
             return MDP_YCRYCB_H2V1;
+        case HAL_PIXEL_FORMAT_CbYCrY_422_I:
+            return MDP_CBYCRY_H2V1;
+        case HAL_PIXEL_FORMAT_CrYCbY_422_I:
+            return MDP_CRYCBY_H2V1;
         case HAL_PIXEL_FORMAT_YCbCr_444_SP:
             return MDP_Y_CBCR_H1V1;
         case HAL_PIXEL_FORMAT_YCrCb_444_SP:
@@ -178,6 +182,10 @@ int getHALFormat(int mdpFormat) {
             return HAL_PIXEL_FORMAT_YCbCr_422_I;
         case MDP_YCRYCB_H2V1:
             return HAL_PIXEL_FORMAT_YCrCb_422_I;
+        case MDP_CBYCRY_H2V1:
+            return HAL_PIXEL_FORMAT_CbYCrY_422_I;
+        case MDP_CRYCBY_H2V1:
+            return HAL_PIXEL_FORMAT_CrYCbY_422_I;
          case MDP_Y_CBCR_H1V1:
             return HAL_PIXEL_FORMAT_YCbCr_444_SP;
         case MDP_Y_CRCB_H1V1:
