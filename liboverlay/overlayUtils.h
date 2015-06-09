@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+* Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -487,6 +487,8 @@ inline bool isYuv(uint32_t format) {
         case MDP_Y_CBCR_H2V2_VENUS:
         case MDP_YCBYCR_H2V1:
         case MDP_YCRYCB_H2V1:
+        case MDP_CBYCRY_H2V1:
+        case MDP_CRYCBY_H2V1:
             return true;
         default:
             return false;
@@ -518,6 +520,8 @@ inline const char* getFormatString(int format){
         "MDP_Y_CRCB_H2V2",
         "MDP_YCBYCR_H2V1",
         "MDP_YCRYCB_H2V1",
+        "MDP_CBYCRY_H2V1",
+        "MDP_CRYCBY_H2V1",
         "MDP_Y_CRCB_H2V1",
         "MDP_Y_CBCR_H2V1",
         "MDP_Y_CRCB_H1V2",

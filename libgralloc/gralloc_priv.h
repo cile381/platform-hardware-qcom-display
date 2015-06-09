@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,8 +104,10 @@ enum {
     HAL_PIXEL_FORMAT_RG_88                  = 0x10E,
     HAL_PIXEL_FORMAT_YCbCr_444_SP           = 0x10F,
     HAL_PIXEL_FORMAT_YCrCb_444_SP           = 0x110,
-    HAL_PIXEL_FORMAT_YCrCb_422_I            = 0x111,
+    HAL_PIXEL_FORMAT_YCrCb_422_I            = 0x111,  //YVYU
     HAL_PIXEL_FORMAT_NV21_ZSL               = 0x112,
+    HAL_PIXEL_FORMAT_CrYCbY_422_I           = 0x113,  //VYUY
+    HAL_PIXEL_FORMAT_CbYCrY_422_I           = 0x114,  //UYVY
     HAL_PIXEL_FORMAT_INTERLACE              = 0x180,
 
 };
