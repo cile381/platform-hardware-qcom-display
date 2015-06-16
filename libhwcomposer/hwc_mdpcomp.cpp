@@ -40,6 +40,7 @@ namespace qhwc {
 
 IdleInvalidator *MDPComp::sIdleInvalidator = NULL;
 bool MDPComp::sIdleFallBack = false;
+bool MDPComp::sHandleTimeout = false;
 bool MDPComp::sDebugLogs = false;
 bool MDPComp::sEnabled = false;
 bool MDPComp::sEnableMixedMode = true;
@@ -229,13 +230,13 @@ void MDPComp::reset(hwc_context_t *ctx) {
 }
 
 void MDPComp::reset() {
+    sHandleTimeout = false;
     mPrevModeOn = mModeOn;
     mModeOn = false;
 }
 
 void MDPComp::timeout_handler(void *udata) {
     struct hwc_context_t* ctx = (struct hwc_context_t*)(udata);
-    bool handleTimeout = false;
 
     if(!ctx) {
         ALOGE("%s: received empty data in timer callback", __FUNCTION__);
@@ -244,15 +245,7 @@ void MDPComp::timeout_handler(void *udata) {
 
     ctx->mDrawLock.lock();
 
-    /* Handle timeout event only if the previous composition
-       on any display is MDP or MIXED*/
-    for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
-        if(ctx->mMDPComp[i])
-            handleTimeout =
-                    ctx->mMDPComp[i]->isMDPComp() || handleTimeout;
-    }
-
-    if(!handleTimeout) {
+    if(!sHandleTimeout) {
         ALOGD_IF(isDebug(), "%s:Do not handle this timeout", __FUNCTION__);
         ctx->mDrawLock.unlock();
         return;
@@ -2469,6 +2462,12 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
         return true;
     }
 
+    if(sIdleInvalidator && !sIdleFallBack &&
+       /* Neednot set for single pipe mdp composition cases */
+       !(mCurrentFrame.mdpCount == 1 and mCurrentFrame.fbCount == 0) ) {
+        sHandleTimeout = true;
+    }
+
     overlay::Overlay& ov = *ctx->mOverlay;
     LayerProp *layerProp = ctx->layerProp[mDpy];
 
@@ -2731,6 +2730,14 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(!isEnabled() or !mModeOn) {
         ALOGD_IF(isDebug(),"%s: MDP Comp not enabled/configured", __FUNCTION__);
         return true;
+    }
+
+    if(sIdleInvalidator && !sIdleFallBack && mCurrentFrame.mdpCount &&
+       !(needs3DComposition(ctx, HWC_DISPLAY_PRIMARY) ||
+         needs3DComposition(ctx, HWC_DISPLAY_EXTERNAL)) &&
+       /* Neednot set for single pipe mdp composition cases */
+       !(mCurrentFrame.mdpCount == 1 and mCurrentFrame.fbCount == 0) ) {
+        sHandleTimeout = true;
     }
 
     overlay::Overlay& ov = *ctx->mOverlay;
