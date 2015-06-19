@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -83,6 +83,7 @@ private:
     void readCEUnderscanInfo();
     bool readResolution();
     int  parseResolution(char* edidStr, int* edidModes);
+    int  parseFeatures(void);
     bool writeHPDOption(int userOption) const;
     bool isValidMode(int ID);
     int  getModeOrder(int mode);
@@ -96,7 +97,8 @@ private:
     int mEDIDModes[64];
     int mModeCount;
     bool mUnderscanSupported;
-    bool mNonHdmiDisplay;
+    bool mHPDEnabled;
+    bool mEDIDEnabled;
     // Holds all the HDMI modes and timing info supported by driver
     msm_hdmi_mode_timing_info* supported_video_mode_lut;
 };

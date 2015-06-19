@@ -1497,12 +1497,37 @@ bool setupBasePipe(hwc_context_t *ctx, const int dpy) {
     }
 
     ovData.id = ovInfo.id;
+    ctx->mBasePipeLayerId[dpy] = ovData.id;
     if (ioctl(arb_fd, MSMFB_OVERLAY_PLAY, &ovData) < 0) {
         ALOGE("Failed to call ioctl MSMFB_OVERLAY_PLAY err=%s",
                 strerror(errno));
         return false;
     }
     ctx->mBasePipeSetup[dpy] = true;
+    return true;
+}
+
+bool freeBasePipe(hwc_context_t *ctx, const int dpy) {
+    int arb_fd = ctx->dpyAttr[dpy].arb_fd;
+
+    if(ioctl(arb_fd, MSMFB_OVERLAY_UNSET,
+                &(ctx->mBasePipeLayerId[dpy]))) {
+                ALOGE("%s Error MSMFB_OVERLAY_UNSET! LayerId: %d DPY: %d err=%s",
+                      __FUNCTION__, ctx->mBasePipeLayerId[dpy], dpy, strerror(errno));
+                return false;
+    }
+
+    mdp_display_commit commit;
+    memset(&commit, 0x00, sizeof(commit));
+            commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+            commit.wait_for_finish = true;
+            if(ioctl(arb_fd, MSMFB_DISPLAY_COMMIT, &commit)) {
+                ALOGE("%s Failed to call ioctl MSMFB_OVERLAY_COMMIT err=%s",
+                                             __FUNCTION__, strerror(errno));
+                return false;
+            }
+
+    ctx->mBasePipeSetup[dpy] = false;
     return true;
 }
 
