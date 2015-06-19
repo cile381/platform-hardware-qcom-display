@@ -211,6 +211,7 @@ bool isExternalActive(hwc_context_t* ctx);
 bool needsScaling(hwc_context_t* ctx, hwc_layer_1_t const* layer, const int& dpy);
 bool isAlphaPresent(hwc_layer_1_t const* layer);
 bool setupBasePipe(hwc_context_t *ctx, const int dpy);
+bool freeBasePipe(hwc_context_t *ctx, const int dpy);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 int getBlending(int blending);
 
@@ -481,6 +482,8 @@ struct hwc_context_t {
     bool mNeedsRotator;
     //Check if base pipe is set up
     bool mBasePipeSetup[HWC_NUM_DISPLAY_TYPES];
+    //Keep track of base pipe layer ID
+    int mBasePipeLayerId[HWC_NUM_DISPLAY_TYPES];
     //Lock to protect drawing data structures
     mutable Locker mDrawLock;
     //Drawing round when we use GPU
@@ -499,6 +502,8 @@ struct hwc_context_t {
     bool mPanelResetStatus;
     // flag to indicate automotive mode is on/off
     bool mAutomotiveModeOn;
+    // flag to indicate HDMI HPD is on/off
+    bool mHPDEnabled;
     // flag to indicate MDP arb is enabled/disabled
     bool mMDPArbSuppport;
     // flag to enable/disable KPI logs

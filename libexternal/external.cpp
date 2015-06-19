@@ -40,9 +40,14 @@
 using namespace android;
 
 namespace qhwc {
-#define MAX_SYSFS_FILE_PATH             255
-#define UNKNOWN_STRING                  "unknown"
-#define SPD_NAME_LENGTH                 16
+#define MAX_SYSFS_FILE_PATH              255
+#define MAX_SYSFS_FILE_LENGTH            512
+#define MAX_HDMI_FEAT_EN_NAME_LEN        10
+#define SPD_NAME_LENGTH                  16
+#define HPD_STR                          "HPD"
+#define EDID_STR                         "EDID"
+#define UNKNOWN_STRING                   "unknown"
+#define HDMI_FEAT_EN_SYSFS_PATH "/sys/devices/virtual/graphics/fb%d/hdmi_feature_en"
 
 ExternalDisplay::ExternalDisplay(hwc_context_t* ctx, int dpy):mFd(-1),
        mHwcContext(ctx), mDpy(dpy)
@@ -111,32 +116,34 @@ SecondaryDisplay::SecondaryDisplay(hwc_context_t* ctx, int dpy):
     ExternalDisplay(ctx, dpy),
     mCurrentMode(-1), mModeCount(0),
     mUnderscanSupported(false),
-    mNonHdmiDisplay(false)
+    mHPDEnabled(false),
+    mEDIDEnabled(false)
 {
     if(ctx->mAutomotiveModeOn) {
-        // For automotive mode, always read resolution from VSCREEN INFO
-        mNonHdmiDisplay = true;
-    }
+        parseFeatures();
+        mHPDEnabled = false;
+        mEDIDEnabled = false;
+        ctx->mHPDEnabled = mHPDEnabled;
 
-    if(ctx->mAutomotiveModeOn) {
-        // Enable HPD for automotive because HDMI is connected by default
-        if (!mNonHdmiDisplay)
-            writeHPDOption(1);
+    if (mHPDEnabled)
+        writeHPDOption(0);
+    else
+        writeHPDOption(1);
     } else {
         // disable HPD at start, it will be enabled later
         // when the display powers on
         // This helps for framework reboot or adb shell stop/start
         writeHPDOption(0);
     }
-    if (!mNonHdmiDisplay) {
+    if (mEDIDEnabled) {
         // for HDMI - retreive all the modes supported by the driver
         if(mFbNum != -1) {
             supported_video_mode_lut =
-                            new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
+                 new msm_hdmi_mode_timing_info[HDMI_VFRMT_MAX];
             // Populate the mode table for supported modes
             MSM_HDMI_MODES_INIT_TIMINGS(supported_video_mode_lut);
             MSM_HDMI_MODES_SET_SUPP_TIMINGS(supported_video_mode_lut,
-                                            MSM_HDMI_MODES_ALL);
+                                                 MSM_HDMI_MODES_ALL);
             // Update the Source Product Information
             // Vendor Name
             setSPDInfo("vendor_name", "ro.product.manufacturer");
@@ -144,7 +151,6 @@ SecondaryDisplay::SecondaryDisplay(hwc_context_t* ctx, int dpy):
             setSPDInfo("product_description", "ro.product.name");
         }
     }
-
 }
 
 SecondaryDisplay::~SecondaryDisplay()
@@ -163,7 +169,7 @@ int SecondaryDisplay::configure() {
         return -1;
     }
 
-    if(mNonHdmiDisplay) {
+    if(!mEDIDEnabled) {
         // Get the fb_var_screeninfo and initialize mVInfo of tertiary display
         struct fb_var_screeninfo info;
         int ret = 0;
@@ -180,6 +186,7 @@ int SecondaryDisplay::configure() {
                 mVInfo.pixclock/1000/1000);
         // For secondary display, set the attributes
         setAttributes();
+        property_set("hw.hdmiON", "1");
     } else {
         readCEUnderscanInfo();
         readResolution();
@@ -202,7 +209,7 @@ int SecondaryDisplay::configure() {
 
 void SecondaryDisplay::getAttributes(int& width, int& height) {
     if(mHwcContext) {
-        if(mNonHdmiDisplay) {
+        if(!mEDIDEnabled) {
             /* derive the width and height values from fb_var_screeninfo */
             width = mVInfo.xres;
             height = mVInfo.yres;
@@ -257,7 +264,7 @@ void SecondaryDisplay::setSPDInfo(const char* node, const char* property) {
 }
 
 void SecondaryDisplay::setHPD(uint32_t startEnd) {
-    if (!mNonHdmiDisplay) {
+    if (mHPDEnabled) {
         ALOGD_IF(DEBUG,"HPD enabled=%d", startEnd);
         writeHPDOption(startEnd);
     } else {
@@ -410,6 +417,60 @@ int SecondaryDisplay::parseResolution(char* edidStr, int* edidModes)
     return count;
 }
 
+int SecondaryDisplay::parseFeatures(void)
+{
+    char sysFsEDIDFilePath[MAX_SYSFS_FILE_PATH];
+    const char delim1[] = ":";
+    const char delim2[] = ";";
+    char *tmp = NULL, *cont = NULL;
+    int len = -1;
+    char featEnStr[MAX_SYSFS_FILE_LENGTH] = {'\0'};
+    int hdmiFeaturesFile;
+
+    snprintf(sysFsEDIDFilePath, sizeof(sysFsEDIDFilePath),
+                          HDMI_FEAT_EN_SYSFS_PATH, mFbNum);
+
+    hdmiFeaturesFile = open(sysFsEDIDFilePath, O_RDONLY, 0);
+
+    if (hdmiFeaturesFile < 0) {
+       ALOGE("HDMI_FEAT %s: hdmi features enabled file '%s' not found",
+                                           __FUNCTION__, sysFsEDIDFilePath);
+       return 0;
+    } else {
+        len = read(hdmiFeaturesFile, featEnStr, sizeof(featEnStr)-1);
+        if (len <= 0) {
+            ALOGE("HDMI_FEAT %s: hdmi features enabled file empty '%s'",
+                                            __FUNCTION__, sysFsEDIDFilePath);
+            featEnStr[0] = '\0';
+            mHPDEnabled = false;
+            mEDIDEnabled = false;
+            close(hdmiFeaturesFile);
+            return 0;
+        }
+    }
+    close(hdmiFeaturesFile);
+
+    tmp = strtok_r(featEnStr, delim1, &cont);
+    while(tmp != NULL) {
+        if (strncmp(tmp, HPD_STR, MAX_HDMI_FEAT_EN_NAME_LEN) == 0) {
+            tmp = strtok_r(NULL, delim2, &cont);
+            mHPDEnabled = atoi(tmp);
+        } else if (strncmp(tmp, EDID_STR, MAX_HDMI_FEAT_EN_NAME_LEN) == 0) {
+            tmp = strtok_r(NULL, delim2, &cont);
+            mEDIDEnabled = atoi(tmp);
+        } else {
+            ALOGE("HDMI_FEAT %s: hdmi feature unknown '%s' sys node string: %s",
+                                              __FUNCTION__, tmp, featEnStr);
+            break;
+        }
+        if (tmp == NULL)
+            break;
+        tmp = strtok_r(NULL, delim1, &cont);
+    }
+
+    return 0;
+}
+
 bool SecondaryDisplay::readResolution()
 {
     char sysFsEDIDFilePath[MAX_SYSFS_FILE_PATH];
@@ -452,7 +513,7 @@ bool SecondaryDisplay::readResolution()
 }
 
 bool SecondaryDisplay::waitForConnectEvent() {
-    if (!mNonHdmiDisplay) {
+    if (mHPDEnabled) {
         // Open a sysfs node to receive the timeout notification from driver.
         char sysFsExtConnectionPath[MAX_SYSFS_FILE_PATH];
         snprintf(sysFsExtConnectionPath , sizeof(sysFsExtConnectionPath),
@@ -718,7 +779,7 @@ void SecondaryDisplay::setAttributes() {
     getAttributes(width, height);
     ALOGD("SecondaryDisplay setting xres = %d, yres = %d", width, height);
     if(mHwcContext) {
-        if(mNonHdmiDisplay) {
+        if(!mEDIDEnabled) {
             // Always set dpyAttr res to mVInfo res
             mHwcContext->dpyAttr[mDpy].xres = width;
             mHwcContext->dpyAttr[mDpy].yres = height;
