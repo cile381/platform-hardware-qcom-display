@@ -109,6 +109,7 @@ enum {
     HAL_PIXEL_FORMAT_CrYCbY_422_I           = 0x113,  //VYUY
     HAL_PIXEL_FORMAT_CbYCrY_422_I           = 0x114,  //UYVY
     HAL_PIXEL_FORMAT_INTERLACE              = 0x180,
+    HAL_PIXEL_FORMAT_BGR_888                = 8,
 
 };
 

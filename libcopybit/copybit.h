@@ -22,7 +22,7 @@
 #define ANDROID_COPYBIT_INTERFACE_H
 
 #include <hardware/hardware.h>
-
+#include <gralloc_priv.h>
 #include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>

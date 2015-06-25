@@ -192,12 +192,14 @@ bool CopyBit::prepare(hwc_context_t *ctx, hwc_display_contents_1_t *list,
         if (!(layer->planeAlpha < 0xFF) &&
             ((hnd->bufferType == BUFFER_TYPE_VIDEO && useCopybitForYUV) ||
             (hnd->bufferType == BUFFER_TYPE_UI && useCopybitForRGB))) {
-            layerProp[i].mFlags |= HWC_COPYBIT;
-            if (ctx->mMDP.version <= qdutils::MDP_V4_3)
-                list->hwLayers[i].compositionType = HWC_BLIT;
-            else
+            if (ctx->mMDP.version <= qdutils::MDP_V4_3) {
+                list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
+                mCopyBitDraw = false;
+            } else {
                 list->hwLayers[i].compositionType = HWC_OVERLAY;
-            mCopyBitDraw = true;
+                layerProp[i].mFlags |= HWC_COPYBIT;
+                mCopyBitDraw = true;
+            }
         } else {
             ALOGD_IF(DEBUG_COPYBIT,"%s:Can not do copybit, Resetting all the layers marked for it", __FUNCTION__);
             // We currently cannot mix copybit layers with layers marked to

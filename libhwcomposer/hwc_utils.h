@@ -40,6 +40,16 @@
 #define MDP_ARB_DEV_PATH "/dev/mdp_arb"
 #define HWC_FB_DISP_ID_SYS_PATH "/sys/class/graphics/fb%d/msm_fb_disp_id"
 
+enum {
+    HWC_DISPLAY_SECONDARY = HWC_DISPLAY_EXTERNAL,
+    HWC_DISPLAY_TERTIARY,
+};
+
+enum {
+    HWC_DISPLAY_SECONDARY_BIT   = 1 << HWC_DISPLAY_SECONDARY,
+    HWC_DISPLAY_TERTIARY_BIT    = 1 << HWC_DISPLAY_TERTIARY,
+};
+
 //Fwrd decls
 struct hwc_context_t;
 

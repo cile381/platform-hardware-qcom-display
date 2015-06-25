@@ -281,7 +281,7 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
                 ret = hwc_prepare_primary(dev, list);
                 break;
             case HWC_DISPLAY_SECONDARY:
-            case HWC_DISPLAY_TERTIARY:
+            //case HWC_DISPLAY_TERTIARY:
                 ret = hwc_prepare_external(dev, list, dpy);
                 break;
             case HWC_DISPLAY_VIRTUAL:
@@ -428,7 +428,7 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
         }
         break;
     case HWC_DISPLAY_SECONDARY:
-    case HWC_DISPLAY_TERTIARY:
+    //case HWC_DISPLAY_TERTIARY:
         if(blank) {
             if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,1)) {
                 ALOGE("%s: display commit fail for external!", __FUNCTION__);
@@ -690,7 +690,7 @@ static int hwc_set(hwc_composer_device_1 *dev,
                 ret = hwc_set_primary(ctx, list);
                 break;
             case HWC_DISPLAY_SECONDARY:
-            case HWC_DISPLAY_TERTIARY:
+            //case HWC_DISPLAY_TERTIARY:
                 ret = hwc_set_external(ctx, list, dpy);
                 break;
             case HWC_DISPLAY_VIRTUAL:
@@ -758,7 +758,7 @@ int hwc_getDisplayAttributes(struct hwc_composer_device_1* dev, int disp,
         HWC_DISPLAY_HEIGHT,
         HWC_DISPLAY_DPI_X,
         HWC_DISPLAY_DPI_Y,
-        HWC_DISPLAY_SECURE,
+        //HWC_DISPLAY_SECURE,
         HWC_DISPLAY_NO_ATTRIBUTE,
     };
 
@@ -786,9 +786,9 @@ int hwc_getDisplayAttributes(struct hwc_composer_device_1* dev, int disp,
         case HWC_DISPLAY_DPI_Y:
             values[i] = (int32_t) (ctx->dpyAttr[disp].ydpi*1000.0);
             break;
-        case HWC_DISPLAY_SECURE:
-            values[i] = (int32_t) (ctx->dpyAttr[disp].secure);
-            break;
+        //case HWC_DISPLAY_SECURE:
+        //    values[i] = (int32_t) (ctx->dpyAttr[disp].secure);
+        //    break;
         default:
             ALOGE("Unknown display attribute %d",
                     attributes[i]);
