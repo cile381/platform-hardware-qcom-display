@@ -54,6 +54,7 @@ public:
     /* Initialize MDP comp*/
     static bool init(hwc_context_t *ctx);
     static void resetIdleFallBack() { sIdleFallBack = false; }
+    void setDynRefreshRate(hwc_context_t *ctx, hwc_display_contents_1_t* list);
 
 protected:
     enum { MAX_SEC_LAYERS = 1 }; //TODO add property support
@@ -188,7 +189,8 @@ protected:
     /* checks for mdp comp dimension limitation */
     bool isValidDimension(hwc_context_t *ctx, hwc_layer_1_t *layer);
     /* tracks non updating layers*/
-    void updateLayerCache(hwc_context_t* ctx, hwc_display_contents_1_t* list);
+    void updateLayerCache(hwc_context_t* ctx, hwc_display_contents_1_t* list,
+                          FrameInfo& frame);
     /* optimize layers for mdp comp*/
     bool markLayersForCaching(hwc_context_t* ctx,
             hwc_display_contents_1_t* list);
@@ -202,7 +204,7 @@ protected:
 
         /* updates cache map with YUV info */
     void updateYUV(hwc_context_t* ctx, hwc_display_contents_1_t* list,
-            bool secureOnly);
+            bool secureOnly, FrameInfo& frame);
     /* Validates if the GPU/MDP layer split chosen by a strategy is supported
      * by MDP.
      * Sets up MDP comp data structures to reflect covnversion from layers to
