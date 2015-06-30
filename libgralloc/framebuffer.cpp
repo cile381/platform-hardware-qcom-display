@@ -649,9 +649,8 @@ static int fb_close(struct hw_device_t *dev)
     mdp_display_commit commit;
     if (ctx) {
         private_module_t* m = (private_module_t*)ctx->device.common.module;
-        int overlay_id = m->overlay.id;
         if(m && m->framebuffer && (m->mdpArbFd >= 0) &&
-            (overlay_id >= 0) && (m->setOverlay)) {
+            ((int)(m->overlay.id) >= 0) && (m->setOverlay)) {
             if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_UNSET,
                 &(m->overlay.id))) {
                 ALOGE("Error unset overlay");

@@ -293,6 +293,7 @@ void SecondaryDisplay::readCEUnderscanInfo()
     char scanInfo[17];
     char *ce_info_str = NULL;
     const char token[] = ", \n";
+    char *rest = NULL;
     int ce_info = -1;
     char sysFsScanInfoFilePath[MAX_SYSFS_FILE_PATH];
     snprintf(sysFsScanInfoFilePath, sizeof(sysFsScanInfoFilePath),
@@ -327,13 +328,13 @@ void SecondaryDisplay::readCEUnderscanInfo()
      */
 
     /* PT */
-    ce_info_str = strtok(scanInfo, token);
+    ce_info_str = strtok_r(scanInfo, token, &rest);
     if (ce_info_str) {
         /* IT */
-        ce_info_str = strtok(NULL, token);
+        ce_info_str = strtok_r(NULL, token, &rest);
         if (ce_info_str) {
             /* CE */
-            ce_info_str = strtok(NULL, token);
+            ce_info_str = strtok_r(NULL, token, &rest);
             if (ce_info_str)
                 ce_info = atoi(ce_info_str);
         }
