@@ -800,23 +800,54 @@ int hwc_getDisplayAttributes(struct hwc_composer_device_1* dev, int disp,
 
 void hwc_dump(struct hwc_composer_device_1* dev, char *buff, int buff_len)
 {
+    int ret = 0;
+    int len = 0;
+    if ((dev == NULL) || (buff == NULL) || (buff_len <= 0)) {
+        ALOGE("%s: invalid parameters: dev=0x%x, buff=0x%x, buff_len=%d\n",
+                __FUNCTION__, (uint32_t)dev, (uint32_t)buff, buff_len);
+        return;
+    }
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     Locker::Autolock _l(ctx->mDrawLock);
-    android::String8 aBuf("");
-    dumpsys_log(aBuf, "Qualcomm HWC state:\n");
-    dumpsys_log(aBuf, "  MDPVersion=%d\n", ctx->mMDP.version);
-    dumpsys_log(aBuf, "  DisplayPanel=%c\n", ctx->mMDP.panel);
-    for(int dpy = 0; dpy < HWC_NUM_DISPLAY_TYPES; dpy++) {
-        if(ctx->mMDPComp[dpy])
-            ctx->mMDPComp[dpy]->dump(aBuf);
+    memset(buff, 0, buff_len);
+    ret = snprintf(buff, buff_len, "Qualcomm HWC state:\n");
+    if ((ret >= buff_len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len);
+        return;
     }
-    char ovDump[2048] = {'\0'};
-    ctx->mOverlay->getDump(ovDump, 2048);
-    dumpsys_log(aBuf, ovDump);
-    ovDump[0] = '\0';
-    ctx->mRotMgr->getDump(ovDump, 2048);
-    dumpsys_log(aBuf, ovDump);
-    strlcpy(buff, aBuf.string(), buff_len);
+    len = strnlen(buff, buff_len);
+    ret = snprintf(buff + len, buff_len - len, "  MDPVersion=%d\n", ctx->mMDP.version);
+    if ((ret >= buff_len - len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len - len);
+        return;
+    }
+    len = strnlen(buff, buff_len);
+    ret = snprintf(buff + len, buff_len - len, "  DisplayPanel=%c\n", ctx->mMDP.panel);
+    if ((ret >= buff_len - len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len - len);
+        return;
+    }
+    for(int dpy = 0; dpy < HWC_NUM_DISPLAY_TYPES; dpy++) {
+        if(ctx->mMDPComp[dpy]) {
+            len = strnlen(buff, buff_len);
+            ctx->mMDPComp[dpy]->dump(buff + len, buff_len - len);
+        }
+    }
+    len = strnlen(buff, buff_len);
+    if (len >= buff_len - 1) {
+        ALOGE("%s: buffer full: %d/%d", __FUNCTION__, len, buff_len);
+        return;
+    }
+    ctx->mOverlay->getDump(buff + len, buff_len - len);
+    len = strnlen(buff, buff_len);
+    if (len >= buff_len - 1) {
+        ALOGE("%s: buffer full: %d/%d", __FUNCTION__, len, buff_len);
+        return;
+    }
+    ctx->mRotMgr->getDump(buff + len, buff_len - len);
 }
 
 static int hwc_device_close(struct hw_device_t *dev)

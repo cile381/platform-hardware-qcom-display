@@ -53,23 +53,62 @@ MDPComp::MDPComp(int dpy, int maxPipesPerLayer) : mDpy(dpy),
         mMaxPipesPerLayer(maxPipesPerLayer) {
 }
 
-void MDPComp::dump(android::String8& buf)
+void MDPComp::dump(char *buff, int buff_len)
 {
-    dumpsys_log(buf,"HWC Map for Dpy: %s \n",
+    int ret = 0;
+    int len = 0;
+    if ((buff == NULL) || (buff_len <= 0)) {
+        ALOGE("%s: invalid parameters: buff=0x%x, buff_len=%d\n",
+                __FUNCTION__, (uint32_t)buff, buff_len);
+        return;
+    }
+    memset(buff, 0, buff_len);
+    ret = snprintf(buff, buff_len, "HWC Map for Dpy: %s \n",
                 (mDpy == 0) ? "\"PRIMARY\"" :
                 (mDpy == 1) ? "\"SECONDARY\"" :
                 (mDpy == 2) ? "\"TERTIARY\"" : "\"VIRTUAL\"");
-    dumpsys_log(buf,"CURR_FRAME: layerCount:%2d mdpCount:%2d "
-                "fbCount:%2d \n", mCurrentFrame.layerCount,
+    if ((ret >= buff_len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len);
+        return;
+    }
+    len = strnlen(buff, buff_len);
+    ret = snprintf(buff + len, buff_len - len, "CURR_FRAME: layerCount:%2d "
+                "mdpCount:%2d fbCount:%2d \n", mCurrentFrame.layerCount,
                 mCurrentFrame.mdpCount, mCurrentFrame.fbCount);
-    dumpsys_log(buf,"needsFBRedraw:%3s  pipesUsed:%2d  MaxPipesPerMixer: %d \n",
+    if ((ret >= buff_len - len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len - len);
+        return;
+    }
+    len = strnlen(buff, buff_len);
+    ret = snprintf(buff + len, buff_len - len,
+                "needsFBRedraw:%3s  pipesUsed:%2d  MaxPipesPerMixer: %d \n",
                 (mCurrentFrame.needsRedraw? "YES" : "NO"),
                 mCurrentFrame.mdpCount, sMaxPipesPerMixer);
-    dumpsys_log(buf," ---------------------------------------------  \n");
-    dumpsys_log(buf," listIdx | cached? | mdpIndex | comptype  |  Z  \n");
-    dumpsys_log(buf," ---------------------------------------------  \n");
-    for(int index = 0; index < mCurrentFrame.layerCount; index++ )
-        dumpsys_log(buf," %7d | %7s | %8d | %9s | %2d \n",
+    if ((ret >= buff_len - len) || (ret < 0)) {
+        ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                __FUNCTION__, ret, buff_len - len);
+        return;
+    }
+    ret = strlcat(buff, " ---------------------------------------------  \n", buff_len);
+    if (ret >= buff_len) {
+        ALOGE("%s: buffer overflow: %d/%d", __FUNCTION__, ret, buff_len);
+        return;
+    }
+    ret = strlcat(buff, " listIdx | cached? | mdpIndex | comptype  |  Z  \n", buff_len);
+    if (ret >= buff_len) {
+        ALOGE("%s: buffer overflow: %d/%d", __FUNCTION__, ret, buff_len);
+        return;
+    }
+    ret = strlcat(buff, " ---------------------------------------------  \n", buff_len);
+    if (ret >= buff_len) {
+        ALOGE("%s: buffer overflow: %d/%d", __FUNCTION__, ret, buff_len);
+        return;
+    }
+    for(int index = 0; index < mCurrentFrame.layerCount; index++ ) {
+        len = strnlen(buff, buff_len);
+        ret = snprintf(buff + len, buff_len - len, " %7d | %7s | %8d | %9s | %2d \n",
                     index,
                     (mCurrentFrame.isFBComposed[index] ? "YES" : "NO"),
                     mCurrentFrame.layerToMDP[index],
@@ -77,7 +116,15 @@ void MDPComp::dump(android::String8& buf)
                      (mCurrentFrame.needsRedraw ? "GLES" : "CACHE") : "MDP"),
                     (mCurrentFrame.isFBComposed[index] ? mCurrentFrame.fbZ :
     mCurrentFrame.mdpToLayer[mCurrentFrame.layerToMDP[index]].pipeInfo->zOrder));
-    dumpsys_log(buf,"\n");
+        if ((ret >= buff_len - len) || (ret < 0)) {
+            ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
+                    __FUNCTION__, ret, buff_len - len);
+            return;
+        }
+    }
+    ret = strlcat(buff, "\n", buff_len);
+    if (ret >= buff_len)
+        ALOGE("%s: buffer overflow: %d/%d", __FUNCTION__, ret, buff_len);
 }
 
 bool MDPComp::init(hwc_context_t *ctx) {
@@ -994,9 +1041,10 @@ int MDPComp::prepare(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
 
     if(isDebug()) {
         ALOGD("GEOMETRY change: %d", (list->flags & HWC_GEOMETRY_CHANGED));
-        android::String8 sDump("");
-        dump(sDump);
-        ALOGE("%s",sDump.string());
+        const int dumpBufSize = 2048;
+        char sDump[dumpBufSize] = {'\0'};
+        dump(sDump, dumpBufSize);
+        ALOGE("%s", sDump);
     }
 
     return ret;
