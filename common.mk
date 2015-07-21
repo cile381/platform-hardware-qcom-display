@@ -54,7 +54,7 @@ ifneq (,$(filter $(QCOM_BOARD_PLATFORMS),$(TARGET_BOARD_PLATFORM)))
 # available in the build tree.
 # If the macro is not present, the headers are picked from hardware/qcom/msmXXXX
 # failing which, they are picked from bionic.
-    ifneq ($(TARGET_NO_KERNEL), true)
+    ifneq ($(TARGET_PREBUILT_KERNEL), true)
         common_deps += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
         kernel_includes += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
     else
