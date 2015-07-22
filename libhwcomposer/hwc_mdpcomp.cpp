@@ -245,16 +245,36 @@ void MDPComp::timeout_handler(void *udata) {
 
     ctx->mDrawLock.lock();
 
-    if(!sHandleTimeout) {
-        ALOGD_IF(isDebug(), "%s:Do not handle this timeout", __FUNCTION__);
-        ctx->mDrawLock.unlock();
-        return;
-    }
     if(!ctx->proc) {
         ALOGE("%s: HWC proc not registered", __FUNCTION__);
         ctx->mDrawLock.unlock();
         return;
     }
+
+    if(!sHandleTimeout) {
+        ALOGD_IF(isDebug(), "%s:Do not handle this timeout", __FUNCTION__);
+        if(qdutils::MDPVersion::getInstance().isDynFpsSupported() &&
+           ctx->mUseMetaDataRefreshRate) {
+            MDPVersion& mdpHw = MDPVersion::getInstance();
+            int dpy = HWC_DISPLAY_PRIMARY;
+            /* Even in cases, where we wouldnot like to trigger new frame update
+               (for ex: if previous frame happens to be single pipe mdpcomp, etc),
+               refresh-rate should be set to the minfps supported by panel as
+               part of idle-fallback */
+            uint32_t refreshRate = mdpHw.getMinFpsSupported();
+            if((refreshRate != ctx->dpyAttr[dpy].dynRefreshRate) &&
+               ctx->dpyAttr[dpy].isActive) {
+                setRefreshRate(ctx, dpy, refreshRate);
+                if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
+                    ALOGE("%s: displayCommit failed for %d when setting dynfps",
+                          __FUNCTION__, dpy);
+                }
+            }
+        }
+        ctx->mDrawLock.unlock();
+        return;
+    }
+
     sIdleFallBack = true;
     ctx->mDrawLock.unlock();
     /* Trigger SF to redraw the current frame */
@@ -888,6 +908,12 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         return false;
     }
 
+    uint32_t totalDirtyArea = 0;
+    bool computeDirtyArea = not (list->flags & HWC_GEOMETRY_CHANGED) and
+            not isYuvPresent(ctx, mDpy) and
+            not qdutils::MDPVersion::getInstance().isPartialUpdateEnabled() and
+            numAppLayers > 1;
+
     for(int i = 0; i < numAppLayers; ++i) {
         hwc_layer_1_t* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
@@ -907,6 +933,33 @@ bool MDPComp::tryFullFrame(hwc_context_t *ctx,
         if( mdpHw.is8x26() && (ctx->dpyAttr[mDpy].xres > 1024) &&
                 (transform & HWC_TRANSFORM_FLIP_H) && (!isYuvBuffer(hnd)))
             return false;
+
+#ifdef QCOM_BSP
+        if(computeDirtyArea and mCachedFrame.hnd[i] != hnd) {
+            if(needsScaling(layer)) {
+                totalDirtyArea = 0;
+                computeDirtyArea = false;
+            } else {
+                hwc_rect_t dirtyRect = layer->dirtyRect;
+                ALOGD_IF(isDebug(),
+                        "Updating layer: %d Dirty rect: %d, %d, %d, %d",
+                        i, dirtyRect.left, dirtyRect.top, dirtyRect.right,
+                        dirtyRect.bottom);
+                totalDirtyArea += (dirtyRect.right - dirtyRect.left)
+                        * (dirtyRect.bottom - dirtyRect.top);
+            }
+        }
+#endif
+    }
+
+    if(totalDirtyArea) {
+        const uint32_t fbArea = ctx->dpyAttr[mDpy].xres *
+                ctx->dpyAttr[mDpy].yres;
+        if(totalDirtyArea < (fbArea / 20)) {
+            ALOGD_IF(isDebug(), "%s: Small update, bailing out. Dirty area %u",
+                    __FUNCTION__, totalDirtyArea);
+            return false;
+        }
     }
 
     if(ctx->mAD->isDoable()) {
