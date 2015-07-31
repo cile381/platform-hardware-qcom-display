@@ -398,7 +398,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             if(state_update)
                 handleReverseCameraState(ctx, reverseCameraState);
         }
-        return;
+       if (!ctx->mHPDEnabled)
+           return;
     }
 
     bool bpanelReset = getPanelResetStatus(ctx, udata, len);
@@ -412,6 +413,10 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
         ALOGD_IF(UEVENT_DEBUG, "%s: Not disp Event ", __FUNCTION__);
         return;
     }
+
+    // If hdmi is primary, skip uevent
+    if (dpy == HWC_DISPLAY_PRIMARY)
+        return;
 
     int switch_state = getConnectedState(udata, len);
 
@@ -455,6 +460,8 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
             }
 
             if(dpy == HWC_DISPLAY_SECONDARY) {
+                ctx->mBasePipeSetup[dpy] = false;
+                freeBasePipe(ctx, dpy);
                 ctx->mSecondaryDisplay->teardown();
             } else {
                 ctx->mVirtualDisplay->teardown();
