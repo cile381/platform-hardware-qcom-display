@@ -35,6 +35,14 @@ enum {
     PRIV_MAX_SWAP_INTERVAL = 1,
 };
 
+enum eZorder {
+    ZORDER_0 = 0,
+    ZORDER_1,
+    ZORDER_2,
+    ZORDER_3,
+    DEFAULT_OVERLAY_Z_ORDER = ZORDER_3,
+};
+
 struct fb_display_mapping {
     const char *fb_name;
     const char *display_id;
@@ -63,6 +71,9 @@ struct private_module_t {
     uint32_t logKPI;
     const char *display_id;
     int mdpArbFd;
+    uint32_t zOrder;
+    uint32_t updateZOrder;
+    uint32_t fbIndex;
 };
 
 
