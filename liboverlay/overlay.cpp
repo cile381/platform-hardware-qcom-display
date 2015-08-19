@@ -41,6 +41,7 @@ using namespace utils;
 
 Overlay::Overlay() {
     PipeBook::NUM_PIPES = qdutils::MDPVersion::getInstance().getTotalPipes();
+    mPipeBook = new PipeBook[PipeBook::NUM_PIPES];
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
         mPipeBook[i].init();
     }
@@ -52,6 +53,7 @@ Overlay::~Overlay() {
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
         mPipeBook[i].destroy();
     }
+    delete[] mPipeBook;
 }
 
 void Overlay::configBegin() {
@@ -64,6 +66,7 @@ void Overlay::configBegin() {
 }
 
 void Overlay::configDone() {
+    const int TMP_STR_BUF_SIZE = 32;
     if(PipeBook::pipeUsageUnchanged()) return;
 
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
@@ -71,10 +74,10 @@ void Overlay::configDone() {
             //Forces UNSET on pipes, flushes rotator memory and session, closes
             //fds
             if(mPipeBook[i].valid()) {
-                char str[32];
-                sprintf(str, "Unset pipe=%s dpy=%d; ",
+                char str[TMP_STR_BUF_SIZE];
+                snprintf(str, TMP_STR_BUF_SIZE, "Unset pipe=%s dpy=%d; ",
                         PipeBook::getDestStr((eDest)i), mPipeBook[i].mDisplay);
-                strncat(mDumpStr, str, strlen(str));
+                strlcat(mDumpStr, str, DUMP_STR_MAX);
             }
             mPipeBook[i].destroy();
         }
@@ -125,7 +128,7 @@ eDest Overlay::nextPipe(eMdpPipeType type, int dpy) {
             char str[32];
             snprintf(str, 32, "Set pipe=%s dpy=%d; ",
                      PipeBook::getDestStr(dest), dpy);
-            strncat(mDumpStr, str, strlen(str));
+            strlcat(mDumpStr, str, DUMP_STR_MAX);
         }
     } else {
         ALOGD_IF(PIPE_DEBUG, "Pipe unavailable type=%d display=%d",
@@ -393,19 +396,19 @@ void Overlay::dump() const {
 void Overlay::getDump(char *buf, size_t len) {
     int totalPipes = 0;
     const char *str = "\nOverlay State\n==========================\n";
-    strncat(buf, str, strlen(str));
+    strlcat(buf, str, len);
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
         if(mPipeBook[i].valid() && mPipeBook[i].isUsed(i)) {
             mPipeBook[i].mPipe->getDump(buf, len);
             char str[64] = {'\0'};
             snprintf(str, 64, "Attached to dpy=%d\n\n", mPipeBook[i].mDisplay);
-            strncat(buf, str, strlen(str));
+            strlcat(buf, str, len);
             totalPipes++;
         }
     }
     char str_pipes[64] = {'\0'};
     snprintf(str_pipes, 64, "Pipes used=%d\n\n", totalPipes);
-    strncat(buf, str_pipes, strlen(str_pipes));
+    strlcat(buf, str_pipes, len);
 }
 
 void Overlay::clear(int dpy) {
