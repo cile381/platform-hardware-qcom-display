@@ -382,8 +382,7 @@ static void handle_uevent(hwc_context_t* ctx, const char* udata, int len)
     if(ctx->mAutomotiveModeOn) {
         if (ctx->mMDPArbSuppport) {
             mdp_arb_notification_event event;
-            //int fb_idx[HWC_NUM_DISPLAY_TYPES] = {-1, -1, -1, -1};
-            int fb_idx[HWC_NUM_DISPLAY_TYPES] = {-1, -1, -1};
+            int fb_idx[HWC_NUM_DISPLAY_TYPES] = {-1, -1, -1, -1};
             int state = -1;
             bool update = getMdpArbNotification(udata, len, event, fb_idx,
                             HWC_NUM_DISPLAY_TYPES, state);
