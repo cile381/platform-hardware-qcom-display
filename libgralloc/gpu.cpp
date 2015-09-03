@@ -95,6 +95,9 @@ int gpu_context_t::gralloc_alloc_buffer(unsigned int size, int usage,
         if (usage & GRALLOC_USAGE_PRIVATE_EXTERNAL_ONLY) {
             flags |= private_handle_t::PRIV_FLAGS_EXTERNAL_ONLY;
         }
+        if (usage & GRALLOC_USAGE_PRIVATE_INTERNAL_ONLY) {
+            flags |= private_handle_t::PRIV_FLAGS_INTERNAL_ONLY;
+        }
 
         if (usage & GRALLOC_USAGE_PRIVATE_INTERNAL_ONLY) {
             flags |= private_handle_t::PRIV_FLAGS_INTERNAL_ONLY;
