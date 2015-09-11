@@ -255,7 +255,6 @@ int gralloc_lock_ycbcr(gralloc_module_t const* module,
     int ystride;
     if(!err) {
         //hnd->format holds our implementation defined format
-        //HAL_PIXEL_FORMAT_YCrCb_420_SP is the only one set right now.
         switch (hnd->format) {
             case HAL_PIXEL_FORMAT_YCrCb_420_SP:
                 ystride = ALIGN(hnd->width, 16);
@@ -267,6 +266,17 @@ int gralloc_lock_ycbcr(gralloc_module_t const* module,
                 ycbcr->chroma_step = 2;
                 memset(ycbcr->reserved, 0, sizeof(ycbcr->reserved));
                 break;
+            // YCbCr_420_SP
+            case HAL_PIXEL_FORMAT_NV12:
+                ystride = ALIGN(hnd->width, 16);
+                ycbcr->y  = (void*)hnd->base;
+                ycbcr->cb = (void*)(hnd->base + ystride * hnd->height);
+                ycbcr->cr = (void*)(hnd->base + ystride * hnd->height + 1);
+                ycbcr->ystride = ystride;
+                ycbcr->cstride = ystride;
+                ycbcr->chroma_step = 2;
+                break;
+            //Unsupported formats
             default:
                 ALOGD("%s: Invalid format passed: 0x%x", __FUNCTION__,
                       hnd->format);
