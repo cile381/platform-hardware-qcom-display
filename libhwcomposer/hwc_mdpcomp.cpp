@@ -2210,7 +2210,10 @@ void MDPComp::setDynRefreshRate(hwc_context_t *ctx, hwc_display_contents_1_t* li
                                         ctx->mUseMetaDataRefreshRate) {
         uint32_t refreshRate = ctx->dpyAttr[mDpy].refreshRate;
         MDPVersion& mdpHw = MDPVersion::getInstance();
-        if(sIdleFallBack) {
+        if(sIdleFallBack && !ctx->listStats[mDpy].secureUI &&
+                !ctx->listStats[mDpy].secureRGBCount &&
+                (ctx->listStats[mDpy].numAppLayers > 1) &&
+                (ctx->listStats[mDpy].yuvCount == 0)) {
             //Set minimum panel refresh rate during idle timeout
             refreshRate = mdpHw.getMinFpsSupported();
         } else if(onlyVideosUpdating(ctx, list)) {
@@ -2567,7 +2570,8 @@ bool MDPCompNonSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
     if(sIdleInvalidator && !sIdleFallBack &&
        /* Neednot set for single pipe mdp composition cases */
        !(mCurrentFrame.mdpCount == 1 and mCurrentFrame.fbCount == 0) &&
-       !(ctx->listStats[mDpy].yuvCount == 0)) {
+       !ctx->listStats[mDpy].secureUI && !ctx->listStats[mDpy].secureRGBCount &&
+       (ctx->listStats[mDpy].yuvCount == 0)) {
         sHandleTimeout = true;
     }
 
@@ -2840,7 +2844,8 @@ bool MDPCompSplit::draw(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
          needs3DComposition(ctx, HWC_DISPLAY_EXTERNAL)) &&
        /* Neednot set for single pipe mdp composition cases */
        !(mCurrentFrame.mdpCount == 1 and mCurrentFrame.fbCount == 0) &&
-       !(ctx->listStats[mDpy].yuvCount == 0) ) {
+       !ctx->listStats[mDpy].secureUI && !ctx->listStats[mDpy].secureRGBCount &&
+       (ctx->listStats[mDpy].yuvCount == 0) ) {
         sHandleTimeout = true;
     }
 
