@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008 The Android Open Source Project
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2015, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -255,7 +255,6 @@ int gralloc_lock_ycbcr(gralloc_module_t const* module,
     int ystride;
     if(!err) {
         //hnd->format holds our implementation defined format
-        //HAL_PIXEL_FORMAT_YCrCb_420_SP is the only one set right now.
         switch (hnd->format) {
             case HAL_PIXEL_FORMAT_YCrCb_420_SP:
                 ystride = ALIGN(hnd->width, 16);
@@ -267,6 +266,17 @@ int gralloc_lock_ycbcr(gralloc_module_t const* module,
                 ycbcr->chroma_step = 2;
                 memset(ycbcr->reserved, 0, sizeof(ycbcr->reserved));
                 break;
+            // YCbCr_420_SP
+            case HAL_PIXEL_FORMAT_NV12:
+                ystride = ALIGN(hnd->width, 16);
+                ycbcr->y  = (void*)hnd->base;
+                ycbcr->cb = (void*)(hnd->base + ystride * hnd->height);
+                ycbcr->cr = (void*)(hnd->base + ystride * hnd->height + 1);
+                ycbcr->ystride = ystride;
+                ycbcr->cstride = ystride;
+                ycbcr->chroma_step = 2;
+                break;
+            //Unsupported formats
             default:
                 ALOGD("%s: Invalid format passed: 0x%x", __FUNCTION__,
                       hnd->format);
@@ -328,38 +338,24 @@ int gralloc_perform(struct gralloc_module_t const* module,
                 int memoryFlags = va_arg(args, int);
                 private_handle_t* hnd = (private_handle_t*)native_handle_create(
                     private_handle_t::sNumFds, private_handle_t::sNumInts);
-                hnd->magic = private_handle_t::sMagic;
-                hnd->fd = fd;
-                hnd->flags =  private_handle_t::PRIV_FLAGS_USES_ION;
-                hnd->size = size;
-                hnd->offset = offset;
-                hnd->base = intptr_t(base) + offset;
-                hnd->gpuaddr = 0;
-                hnd->width = width;
-                hnd->height = height;
-                hnd->format = format;
-                *handle = (native_handle_t *)hnd;
-                res = 0;
-                break;
-
-            }
-#ifdef QCOM_BSP
-        case GRALLOC_MODULE_PERFORM_UPDATE_BUFFER_GEOMETRY:
-            {
-                int width = va_arg(args, int);
-                int height = va_arg(args, int);
-                int format = va_arg(args, int);
-                private_handle_t* hnd =  va_arg(args, private_handle_t*);
-                if (private_handle_t::validate(hnd)) {
-                    return res;
+                if (hnd) {
+                    hnd->magic = private_handle_t::sMagic;
+                    hnd->fd = fd;
+                    hnd->flags =  private_handle_t::PRIV_FLAGS_USES_ION;
+                    hnd->size = size;
+                    hnd->offset = offset;
+                    hnd->base = intptr_t(base) + offset;
+                    hnd->gpuaddr = 0;
+                    hnd->width = width;
+                    hnd->height = height;
+                    hnd->format = format;
+                    *handle = (native_handle_t *)hnd;
+                    res = 0;
+                } else {
+                    ALOGE("%s: native_handle_create failed", __FUNCTION__);
                 }
-                hnd->width = width;
-                hnd->height = height;
-                hnd->format = format;
-                res = 0;
+                break;
             }
-            break;
-#endif
         case GRALLOC_MODULE_PERFORM_GET_STRIDE:
             {
                 int width   = va_arg(args, int);

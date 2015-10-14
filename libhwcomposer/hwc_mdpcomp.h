@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are retained
  * for attribution purposes only.
@@ -44,7 +44,7 @@ public:
     /* draw */
     virtual bool draw(hwc_context_t *ctx, hwc_display_contents_1_t *list) = 0;
     /* dumpsys */
-    void dump(android::String8& buf);
+    void dump(char *buff, int buff_len);
 
     static MDPComp* getObject(const int& width, const int dpy);
     /* Handler to invoke frame redraw on Idle Timer expiry */

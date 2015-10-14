@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -107,6 +107,9 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
                                int fbZorder) {
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
+    char value[PROPERTY_VALUE_MAX];
+    char key[PROPERTY_KEY_MAX];
+    int zOrder = 0;
     if (LIKELY(ctx->mOverlay)) {
         int extOnlyLayerIndex = ctx->listStats[mDpy].extOnlyLayerIndex;
         // ext only layer present..
@@ -140,6 +143,26 @@ bool FBUpdateLowRes::configure(hwc_context_t *ctx, hwc_display_contents_1 *list,
         if((mDpy && ctx->deviceOrientation) &&
             ctx->listStats[mDpy].isDisplayAnimating) {
             fbZorder = 0;
+        }
+
+        if (ctx->dpyAttr[mDpy].inOptimizeMode) {
+            /* If display is in Optimize mode, apply the zorder for the fb
+             * layer from system property. */
+            memset(key, 0x00, sizeof(key));
+            snprintf(key, PROPERTY_KEY_MAX,
+                "sys.hwc.fb_layer_zorder.%d", mDpy);
+            if(property_get(key, value, "0")) {
+                zOrder = atoi(value);
+                if (zOrder >= ZORDER_0 && zOrder <= ZORDER_3)
+                    fbZorder = zOrder;
+                else
+                    ALOGD_IF(DEBUG_FBUPDATE, "%s, zOrder=%d is out of bound"
+                             "[%d,%d], mDpy=%d", __FUNCTION__, zOrder, ZORDER_0,
+                             ZORDER_3, mDpy);
+            } else {
+                ALOGD_IF(DEBUG_FBUPDATE, "%s get prop=%s fail, "
+                         "use zOrder=0 for fb layer", __FUNCTION__, key);
+            }
         }
 
         ovutils::eMdpFlags mdpFlags = ovutils::OV_MDP_BLEND_FG_PREMULT;
@@ -261,6 +284,9 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
         hwc_display_contents_1 *list, int fbZorder) {
     bool ret = false;
     hwc_layer_1_t *layer = &list->hwLayers[list->numHwLayers - 1];
+    char value[PROPERTY_VALUE_MAX];
+    char key[PROPERTY_KEY_MAX];
+    int zOrder = 0;
     if (LIKELY(ctx->mOverlay)) {
         int extOnlyLayerIndex = ctx->listStats[mDpy].extOnlyLayerIndex;
         // ext only layer present..
@@ -287,6 +313,26 @@ bool FBUpdateHighRes::configure(hwc_context_t *ctx,
             ALOGE("%s: No pipes available to configure fb for dpy %d's right"
                     " mixer", __FUNCTION__, mDpy);
             return false;
+        }
+
+        if (ctx->dpyAttr[mDpy].inOptimizeMode) {
+            /* If display is in Optimize mode, apply the zorder for the fb
+             * layer from system property. */
+            memset(key, 0x00, sizeof(key));
+            snprintf(key, PROPERTY_KEY_MAX,
+                "sys.hwc.fb_layer_zorder.%d", mDpy);
+            if(property_get(key, value, "0")) {
+                zOrder = atoi(value);
+                if (zOrder >= ZORDER_0 && zOrder <= ZORDER_3)
+                    fbZorder = zOrder;
+                else
+                    ALOGD_IF(DEBUG_FBUPDATE, "%s, zOrder=%d is out of bound"
+                             "[%d,%d], mDpy=%d", __FUNCTION__, zOrder, ZORDER_0,
+                             ZORDER_3, mDpy);
+            } else {
+                ALOGD_IF(DEBUG_FBUPDATE, "%s get prop=%s fail, "
+                         "use zOrder=0 for fb layer", __FUNCTION__, key);
+            }
         }
 
         mDestLeft = destL;

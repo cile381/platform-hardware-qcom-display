@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -32,7 +32,18 @@
 
 namespace qhwc {
 
-#define HWC_VSYNC_THREAD_NAME "hwcVsyncThread"
+#define HWC_VSYNC_THREAD_NAME      "hwcVsyncThread%u"
+#define HWC_VSYNC_SYS_NODE_PATH    "/sys/class/graphics/fb%u/vsync_event"
+#define HWC_VSYNC_PATH_MAX         64
+#define HWC_VSYNC_THREAD_MAX       32
+
+struct hwc_vsync_ctl_t {
+    hwc_context_t* ctx;
+    int disp_id;
+};
+
+static pthread_t vsync_threads[HWC_NUM_PHYSICAL_DISPLAY_TYPES];
+static hwc_vsync_ctl_t hwc_vsync_ctl_arr[HWC_NUM_PHYSICAL_DISPLAY_TYPES];
 
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable)
 {
@@ -49,19 +60,11 @@ int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable)
 
 static void *vsync_loop(void *param)
 {
-    const char* vsync_timestamp_fb0 = "/sys/class/graphics/fb0/vsync_event";
-    const char* vsync_timestamp_fb1 = "/sys/class/graphics/fb1/vsync_event";
-    int dpy = HWC_DISPLAY_PRIMARY;
-
-    hwc_context_t * ctx = reinterpret_cast<hwc_context_t *>(param);
-
-    char thread_name[64] = HWC_VSYNC_THREAD_NAME;
-    prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
-    setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY +
-                android::PRIORITY_MORE_FAVORABLE);
-
     const int MAX_DATA = 64;
     static char vdata[MAX_DATA];
+    char property[PROPERTY_VALUE_MAX];
+    char thread_name[HWC_VSYNC_THREAD_MAX];
+    char vsync_fbtimestamp[HWC_VSYNC_PATH_MAX];
 
     uint64_t cur_timestamp=0;
     ssize_t len = -1;
@@ -70,7 +73,29 @@ static void *vsync_loop(void *param)
     bool fb1_vsync = false;
     bool logvsync = false;
 
-    char property[PROPERTY_VALUE_MAX];
+    hwc_vsync_ctl_t *v_ctl = reinterpret_cast<hwc_vsync_ctl_t *>(param);
+    if (!v_ctl) {
+         ALOGE ("ERROR:%s:v_ctl not valid! %s",  __FUNCTION__, strerror(errno));
+         return NULL;
+    }
+
+    int dpy = v_ctl->disp_id;
+    hwc_context_t *ctx = v_ctl->ctx;
+    if (!ctx) {
+         ALOGE ("ERROR:%s:ctx not valid! %s",  __FUNCTION__, strerror(errno));
+         return NULL;
+    }
+
+    memset(thread_name, 0x00, HWC_VSYNC_THREAD_MAX);
+    snprintf(thread_name, HWC_VSYNC_THREAD_MAX, HWC_VSYNC_THREAD_NAME, dpy);
+
+    memset(vsync_fbtimestamp, 0x00, HWC_VSYNC_PATH_MAX);
+    snprintf(vsync_fbtimestamp, HWC_VSYNC_PATH_MAX, HWC_VSYNC_SYS_NODE_PATH, dpy);
+
+    prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
+    setpriority(PRIO_PROCESS, 0, HAL_PRIORITY_URGENT_DISPLAY +
+                android::PRIORITY_MORE_FAVORABLE);
+
     if(property_get("debug.hwc.fakevsync", property, NULL) > 0) {
         if(atoi(property) == 1)
             ctx->vstate.fakevsync = true;
@@ -84,13 +109,12 @@ static void *vsync_loop(void *param)
     /* Currently read vsync timestamp from drivers
        e.g. VSYNC=41800875994
        */
-    fd_timestamp = open(vsync_timestamp_fb0, O_RDONLY);
+    fd_timestamp = open(vsync_fbtimestamp, O_RDONLY);
     if (fd_timestamp < 0) {
         // Make sure fb device is opened before starting this thread so this
         // never happens.
         ALOGE ("FATAL:%s:not able to open file:%s, %s",  __FUNCTION__,
-               (fb1_vsync) ? vsync_timestamp_fb1 : vsync_timestamp_fb0,
-               strerror(errno));
+               vsync_fbtimestamp, strerror(errno));
         ctx->vstate.fakevsync = true;
     }
 
@@ -105,7 +129,7 @@ static void *vsync_loop(void *param)
                     errno != EBUSY) {
                     ALOGE ("FATAL:%s:not able to read file:%s, %s",
                            __FUNCTION__,
-                           vsync_timestamp_fb0, strerror(errno));
+                           vsync_fbtimestamp, strerror(errno));
                 }
                 continue;
             }
@@ -120,8 +144,8 @@ static void *vsync_loop(void *param)
         }
         // send timestamp to HAL
         if(ctx->vstate.enable) {
-            ALOGD_IF (logvsync, "%s: timestamp %llu sent to HWC for %s",
-                      __FUNCTION__, cur_timestamp, "fb0");
+            ALOGD_IF (logvsync, "%s: timestamp %llu sent to HWC for %s%d",
+                      __FUNCTION__, cur_timestamp, "fb", dpy);
             ctx->proc->vsync(ctx->proc, dpy, cur_timestamp);
         }
 
@@ -134,13 +158,17 @@ static void *vsync_loop(void *param)
 
 void init_vsync_thread(hwc_context_t* ctx)
 {
-    int ret;
-    pthread_t vsync_thread;
+    int ret, i;
     ALOGI("Initializing VSYNC Thread");
-    ret = pthread_create(&vsync_thread, NULL, vsync_loop, (void*) ctx);
-    if (ret) {
-        ALOGE("%s: failed to create %s: %s", __FUNCTION__,
-              HWC_VSYNC_THREAD_NAME, strerror(ret));
+
+    for (i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i++) {
+        hwc_vsync_ctl_arr[i].ctx = ctx;
+        hwc_vsync_ctl_arr[i].disp_id = ctx->dpyAttr[i].fb_idx;
+        ret = pthread_create(&vsync_threads[i], NULL, vsync_loop, (void*)&hwc_vsync_ctl_arr[i]);
+        if (ret) {
+            ALOGE("%s: failed to create %s %s", __FUNCTION__,
+                  HWC_VSYNC_THREAD_NAME, i, strerror(ret));
+        }
     }
 }
 

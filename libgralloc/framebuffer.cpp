@@ -136,16 +136,41 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     size_t offset = 0;
     msmfb_overlay_data overlay_data;
     char log_msg[LENGTH_OF_NAME_MAX];
+    char value[PROPERTY_VALUE_MAX];
+    char key[PROPERTY_KEY_MAX];
+    uint32_t zOrder = 0;
 
     memset(&overlay_data, 0x00, sizeof(overlay_data));
 
     if (!m->automotive)
         offset = hnd->base - m->framebuffer->base;
 
+    memset(key, 0x00, sizeof(key));
+    snprintf(key, PROPERTY_KEY_MAX,
+        "sys.fb.fb_layer_zorder.%d", m->fbIndex);
+    if(property_get(key, value, NULL)) {
+        zOrder = atoi(value);
+        if (zOrder <= ZORDER_3) {
+            if (zOrder != m->zOrder) {
+                m->zOrder = zOrder;
+                m->updateZOrder = 1;
+            }
+        } else {
+            ALOGE("%s, zOrder=%d is out of bound [%d,%d], fbIndex=%d",
+                __FUNCTION__, zOrder, ZORDER_0, ZORDER_3, m->fbIndex);
+        }
+    } else {
+        ALOGV("%s no prop=%s, use zOrder=%d for fb layer",
+            __FUNCTION__, key, m->zOrder);
+    }
+
+
     /* Set overlay first*/
-    if(!m->setOverlay) {
-        memset(&(m->overlay), 0x00, sizeof(m->overlay));
-        m->overlay.id          = MSMFB_NEW_REQUEST;
+    if(!m->setOverlay || m->updateZOrder) {
+        if(!m->setOverlay) {
+            memset(&(m->overlay), 0x00, sizeof(m->overlay));
+            m->overlay.id      = MSMFB_NEW_REQUEST;
+        }
         m->overlay.src.width   = hnd->width;
         m->overlay.src.height  = hnd->height;
         m->overlay.src.format  = get_mdp_pixel_format(hnd->format);
@@ -157,7 +182,7 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         m->overlay.dst_rect.y  = 0;
         m->overlay.dst_rect.w  = m->info.xres;
         m->overlay.dst_rect.h  = m->info.yres;
-        m->overlay.z_order     = 3;
+        m->overlay.z_order     = m->zOrder;
         m->overlay.alpha       = MDP_ALPHA_NOP;
         m->overlay.transp_mask = MDP_TRANSP_NOP;
         m->overlay.flags       = 0;
@@ -169,6 +194,7 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
             return -errno;
         }
         m->setOverlay = 1;
+        m->updateZOrder = 0;
     }
 
     overlay_data.id = m->overlay.id;
@@ -221,7 +247,7 @@ static int fb_compositionComplete(struct framebuffer_device_t* dev)
     return 0;
 }
 
-static const char *getDisplayId(int idx)
+static const char *getDisplayId(struct private_module_t* module, int idx)
 {
     int status = 0;
     int fd = -1;
@@ -230,7 +256,6 @@ static const char *getDisplayId(int idx)
     const char *display_id = NULL;
     FILE *fp = NULL;
     char fb_display_id[LENGTH_OF_NAME_MAX];
-    int fb_id = -1;
 
     memset(fd_name, 0x00, LENGTH_OF_NAME_MAX);
     snprintf(fd_name, LENGTH_OF_NAME_MAX, FB_ATTRIBUTE_DISPLAY_ID_PATH, idx);
@@ -248,6 +273,9 @@ static const char *getDisplayId(int idx)
         if (!strncmp(fb_display_id, mFbDisplayMapping[i].display_id,
                     strlen(mFbDisplayMapping[i].display_id))) {
             display_id = mFbDisplayMapping[i].display_id;
+            if(module) {
+                module->fbIndex = i;
+            }
             break;
         }
     }
@@ -275,6 +303,9 @@ static int getFbIdx(struct private_module_t* module, const char* name, int *idx)
         if (!strcmp(name, mFbDisplayMapping[i].fb_name)) {
             display_id = mFbDisplayMapping[i].display_id;
             fb_id = i;
+            if(module) {
+                module->fbIndex = i;
+            }
             break;
         }
     }
@@ -647,9 +678,8 @@ static int fb_close(struct hw_device_t *dev)
     mdp_display_commit commit;
     if (ctx) {
         private_module_t* m = (private_module_t*)ctx->device.common.module;
-        int overlay_id = m->overlay.id;
         if(m && m->framebuffer && (m->mdpArbFd >= 0) &&
-            (overlay_id >= 0) && (m->setOverlay)) {
+            ((int)(m->overlay.id) >= 0) && (m->setOverlay)) {
             if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_UNSET,
                 &(m->overlay.id))) {
                 ALOGE("Error unset overlay");
@@ -739,6 +769,7 @@ int fb_device_open(hw_module_t const* module, const char* name,
         dev->device.setUpdateRect   = 0;
         dev->device.compositionComplete = fb_compositionComplete;
         m->mdpArbFd = -1;
+        m->zOrder = DEFAULT_OVERLAY_Z_ORDER;
 
         status = getFbIdx(m, name, &fb_idx);
         if (status) {
@@ -820,8 +851,9 @@ int framebuffer_open_ex(const struct hw_module_t* module, const char *name,
     dev->device.post            = fb_post;
     dev->device.setUpdateRect   = 0;
     dev->device.compositionComplete = fb_compositionComplete;
-    m->display_id = getDisplayId(fb_idx);
+    m->display_id = getDisplayId(m, fb_idx);
     m->mdpArbFd = -1;
+    m->zOrder = DEFAULT_OVERLAY_Z_ORDER;
 
     status = bindMdpArb(m, name, fb_idx);
     if (status) {

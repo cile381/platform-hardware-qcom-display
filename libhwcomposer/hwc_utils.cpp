@@ -68,6 +68,7 @@ static void openFb(int dpy, int *fd, int *fb_idx) {
     if (!fd || !fb_idx) {
         ALOGE("%s, fd=0x%08x or fb_idx=0x%08x is NULL", __FUNCTION__, (int)fd,
             (int)fb_idx);
+        return;
     }
     *fd = -1;
     if (dpy >= HWC_NUM_DISPLAY_TYPES)
@@ -378,9 +379,13 @@ void initContext(hwc_context_t *ctx)
     //independent process as well.
     QService::init();
     sp<IQClient> client = new QClient(ctx);
-    interface_cast<IQService>(
+    sp<IQService> ptr = interface_cast<IQService>(
             defaultServiceManager()->getService(
-            String16("display.qservice")))->connect(client);
+            String16("display.qservice")));
+    if (ptr != NULL)
+        ptr->connect(client);
+    else
+        ALOGE("%s: Error: interface_cast failed", __FUNCTION__);
 
     // Initialize device orientation to its default orientation
     ctx->deviceOrientation = 0;
@@ -885,17 +890,12 @@ void setListStats(hwc_context_t *ctx,
     ctx->listStats[dpy].extOnlyLayerIndex = -1;
     ctx->listStats[dpy].isDisplayAnimating = false;
     ctx->listStats[dpy].secureUI = false;
-    ctx->mViewFrame[dpy] = (hwc_rect_t){0, 0, 0, 0};
-
     optimizeLayerRects(ctx, list, dpy);
 
     for (size_t i = 0; i < (size_t)ctx->listStats[dpy].numAppLayers; i++) {
         hwc_layer_1_t const* layer = &list->hwLayers[i];
         private_handle_t *hnd = (private_handle_t *)layer->handle;
 
-        // Calculate view frame of each display from the layer displayframe
-        ctx->mViewFrame[dpy] = getUnion(ctx->mViewFrame[dpy],
-                                        layer->displayFrame);
 #ifdef QCOM_BSP
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
@@ -1272,19 +1272,24 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
         struct msm_rotator_buf_sync rotData;
 
         for(uint32_t i = 0; i < ctx->mLayerRotMap[dpy]->getCount(); i++) {
+            hwc_layer_1_t *pLayer = ctx->mLayerRotMap[dpy]->getLayer(i);
+            overlay::Rotator *pRot = ctx->mLayerRotMap[dpy]->getRot(i);
             memset(&rotData, 0, sizeof(rotData));
-            int& acquireFenceFd =
-                ctx->mLayerRotMap[dpy]->getLayer(i)->acquireFenceFd;
-            rotData.acq_fen_fd = acquireFenceFd;
-            rotData.session_id = ctx->mLayerRotMap[dpy]->getRot(i)->getSessId();
-            ioctl(rotFd, MSM_ROTATOR_IOCTL_BUFFER_SYNC, &rotData);
-            close(acquireFenceFd);
-            //For MDP to wait on.
-            acquireFenceFd = dup(rotData.rel_fen_fd);
-            //A buffer is free to be used by producer as soon as its copied to
-            //rotator.
-            ctx->mLayerRotMap[dpy]->getLayer(i)->releaseFenceFd =
-                rotData.rel_fen_fd;
+            if (pLayer && pRot) {
+                int& acquireFenceFd = pLayer->acquireFenceFd;
+                rotData.acq_fen_fd = acquireFenceFd;
+                rotData.session_id = pRot->getSessId();
+                ioctl(rotFd, MSM_ROTATOR_IOCTL_BUFFER_SYNC, &rotData);
+                close(acquireFenceFd);
+                //For MDP to wait on.
+                acquireFenceFd = dup(rotData.rel_fen_fd);
+                //A buffer is free to be used by producer as soon as its
+                //copied to rotator.
+                pLayer->releaseFenceFd = rotData.rel_fen_fd;
+            } else {
+                ALOGE("%s Error: NULL pointer: pLayer=%x, pRot=%x",
+                      __FUNCTION__, (uint32_t)pLayer, (uint32_t)pRot);
+            }
         }
     } else {
         //TODO B-family

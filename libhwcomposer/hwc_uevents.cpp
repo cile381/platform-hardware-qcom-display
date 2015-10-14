@@ -1,7 +1,7 @@
 
 /*
  * Copyright (C) 2010 The Android Open Source Project
- * Copyright (C) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012, 2015, The Linux Foundation. All rights reserved.
  *
  * Not a Contribution, Apache license notifications and license are
  * retained for attribution purposes only.
@@ -269,6 +269,10 @@ static void handleMdpArbEvent(hwc_context_t* ctx,
                 break;
             }
         }
+        if (dpy == HWC_NUM_DISPLAY_TYPES) {
+            ALOGE("%s invalid fb index=%d", __FUNCTION__, fbIdx[i]);
+            continue;
+        }
         // Acknowledge the MDP arb
         ret = ioctl(ctx->dpyAttr[dpy].arb_fd, MSMFB_ARB_ACKNOWLEDGE, &event);
         if (ret) {
@@ -327,7 +331,7 @@ static bool getMdpArbNotification(const char* strUdata,
                 l = strlen(p);
                 token = strtok_r(p, delimit, &last);
                 i = 0;
-                c =  strlen(token);
+                c = (token == NULL) ? 0 : strlen(token);
                 while((NULL != token) && (c <= l)) {
                     if (!strncmp(token, "hwc", strlen("hwc"))) {
                         fbIdx[idx] = i;
@@ -350,7 +354,7 @@ static bool getMdpArbNotification(const char* strUdata,
                 token = strtok_r(p, delimit, &last);
                 i = 0;
                 j = 0;
-                c = strlen(token);
+                c = (token == NULL) ? 0 : strlen(token);
                 while((token) && (j < idx) && (c <= l)) {
                     if (i == fbIdx[j]) {
                         if (token) {
