@@ -46,7 +46,9 @@ gpu_context_t::gpu_context_t(const private_module_t* module,
     common.close   = gralloc_close;
     alloc          = gralloc_alloc;
 #ifdef QCOM_BSP
+#ifdef AUTO_DISP_BSP_EN
     allocSize      = gralloc_alloc_size;
+#endif
 #endif
     free           = gralloc_free;
 

@@ -321,6 +321,7 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
                       (enable)?"ENABLED":"DISABLED");
             break;
 #ifdef QCOM_BSP
+#ifdef AUTO_DISP_BSP_EN
         case  HWC_EVENT_ORIENTATION:
             if(dpy == HWC_DISPLAY_PRIMARY) {
                 Locker::Autolock _l(ctx->mDrawLock);
@@ -328,6 +329,7 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
                 ctx->deviceOrientation = enable;
             }
             break;
+#endif
 #endif
         default:
             ret = -EINVAL;

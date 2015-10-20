@@ -897,12 +897,14 @@ void setListStats(hwc_context_t *ctx,
         ctx->mViewFrame[dpy] = getUnion(ctx->mViewFrame[dpy],
                                         layer->displayFrame);
 #ifdef QCOM_BSP
+#ifdef AUTO_DISP_BSP_EN
         if (layer->flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
             ctx->listStats[dpy].isDisplayAnimating = true;
         }
         if(isSecureDisplayBuffer(hnd)) {
             ctx->listStats[dpy].secureUI = true;
         }
+#endif
 #endif
         // continue if number of app layers exceeds MAX_NUM_APP_LAYERS
         if(ctx->listStats[dpy].numAppLayers > MAX_NUM_APP_LAYERS)
