@@ -32,6 +32,15 @@
 
 #define ROUND_UP_PAGESIZE(x) ( (((unsigned long)(x)) + PAGE_SIZE-1)  & \
                                (~(PAGE_SIZE-1)) )
+#define GRALLOC_HARDWARE_FB1 "fb1"
+#define GRALLOC_HARDWARE_FB2 "fb2"
+
+/** convenience API for opening and closing a supported device */
+static inline int framebuffer_open_module(const struct hw_module_t* module,
+        const char *fb_name, struct framebuffer_device_t** device) {
+    return module->methods->open(module,
+            fb_name, (struct hw_device_t**)device);
+}
 
 enum {
     /* gralloc usage bits indicating the type
