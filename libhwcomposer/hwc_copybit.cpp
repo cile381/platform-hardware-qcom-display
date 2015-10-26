@@ -226,7 +226,9 @@ int CopyBit::getLayersChanging(hwc_context_t *ctx,
             hwc_rect_t displayFrame = list->hwLayers[k].displayFrame;
             hwc_rect_t result = getIntersection(displayFrame,dirtyRect);
             if((k != changingLayerIndex) && isValidRect(result)){
-              return -1;
+                mFbCache.reset();
+                mLayerCache.updateCounts(ctx,list,dpy);
+                return -1;
            }
        }
        mFbCache.insertAndUpdateFbCache(dirtyRect);
