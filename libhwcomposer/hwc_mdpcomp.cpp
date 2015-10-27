@@ -106,7 +106,8 @@ void MDPComp::dump(char *buff, int buff_len)
         ALOGE("%s: buffer overflow: %d/%d", __FUNCTION__, ret, buff_len);
         return;
     }
-    for(int index = 0; index < mCurrentFrame.layerCount; index++ ) {
+    for(int index = 0; index < mCurrentFrame.layerCount &&
+        mCurrentFrame.layerCount < MAX_NUM_APP_LAYERS; index++ ) {
         len = strnlen(buff, buff_len);
         ret = snprintf(buff + len, buff_len - len, " %7d | %7s | %8d | %9s | %2d \n",
                     index,
@@ -115,7 +116,11 @@ void MDPComp::dump(char *buff, int buff_len)
                     (mCurrentFrame.isFBComposed[index] ?
                      (mCurrentFrame.needsRedraw ? "GLES" : "CACHE") : "MDP"),
                     (mCurrentFrame.isFBComposed[index] ? mCurrentFrame.fbZ :
-    mCurrentFrame.mdpToLayer[mCurrentFrame.layerToMDP[index]].pipeInfo->zOrder));
+                     ((mCurrentFrame.layerToMDP[index] >= 0 &&
+                       mCurrentFrame.layerToMDP[index] < MAX_PIPES_PER_MIXER &&
+                       mCurrentFrame.mdpToLayer[mCurrentFrame.layerToMDP[index]].pipeInfo)?
+                      mCurrentFrame.mdpToLayer[mCurrentFrame.layerToMDP[index]].pipeInfo->zOrder:
+                      -1)));
         if ((ret >= buff_len - len) || (ret < 0)) {
             ALOGE("%s: snprintf error: ret=%d, available buffer length=%d",
                     __FUNCTION__, ret, buff_len - len);
