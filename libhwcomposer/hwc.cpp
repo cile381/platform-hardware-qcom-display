@@ -432,9 +432,15 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
     case HWC_DISPLAY_SECONDARY:
     case HWC_DISPLAY_TERTIARY:
         if(blank) {
-            if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,1)) {
-                ALOGE("%s: display commit fail for external!", __FUNCTION__);
-                ret = -1;
+            if(ctx->mBasePipeSetup[dpy]) {
+                ctx->mBasePipeSetup[dpy] = false;
+                freeBasePipe(ctx, dpy);
+            } else {
+                if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd,1)) {
+                    ALOGE("%s: display commit fail for display=%d!",
+                        __FUNCTION__, dpy);
+                    ret = -1;
+                }
             }
         }
         value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
