@@ -121,8 +121,6 @@ SecondaryDisplay::SecondaryDisplay(hwc_context_t* ctx, int dpy):
 {
     if(ctx->mAutomotiveModeOn) {
         parseFeatures();
-        mHPDEnabled = false;
-        mEDIDEnabled = false;
         ctx->mHPDEnabled = mHPDEnabled;
 
     if (mHPDEnabled)
