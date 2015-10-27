@@ -167,7 +167,9 @@ bool isUncompressedRgbFormat(int format)
         case HAL_PIXEL_FORMAT_RGBA_4444:
         case HAL_PIXEL_FORMAT_R_8:
         case HAL_PIXEL_FORMAT_RG_88:
-        case HAL_PIXEL_FORMAT_BGRX_8888:    // Intentional fallthrough
+        case HAL_PIXEL_FORMAT_BGRX_8888:
+        case HAL_PIXEL_FORMAT_sRGB_X_8888:
+        case HAL_PIXEL_FORMAT_sRGB_A_8888:     // Intentional fallthrough
             is_rgb_format = true;
             break;
         default:
