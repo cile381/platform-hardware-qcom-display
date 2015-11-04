@@ -62,7 +62,9 @@ struct fb_context_t {
 };
 
 static struct fb_display_mapping mFbDisplayMapping[] = {
-    { GRALLOC_HARDWARE_FB0,   "PRIMARY" },
+    { GRALLOC_HARDWARE_FB0,   "PRIMARY"   },
+    { GRALLOC_HARDWARE_FB1,   "SECONDARY" },
+    { GRALLOC_HARDWARE_FB2,   "TERTIARY"  },
 };
 static const int mFbDisplayMappingLen =
     sizeof(mFbDisplayMapping)/sizeof(struct fb_display_mapping);
@@ -713,7 +715,9 @@ int framebuffer_getDisplayFbIdx(const char *fb_name, int *fb_idx)
         ALOGE("%s fb_name=0x%08x or fb_idx=0x%08x is NULL", __FUNCTION__,
             (int)fb_name, (int)fb_idx);
         status = -EINVAL;
-    } else if (strcmp(fb_name, GRALLOC_HARDWARE_FB0)) {
+    } else if (strcmp(fb_name, GRALLOC_HARDWARE_FB0) &&
+               strcmp(fb_name, GRALLOC_HARDWARE_FB1) &&
+               strcmp(fb_name, GRALLOC_HARDWARE_FB2)) {
         ALOGE("%s not support fb device=%s", __func__, fb_name);
         status = -ENOENT;
     } else {
