@@ -224,6 +224,7 @@ bool setupBasePipe(hwc_context_t *ctx, const int dpy);
 bool freeBasePipe(hwc_context_t *ctx, const int dpy);
 int hwc_vsync_control(hwc_context_t* ctx, int dpy, int enable);
 int getBlending(int blending);
+int checkMdpArbitratorEvent(hwc_context_t *ctx);
 
 //Helper function to dump logs
 void dumpsys_log(android::String8& buf, const char* fmt, ...);
