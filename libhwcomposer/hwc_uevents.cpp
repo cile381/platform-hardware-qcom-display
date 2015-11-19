@@ -648,6 +648,12 @@ static void *uevent_loop(void *param)
         return NULL;
     }
 
+    // Need to check current event state before processing the first uevent
+    // in order to catch up any missing uevent
+    if (checkMdpArbitratorEvent(ctx) < 0) {
+        ALOGE("%s: failed to check MDP arbitrator event!!", __FUNCTION__);
+    }
+
     while(1) {
         len = uevent_next_event(udata, sizeof(udata) - 2);
         handle_uevent(ctx, udata, len);

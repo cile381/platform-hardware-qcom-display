@@ -193,6 +193,37 @@ static int openFramebufferDevice(hwc_context_t *ctx)
     return 0;
 }
 
+int checkMdpArbitratorEvent(hwc_context_t *ctx)
+{
+    int i = 0, ret = 0;
+    mdp_arb_event event;
+
+    if (ctx && ctx->mMDPArbSuppport) {
+        for (i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i++) {
+            memset(&event, 0x00, sizeof(event));
+            strlcpy(event.name, HWC_MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+            ret = ioctl(ctx->dpyAttr[i].arb_fd, MSMFB_ARB_GET_STATE, &event);
+            if (ret) {
+                ALOGE("%s MDP_GET_STATE fails=%d, display=%d", __FUNCTION__,
+                    ret, i);
+                break;
+            } else {
+                if (event.event.get_state == 1) {
+                    ctx->dpyAttr[i].inOptimizeMode = true;
+                } else {
+                    ctx->dpyAttr[i].inOptimizeMode = false;
+                }
+                ALOGD_IF(isDebug(), "%s,%d event=%s state=%d disp=%d " \
+                    "optimize=%d", __FUNCTION__, __LINE__,
+                    HWC_MDP_ARB_EVENT_NAME, event.event.get_state, i,
+                    ctx->dpyAttr[i].inOptimizeMode);
+            }
+        }
+    }
+
+    return ret;
+}
+
 static int registerMdpArbitrator(hwc_context_t *ctx)
 {
     int i = 0, ret = 0;
@@ -334,6 +365,10 @@ void initContext(hwc_context_t *ctx)
 
     if (registerMdpArbitrator(ctx) < 0) {
         ALOGE("%s: failed to open MDP arbitrator!!", __FUNCTION__);
+    }
+
+    if (checkMdpArbitratorEvent(ctx) < 0) {
+        ALOGE("%s: failed to check MDP arbitrator event!!", __FUNCTION__);
     }
 
     ctx->mMDP.version = qdutils::MDPVersion::getInstance().getMDPVersion();
