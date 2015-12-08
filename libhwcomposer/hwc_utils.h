@@ -442,7 +442,7 @@ void setGPUHint(hwc_context_t* ctx, hwc_display_contents_1_t* list);
 bool isPeripheral(const hwc_rect_t& rect1, const hwc_rect_t& rect2);
 
 // Checks if boot animation has completed and applies default mode
-void processBootAnimCompleted(hwc_context_t *ctx);
+ void processBootAnimCompleted(hwc_context_t *ctx, hwc_display_contents_1_t *list);
 
 // Inline utility functions
 static inline bool isSkipLayer(const hwc_layer_1_t* l) {
