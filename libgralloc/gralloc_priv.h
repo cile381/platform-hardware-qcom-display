@@ -69,6 +69,10 @@ enum {
     /* Buffer content should be displayed on an external display only */
     GRALLOC_USAGE_PRIVATE_EXTERNAL_ONLY   =       0x08000000,
 
+    /* Buffer content is opaque to the layers below it. And current layer
+     * still retains alpha value if it has.*/
+    GRALLOC_USAGE_PRIVATE_OPAQUE_SURFACE  =       0x00100000,
+
     /* This flag is set for WFD usecase */
     GRALLOC_USAGE_PRIVATE_WFD             =       0x00200000,
 
@@ -115,7 +119,6 @@ enum {
     HAL_PIXEL_FORMAT_CbYCrY_422_I           = 0x114,  //UYVY
     HAL_PIXEL_FORMAT_INTERLACE              = 0x180,
     HAL_PIXEL_FORMAT_BGR_888                = 8,
-
 };
 
 /* possible formats for 3D content*/
@@ -164,6 +167,7 @@ struct private_handle_t : public native_handle {
             // Display on external only
             PRIV_FLAGS_EXTERNAL_ONLY      = 0x00002000,
             PRIV_FLAGS_INTERNAL_ONLY      = 0x00004000,
+            PRIV_FLAGS_OPAQUE_SURFACE     = 0x00008000,
             PRIV_FLAGS_VIDEO_ENCODER      = 0x00010000,
             PRIV_FLAGS_CAMERA_WRITE       = 0x00020000,
             PRIV_FLAGS_CAMERA_READ        = 0x00040000,
