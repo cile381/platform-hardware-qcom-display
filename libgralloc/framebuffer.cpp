@@ -187,7 +187,13 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
         m->overlay.z_order     = m->zOrder;
         m->overlay.alpha       = MDP_ALPHA_NOP;
         m->overlay.transp_mask = MDP_TRANSP_NOP;
-        m->overlay.flags       = 0;
+        /* Try to use ViG layer for framebuffer, leave RGB layer to HWC for
+         * resource synchronization between HWC and kernel. Since HWC will
+         * always reqests RGB layer first for RGB content, kernel should return
+         * RGB layer but not ViG layer. If FB HAL occupies RGB layer, kernel
+         * has to return ViG layer instead, hence bookkeeping between HWC and
+         * kernel will be out of sync.*/
+        m->overlay.flags       = MDP_OV_PIPE_SHARE;
         m->overlay.is_fg       = 0;
         if(ioctl(m->mdpArbFd, MSMFB_OVERLAY_SET, &(m->overlay))) {
             ALOGE("%s: MSMFB_OVERLAY_SET for display=%s failed, str=%s",
