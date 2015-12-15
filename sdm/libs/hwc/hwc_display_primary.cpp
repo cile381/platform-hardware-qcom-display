@@ -39,12 +39,12 @@
 namespace sdm {
 
 int HWCDisplayPrimary::Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
-                              HWCDisplay **hwc_display) {
+                              DisplayType display_type, HWCDisplay **hwc_display) {
   int status = 0;
   uint32_t primary_width = 0;
   uint32_t primary_height = 0;
 
-  HWCDisplay *hwc_display_primary = new HWCDisplayPrimary(core_intf, hwc_procs);
+  HWCDisplay *hwc_display_primary = new HWCDisplayPrimary(core_intf, hwc_procs, display_type);
   status = hwc_display_primary->Init();
   if (status) {
     delete hwc_display_primary;
@@ -76,8 +76,9 @@ void HWCDisplayPrimary::Destroy(HWCDisplay *hwc_display) {
   delete hwc_display;
 }
 
-HWCDisplayPrimary::HWCDisplayPrimary(CoreInterface *core_intf, hwc_procs_t const **hwc_procs)
-  : HWCDisplay(core_intf, hwc_procs, kPrimary, HWC_DISPLAY_PRIMARY, true), cpu_hint_(NULL) {
+HWCDisplayPrimary::HWCDisplayPrimary(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                                     DisplayType display_type)
+  : HWCDisplay(core_intf, hwc_procs, display_type, true, false), cpu_hint_(NULL) {
 }
 
 int HWCDisplayPrimary::Init() {

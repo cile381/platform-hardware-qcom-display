@@ -40,11 +40,11 @@ namespace sdm {
 
 int HWCDisplayExternal::Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
                                uint32_t primary_width, uint32_t primary_height,
-                               HWCDisplay **hwc_display) {
+                               DisplayType display_type, HWCDisplay **hwc_display) {
   uint32_t external_width = 0;
   uint32_t external_height = 0;
 
-  HWCDisplay *hwc_display_external = new HWCDisplayExternal(core_intf, hwc_procs);
+  HWCDisplay *hwc_display_external = new HWCDisplayExternal(core_intf, hwc_procs, display_type);
   int status = hwc_display_external->Init();
   if (status) {
     delete hwc_display_external;
@@ -75,8 +75,9 @@ void HWCDisplayExternal::Destroy(HWCDisplay *hwc_display) {
   delete hwc_display;
 }
 
-HWCDisplayExternal::HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs)
-  : HWCDisplay(core_intf, hwc_procs, kHDMI, HWC_DISPLAY_EXTERNAL, false) {
+HWCDisplayExternal::HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                                       DisplayType display_type)
+  : HWCDisplay(core_intf, hwc_procs, display_type, false, true) {
 }
 
 int HWCDisplayExternal::Prepare(hwc_display_contents_1_t *content_list) {

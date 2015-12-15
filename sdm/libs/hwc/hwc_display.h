@@ -118,8 +118,8 @@ class HWCDisplay : public DisplayEventHandler {
     LayerStackCache() : layer_count(0), animating(false), in_use(false) { }
   };
 
-  HWCDisplay(CoreInterface *core_intf, hwc_procs_t const **hwc_procs, DisplayType type, int id,
-             bool needs_blit);
+  HWCDisplay(CoreInterface *core_intf, hwc_procs_t const **hwc_procs, DisplayType type,
+            bool needs_blit, bool pluggable);
 
   // DisplayEventHandler methods
   virtual DisplayError VSync(const DisplayEventVSync &vsync);
@@ -161,8 +161,8 @@ class HWCDisplay : public DisplayEventHandler {
   CoreInterface *core_intf_;
   hwc_procs_t const **hwc_procs_;
   DisplayType type_;
-  int id_;
   bool needs_blit_;
+  bool pluggable_;
   DisplayInterface *display_intf_ = NULL;
   LayerStackMemory layer_stack_memory_;
   LayerStack layer_stack_;

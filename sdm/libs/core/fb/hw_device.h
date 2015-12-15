@@ -96,7 +96,7 @@ class HWDevice : public HWInterface {
   void SetMDPFlags(const Layer &layer, const bool &is_rotator_used,
                    bool is_cursor_pipe_used, uint32_t *mdp_flags);
   // Retrieves HW FrameBuffer Node Index
-  int GetFBNodeIndex(HWDeviceType device_type);
+  int GetFBNodeIndex(DisplayType display_type);
   // Populates HWPanelInfo based on node index
   void PopulateHWPanelInfo();
   void GetHWPanelInfoByNode(int device_node, HWPanelInfo *panel_info);
@@ -134,6 +134,7 @@ class HWDevice : public HWInterface {
   mdp_output_layer mdp_out_layer_;
   const char *device_name_;
   bool synchronous_commit_;
+  DisplayType display_type_;
 };
 
 }  // namespace sdm

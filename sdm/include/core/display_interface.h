@@ -48,6 +48,7 @@ namespace sdm {
 enum DisplayType {
   kPrimary,         //!< Main physical display which is attached to the handheld device.
   kHDMI,            //!< HDMI physical display which is generally detachable.
+  kTertiary,        //!< Tertiary physical display
   kVirtual,         //!< Contents would be rendered into the output buffer provided by the client
                     //!< e.g. wireless display.
   kDisplayMax,

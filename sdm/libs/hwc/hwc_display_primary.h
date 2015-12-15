@@ -41,7 +41,7 @@ class HWCDisplayPrimary : public HWCDisplay {
   };
 
   static int Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
-                    HWCDisplay **hwc_display);
+                    DisplayType display_type, HWCDisplay **hwc_display);
   static void Destroy(HWCDisplay *hwc_display);
   virtual int Init();
   virtual int Prepare(hwc_display_contents_1_t *content_list);
@@ -52,7 +52,8 @@ class HWCDisplayPrimary : public HWCDisplay {
   virtual void SetIdleTimeoutMs(uint32_t timeout_ms);
 
  private:
-  HWCDisplayPrimary(CoreInterface *core_intf, hwc_procs_t const **hwc_procs);
+  HWCDisplayPrimary(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                    DisplayType display_type);
   void SetMetaDataRefreshRateFlag(bool enable);
   virtual DisplayError SetDisplayMode(uint32_t mode);
   void ProcessBootAnimCompleted();
