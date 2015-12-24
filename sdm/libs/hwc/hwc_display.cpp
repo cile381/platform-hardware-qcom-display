@@ -41,6 +41,10 @@
 #include "hwc_debugger.h"
 #include "blit_engine_c2d.h"
 
+#ifdef QTI_BSP
+#include <exhwcomposer_defs.h>
+#endif
+
 #define __CLASS__ "HWCDisplay"
 
 namespace sdm {
@@ -241,11 +245,6 @@ int HWCDisplay::GetDisplayAttributes(uint32_t config, const uint32_t *attributes
     case HWC_DISPLAY_DPI_Y:
       values[i] = INT32(variable_config.y_dpi * 1000.0f);
       break;
-#ifdef QCOM_BSP
-    case HWC_DISPLAY_SECURE:
-      values[i] = INT32(true);  // For backward compatibility. All Physical displays are secure
-      break;
-#endif
     default:
       DLOGW("Spurious attribute type = %d", attributes[i]);
       return -EINVAL;
@@ -497,6 +496,12 @@ int HWCDisplay::PrePrepareLayerStack(hwc_display_contents_1_t *content_list) {
       return ret;
     }
 
+    layer.flags.skip = ((hwc_layer.flags & HWC_SKIP_LAYER) > 0);
+    layer.flags.solid_fill = (hwc_layer.flags & kDimLayer) || solid_fill_enable_;
+    if (layer.flags.skip || layer.flags.solid_fill) {
+      layer.dirty_regions.count = 0;
+    }
+
     hwc_rect_t scaled_display_frame = hwc_layer.displayFrame;
     ScaleDisplayFrame(&scaled_display_frame);
     ApplyScanAdjustment(&scaled_display_frame);
@@ -529,7 +534,6 @@ int HWCDisplay::PrePrepareLayerStack(hwc_display_contents_1_t *content_list) {
     //    - blending to Coverage.
     if (hwc_layer.flags & kDimLayer) {
       layer.input_buffer->format = kFormatARGB8888;
-      layer.flags.solid_fill = true;
       layer.solid_fill_color = 0xff000000;
       SetBlending(HWC_BLENDING_COVERAGE, &layer.blending);
     } else {
@@ -551,11 +555,9 @@ int HWCDisplay::PrePrepareLayerStack(hwc_display_contents_1_t *content_list) {
       layer.src_rect.top = 0;
       layer.src_rect.right = input_buffer->width;
       layer.src_rect.bottom = input_buffer->height;
-      layer.dirty_regions.count = 0;
     }
 
     layer.plane_alpha = hwc_layer.planeAlpha;
-    layer.flags.skip = ((hwc_layer.flags & HWC_SKIP_LAYER) > 0);
     layer.flags.cursor = ((hwc_layer.flags & HWC_IS_CURSOR_LAYER) > 0);
     layer.flags.updating = true;
 
@@ -563,7 +565,7 @@ int HWCDisplay::PrePrepareLayerStack(hwc_display_contents_1_t *content_list) {
       LayerCache layer_cache = layer_stack_cache_.layer_cache[i];
       layer.flags.updating = IsLayerUpdating(hwc_layer, layer_cache);
     }
-#ifdef QCOM_BSP
+#ifdef QTI_BSP
     if (hwc_layer.flags & HWC_SCREENSHOT_ANIMATOR_LAYER) {
       layer_stack_.flags.animating = true;
     }
@@ -1241,15 +1243,6 @@ void HWCDisplay::MarkLayersForGPUBypass(hwc_display_contents_1_t *content_list) 
   for (size_t i = 0 ; i < (content_list->numHwLayers - 1); i++) {
     hwc_layer_1_t *layer = &content_list->hwLayers[i];
     layer->compositionType = HWC_OVERLAY;
-  }
-}
-
-void HWCDisplay::CloseAcquireFences(hwc_display_contents_1_t *content_list) {
-  for (size_t i = 0; i < content_list->numHwLayers; i++) {
-    if (content_list->hwLayers[i].acquireFenceFd >= 0) {
-      close(content_list->hwLayers[i].acquireFenceFd);
-      content_list->hwLayers[i].acquireFenceFd = -1;
-    }
   }
 }
 
