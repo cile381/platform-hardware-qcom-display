@@ -452,9 +452,13 @@ int SecondaryDisplay::parseFeatures(void)
     while(tmp != NULL) {
         if (strncmp(tmp, HPD_STR, MAX_HDMI_FEAT_EN_NAME_LEN) == 0) {
             tmp = strtok_r(NULL, delim2, &cont);
+            if (tmp == NULL)
+                break;
             mHPDEnabled = atoi(tmp);
         } else if (strncmp(tmp, EDID_STR, MAX_HDMI_FEAT_EN_NAME_LEN) == 0) {
             tmp = strtok_r(NULL, delim2, &cont);
+            if (tmp == NULL)
+                break;
             mEDIDEnabled = atoi(tmp);
         } else {
             ALOGE("HDMI_FEAT %s: hdmi feature unknown '%s' sys node string: %s",
