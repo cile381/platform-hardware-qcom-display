@@ -88,6 +88,11 @@ DisplayError CoreImpl::Init() {
     goto CleanupOnError;
   }
 
+  error =  hw_info_intf_->GetHWDisplayInfo(&hw_disp_);
+  if (error != kErrorNone) {
+    goto CleanupOnError;
+  }
+
   error = comp_mgr_.Init(*hw_resource_, extension_intf_, buffer_sync_handler_);
   if (error != kErrorNone) {
     goto CleanupOnError;
@@ -162,12 +167,15 @@ DisplayError CoreImpl::CreateDisplay(DisplayType type, DisplayEventHandler *even
 
   switch (type) {
   case kPrimary:
-    display_base = new DisplayPrimary(event_handler, hw_info_intf_, buffer_sync_handler_,
-                                      &comp_mgr_, rotator_intf_);
-    break;
   case kHDMI:
-    display_base = new DisplayHDMI(event_handler, hw_info_intf_, buffer_sync_handler_,
-                                   &comp_mgr_, rotator_intf_);
+  case kTertiary:
+    if (!hw_disp_.hw_display_type_info[type].is_hotplug) {
+      display_base = new DisplayPrimary(event_handler, hw_info_intf_, type, buffer_sync_handler_,
+                                        &comp_mgr_, rotator_intf_);
+    } else {
+      display_base = new DisplayHDMI(event_handler, hw_info_intf_, type, buffer_sync_handler_,
+                                        &comp_mgr_, rotator_intf_);
+    }
     break;
   case kVirtual:
     display_base = new DisplayVirtual(event_handler, hw_info_intf_, buffer_sync_handler_,
@@ -212,5 +220,18 @@ DisplayError CoreImpl::SetMaxBandwidthMode(HWBwModes mode) {
   return comp_mgr_.SetMaxBandwidthMode(mode);
 }
 
+DisplayError CoreImpl::GetDisplayHotplugInfo(DisplayType type, bool *hotpluggable) {
+  if ((type < 0) || (type > kDisplayMax)) {
+    DLOGE("Display type %d not valid", type);
+    return kErrorParameters;
+  }
+  if (hw_disp_.hw_display_type_info[type].node_num >= 0) {
+    *hotpluggable = hw_disp_.hw_display_type_info[type].is_hotplug;
+    return kErrorNone;
+  } else {
+    DLOGE("Display type %d not exist", type);
+    return kErrorParameters;
+  }
+}
 }  // namespace sdm
 

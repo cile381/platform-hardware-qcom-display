@@ -32,11 +32,12 @@ namespace sdm {
 class HWVirtual : public HWDevice {
  public:
   static DisplayError Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                             BufferSyncHandler *buffer_sync_handler);
+                             DisplayType display_type, BufferSyncHandler *buffer_sync_handler);
   static DisplayError Destroy(HWInterface *intf);
 
  protected:
-  HWVirtual(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf);
+  HWVirtual(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf,
+            DisplayType display_type);
   virtual DisplayError Init(HWEventHandler *eventhandler);
   virtual DisplayError Validate(HWLayers *hw_layers);
   virtual DisplayError Flush();

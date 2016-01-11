@@ -35,11 +35,11 @@
 namespace sdm {
 
 DisplayError HWVirtual::Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                               BufferSyncHandler *buffer_sync_handler) {
+                               DisplayType display_type, BufferSyncHandler *buffer_sync_handler) {
   DisplayError error = kErrorNone;
   HWVirtual *hw_virtual = NULL;
 
-  hw_virtual = new HWVirtual(buffer_sync_handler, hw_info_intf);
+  hw_virtual = new HWVirtual(buffer_sync_handler, hw_info_intf, display_type);
   error = hw_virtual->Init(NULL);
   if (error != kErrorNone) {
     delete hw_virtual;
@@ -58,11 +58,13 @@ DisplayError HWVirtual::Destroy(HWInterface *intf) {
   return kErrorNone;
 }
 
-HWVirtual::HWVirtual(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf)
+HWVirtual::HWVirtual(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf,
+                     DisplayType display_type)
   : HWDevice(buffer_sync_handler) {
   HWDevice::device_type_ = kDeviceVirtual;
   HWDevice::device_name_ = "Virtual Display Device";
   HWDevice::hw_info_intf_ = hw_info_intf;
+  HWDevice::display_type_ = display_type;
 }
 
 DisplayError HWVirtual::Init(HWEventHandler *eventhandler) {

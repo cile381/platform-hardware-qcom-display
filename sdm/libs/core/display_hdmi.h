@@ -34,7 +34,7 @@ class HWHDMIInterface;
 
 class DisplayHDMI : public DisplayBase, DumpImpl {
  public:
-  DisplayHDMI(DisplayEventHandler *event_handler, HWInfoInterface *hw_info_intf,
+  DisplayHDMI(DisplayEventHandler *event_handler, HWInfoInterface *hw_info_intf, DisplayType type,
               BufferSyncHandler *buffer_sync_handler, CompManager *comp_manager,
               RotatorInterface *rotator_intf);
   virtual DisplayError Init();

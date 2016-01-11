@@ -112,6 +112,8 @@ HWCSession::HWCSession(const hw_module_t *module) {
 int HWCSession::Init() {
   int status = -EINVAL;
   const char *qservice_name = "display.qservice";
+  DisplayType type;
+  bool pluggable = false;
 
   // Start QService and connect to it.
   qService::QService::init();
@@ -144,12 +146,50 @@ int HWCSession::Init() {
     return -EINVAL;
   }
 
-  // Create and power on primary display
-  status = HWCDisplayPrimary::Create(core_intf_, &hwc_procs_,
-                                     &hwc_display_[HWC_DISPLAY_PRIMARY]);
-  if (status) {
+  for (uint32_t i = HWC_DISPLAY_PRIMARY; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i ++) {
+    hwc_display_[i] = NULL;
+    type = (DisplayType) i;
+    DLOGI("Create Primary for display %d", i);
+    error = core_intf_->GetDisplayHotplugInfo(type, &pluggable);
+    if (error != kErrorNone) {
+      DLOGI("display %d not exist or not connected", i);
+      error = kErrorNone;
+      hwc_display_[i] = NULL;
+      continue;
+    }
+    if (pluggable) {
+      // Do not create any pluggable display during init
+      continue;
+    }
+    status = HWCDisplayPrimary::Create(core_intf_, &hwc_procs_, type, &hwc_display_[i]);
+    if (status) {
+      DLOGE("Creation failed for display %d failed, status=%d", i, status);
+      error = kErrorHardware;
+      break;
+    }
+    if (type != kPrimary) {
+      // For display that's not pluggable but not primary display,
+      // SF is assuming it's unblanked already, driver needs to call
+      // set power mode internally
+      status = hwc_display_[i]->SetPowerMode(HWC_POWER_MODE_NORMAL);
+      if (status) {
+        DLOGE("Display %d failed to power on, status=%d", i, status);
+        error = kErrorHardware;
+        break;
+      }
+    }
+  }
+
+  if (error != kErrorNone) {
+    // clean up if there is error during display creation
+    for (uint32_t i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i ++) {
+      if (hwc_display_[i] != NULL) {
+        HWCDisplayPrimary::Destroy(hwc_display_[i]);
+        hwc_display_[i] = NULL;
+      }
+    }
     CoreInterface::DestroyCore();
-    return status;
+    return -EINVAL;
   }
 
   color_mgr_ = HWCColorManager::CreateColorManager();
@@ -159,8 +199,12 @@ int HWCSession::Init() {
 
   if (pthread_create(&uevent_thread_, NULL, &HWCUeventThread, this) < 0) {
     DLOGE("Failed to start = %s, error = %s", uevent_thread_name_, strerror(errno));
-    HWCDisplayPrimary::Destroy(hwc_display_[HWC_DISPLAY_PRIMARY]);
-    hwc_display_[HWC_DISPLAY_PRIMARY] = 0;
+    for (uint32_t i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i ++) {
+      if (hwc_display_[i] != NULL) {
+        HWCDisplayPrimary::Destroy(hwc_display_[i]);
+        hwc_display_[i] = NULL;
+      }
+    }
     CoreInterface::DestroyCore();
     return -errno;
   }
@@ -169,8 +213,14 @@ int HWCSession::Init() {
 }
 
 int HWCSession::Deinit() {
-  HWCDisplayPrimary::Destroy(hwc_display_[HWC_DISPLAY_PRIMARY]);
-  hwc_display_[HWC_DISPLAY_PRIMARY] = 0;
+  for (uint32_t i = 0; i < HWC_NUM_PHYSICAL_DISPLAY_TYPES; i ++) {
+    if (hwc_display_[i] != 0) {
+      hwc_display_[i]->Deinit();
+      delete hwc_display_[i];
+      hwc_display_[i] = 0;
+    }
+  }
+
   if (color_mgr_) {
     color_mgr_->DestroyColorManager();
   }
@@ -569,7 +619,7 @@ int HWCSession::ConnectDisplay(int disp, hwc_display_contents_1_t *content_list)
 
   if (disp == HWC_DISPLAY_EXTERNAL) {
     status = HWCDisplayExternal::Create(core_intf_, &hwc_procs_, primary_width, primary_height,
-                                        &hwc_display_[disp]);
+                                       (DisplayType)disp, &hwc_display_[disp]);
   } else if (disp == HWC_DISPLAY_VIRTUAL) {
     status = HWCDisplayVirtual::Create(core_intf_, &hwc_procs_, primary_width, primary_height,
                                        content_list, &hwc_display_[disp]);

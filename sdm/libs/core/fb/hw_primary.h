@@ -38,11 +38,13 @@ struct DisplayConfigVariableInfo;
 class HWPrimary : public HWDevice {
  public:
   static DisplayError Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                             BufferSyncHandler *buffer_sync_handler, HWEventHandler *eventhandler);
+                             DisplayType display_type, BufferSyncHandler *buffer_sync_handler,
+                             HWEventHandler *eventhandler);
   static DisplayError Destroy(HWInterface *intf);
 
  protected:
-  HWPrimary(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf);
+  HWPrimary(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf,
+            DisplayType display_type);
   virtual DisplayError Init(HWEventHandler *eventhandler);
   virtual DisplayError Deinit();
   virtual DisplayError GetNumDisplayAttributes(uint32_t *count);

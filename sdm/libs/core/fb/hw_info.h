@@ -34,6 +34,7 @@ namespace sdm {
 class HWInfo: public HWInfoInterface {
  public:
   virtual DisplayError GetHWResourceInfo(HWResourceInfo *hw_resource);
+  virtual DisplayError GetHWDisplayInfo(HWDisplayInfo *hw_disp);
 
  private:
   // TODO(user): Read Mdss version from the driver
