@@ -76,11 +76,11 @@ static bool MapHDMIDisplayTiming(const msm_hdmi_mode_timing_info *mode,
 }
 
 DisplayError HWHDMI::Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                            BufferSyncHandler *buffer_sync_handler) {
+                            DisplayType display_type, BufferSyncHandler *buffer_sync_handler) {
   DisplayError error = kErrorNone;
   HWHDMI *hw_fb_hdmi = NULL;
 
-  hw_fb_hdmi = new HWHDMI(buffer_sync_handler, hw_info_intf);
+  hw_fb_hdmi = new HWHDMI(buffer_sync_handler, hw_info_intf, display_type);
   error = hw_fb_hdmi->Init(NULL);
   if (error != kErrorNone) {
     delete hw_fb_hdmi;
@@ -98,23 +98,25 @@ DisplayError HWHDMI::Destroy(HWInterface *intf) {
   return kErrorNone;
 }
 
-HWHDMI::HWHDMI(BufferSyncHandler *buffer_sync_handler,  HWInfoInterface *hw_info_intf)
+HWHDMI::HWHDMI(BufferSyncHandler *buffer_sync_handler,  HWInfoInterface *hw_info_intf,
+               DisplayType display_type)
   : HWDevice(buffer_sync_handler), hw_scan_info_(), active_config_index_(0) {
   HWDevice::device_type_ = kDeviceHDMI;
   HWDevice::device_name_ = "HDMI Display Device";
   HWDevice::hw_info_intf_ = hw_info_intf;
+  HWDevice::display_type_ = display_type;
 }
 
 DisplayError HWHDMI::Init(HWEventHandler *eventhandler) {
   DisplayError error = kErrorNone;
 
-  SetSourceProductInformation("vendor_name", "ro.product.manufacturer");
-  SetSourceProductInformation("product_description", "ro.product.name");
-
   error = HWDevice::Init(eventhandler);
   if (error != kErrorNone) {
     return error;
   }
+
+  SetSourceProductInformation("vendor_name", "ro.product.manufacturer");
+  SetSourceProductInformation("product_description", "ro.product.name");
 
   error = ReadEDIDInfo();
   if (error != kErrorNone) {
@@ -536,7 +538,7 @@ bool HWHDMI::IsResolutionFilePresent() {
 void HWHDMI::SetSourceProductInformation(const char *node, const char *name) {
   char property_value[kMaxStringLength];
   char sys_fs_path[kMaxStringLength];
-  int hdmi_node_index = GetFBNodeIndex(kDeviceHDMI);
+  int hdmi_node_index = GetFBNodeIndex(display_type_);
   if (hdmi_node_index < 0) {
     return;
   }

@@ -44,7 +44,7 @@ DisplayVirtual::DisplayVirtual(DisplayEventHandler *event_handler, HWInfoInterfa
 DisplayError DisplayVirtual::Init() {
   SCOPE_LOCK(locker_);
 
-  DisplayError error = HWVirtual::Create(&hw_intf_, hw_info_intf_,
+  DisplayError error = HWVirtual::Create(&hw_intf_, hw_info_intf_, display_type_,
                                          DisplayBase::buffer_sync_handler_);
   if (error != kErrorNone) {
     return error;

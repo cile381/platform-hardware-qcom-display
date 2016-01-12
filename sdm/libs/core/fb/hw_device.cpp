@@ -62,18 +62,19 @@ DisplayError HWDevice::Init(HWEventHandler *eventhandler) {
 
   event_handler_ = eventhandler;
 
+  // Populate HW Capabilities
+  hw_resource_ = HWResourceInfo();
+  hw_info_intf_->GetHWResourceInfo(&hw_resource_);
+
   // Read the fb node index
-  fb_node_index_ = GetFBNodeIndex(device_type_);
+  fb_node_index_ = GetFBNodeIndex(display_type_);
   if (fb_node_index_ == -1) {
-    DLOGE("%s should be present", device_name_);
+    DLOGE("%s should be present, display type %d", device_name_, display_type_);
     return kErrorHardware;
   }
 
   // Populate Panel Info (Used for Partial Update)
   PopulateHWPanelInfo();
-  // Populate HW Capabilities
-  hw_resource_ = HWResourceInfo();
-  hw_info_intf_->GetHWResourceInfo(&hw_resource_);
 
   snprintf(device_name, sizeof(device_name), "%s%d", "/dev/graphics/fb", fb_node_index_);
   device_fd_ = Sys::open_(device_name, O_RDWR);
@@ -623,31 +624,11 @@ void HWDevice::SetMDPFlags(const Layer &layer, const bool &is_rotator_used,
   }
 }
 
-int HWDevice::GetFBNodeIndex(HWDeviceType device_type) {
-  for (int i = 0; i <= kDeviceVirtual; i++) {
-    HWPanelInfo panel_info;
-    GetHWPanelInfoByNode(i, &panel_info);
-    switch (device_type) {
-    case kDevicePrimary:
-      if (panel_info.is_primary_panel) {
-        return i;
-      }
-      break;
-    case kDeviceHDMI:
-      if (panel_info.port == kPortDTv) {
-        return i;
-      }
-      break;
-    case kDeviceVirtual:
-      if (panel_info.port == kPortWriteBack) {
-        return i;
-      }
-      break;
-    default:
-      break;
-    }
-  }
-  return -1;
+int HWDevice::GetFBNodeIndex(DisplayType display_type) {
+  HWDisplayInfo hw_disp;
+  hw_info_intf_->GetHWDisplayInfo(&hw_disp);
+
+  return hw_disp.hw_display_type_info[display_type].node_num;
 }
 
 void HWDevice::PopulateHWPanelInfo() {
@@ -876,17 +857,23 @@ int HWDevice::ParseLine(char *input, const char *delim, char *tokens[],
 
 bool HWDevice::EnableHotPlugDetection(int enable) {
   char hpdpath[kMaxStringLength];
-  int hdmi_node_index = GetFBNodeIndex(kDeviceHDMI);
-  if (hdmi_node_index < 0) {
-    return false;
-  }
+  int hdmi_node_index = -1;
 
-  snprintf(hpdpath , sizeof(hpdpath), "%s%d/hpd", fb_path_, hdmi_node_index);
+  HWDisplayInfo hw_disp;
+  hw_info_intf_->GetHWDisplayInfo(&hw_disp);
 
-  char value = enable ? '1' : '0';
-  ssize_t length = SysFsWrite(hpdpath, &value, sizeof(value));
-  if (length <= 0) {
-    return false;
+  for (uint32_t i = 0; i < hw_disp.max_disp; i++) {
+    if (hw_disp.hw_display_type_info[i].is_hotplug == true) {
+      // ToDo:: need to enhance if we have two pluggable displays
+      hdmi_node_index = hw_disp.hw_display_type_info[i].node_num;
+      snprintf(hpdpath , sizeof(hpdpath), "%s%d/hpd", fb_path_, hdmi_node_index);
+      char value = enable ? '1' : '0';
+      ssize_t length = SysFsWrite(hpdpath, &value, sizeof(value));
+      if (length <= 0) {
+        DLOGW("Cannot enable HPD for HDMI %s", hpdpath);
+        return false;
+      }
+    }
   }
 
   return true;

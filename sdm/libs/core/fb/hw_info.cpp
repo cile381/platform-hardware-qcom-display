@@ -292,5 +292,142 @@ DisplayError HWInfo::GetHWResourceInfo(HWResourceInfo *hw_resource) {
   return kErrorNone;
 }
 
+DisplayError HWInfo::GetHWDisplayInfo(HWDisplayInfo *hw_disp) {
+  static HWDisplayInfo hw_disp_cache_;
+  if (hw_disp_cache_.max_disp > 0) {
+    hw_disp->max_disp = hw_disp_cache_.max_disp;
+    for (int i = 0; i < kVirtual; i ++) {
+      hw_disp->hw_display_type_info[i].node_num = hw_disp_cache_.hw_display_type_info[i].node_num;
+      hw_disp->hw_display_type_info[i].is_hotplug = hw_disp_cache_.hw_display_type_info[i].is_hotplug;
+      hw_disp->hw_display_type_info[i].hw_block_type = hw_disp_cache_.hw_display_type_info[i].hw_block_type;
+    }
+
+    return kErrorNone;
+  }
+
+  const char *disp_fb_path = "/sys/class/graphics/fb";
+  FILE *fileptr = NULL;
+  uint32_t token_count = 0;
+  const uint32_t max_count = 10;
+  char *tokens[max_count] = { NULL };
+  char *stringbuffer = reinterpret_cast<char *>(malloc(kMaxStringLength));
+  if (stringbuffer == NULL) {
+    DLOGE("Failed to allocate stringbuffer");
+    return kErrorMemory;
+  }
+  size_t len = kMaxStringLength;
+  ssize_t read;
+  char *line = stringbuffer;
+  int node_usage = 0;
+
+  hw_disp->max_disp = 0;
+  for (int i = 0; i < kVirtual; i ++) {
+    int display_id = -1;
+    bool pluggable = false;
+    snprintf(stringbuffer , kMaxStringLength, "%s%d/msm_fb_panel_info", disp_fb_path, i);
+    fileptr = Sys::fopen_(stringbuffer, "r");
+
+    if (fileptr != NULL) {
+      while ((read = Sys::getline_(&line, &len, fileptr)) != -1) {
+        if (!ParseLine(line, tokens, max_count, &token_count)) {
+          if (!strncmp(tokens[0], "display_id", strlen("display_id"))) {
+            if ((token_count > 1) && (!strncmp(tokens[1], "primary", strlen("primary")))) {
+              display_id = kPrimary;
+            } else if ((token_count > 1) &&
+                       (!strncmp(tokens[1], "secondary", strlen("secondary")))) {
+              display_id = kHDMI;
+            } else if ((token_count > 1) &&
+                       (!strncmp(tokens[1], "tertiary", strlen("tertiary")))) {
+              display_id = kTertiary;
+            } else {
+              // not valid ID, exit the check
+              DLOGI("Invalid Display ID %s", tokens[1]);
+              break;
+            }
+          } else if (!strncmp(tokens[0], "is_pluggable", strlen("is_pluggable"))) {
+            if ((token_count > 1) && (!strncmp(tokens[1], "1", 1)))
+              pluggable = true;
+          }
+        }
+      }
+      Sys::fclose_(fileptr);
+    }
+
+    if (display_id < 0) {
+      // If display_id is not populated from driver, then assign display based
+      // on fb index and type
+      FILE *fbptr = NULL;
+      snprintf(stringbuffer , kMaxStringLength,
+               "/sys/devices/virtual/graphics/fb%d/msm_fb_type", i);
+      fbptr = Sys::fopen_(stringbuffer, "r");
+      if (fbptr != NULL) {
+        if ((read = Sys::getline_(&line, &len, fbptr)) != -1) {
+          if ((!strncmp(line, "mipi dsi video panel", strlen("mipi dsi video panel"))) ||
+             (!strncmp(line, "mipi dsi cmd panel", strlen("mipi dsi cmd panel"))) ||
+             (!strncmp(line, "dtv panel", strlen("dtv panel")))) {
+            hw_disp->max_disp++;
+            hw_disp->hw_display_type_info[i].node_num = i;
+            if (node_usage == 0) {
+              display_id = kPrimary;
+              node_usage++;
+            } else if (node_usage == 1) {
+              display_id = kHDMI;
+              node_usage++;
+            } else if (node_usage == 2) {
+              display_id = kTertiary;
+              node_usage++;
+            } else {
+              DLOGI("Max display reached");
+            }
+
+            if (!strncmp(line, "dtv panel", strlen("dtv panel")))
+              pluggable = true;
+            else
+              pluggable = false;
+          } else {
+            // ToDo: add other panel type support
+            DLOGE("Display type %s not supported", line);
+          }
+        }
+        Sys::fclose_(fbptr);
+      }
+    }
+
+    if (display_id >= 0) {
+      DLOGI("Node %d hw_block %d hotplug %d", i, display_id, pluggable);
+      hw_disp->max_disp++;
+      hw_disp_cache_.max_disp++;
+      hw_disp->hw_display_type_info[display_id].node_num = i;
+      hw_disp_cache_.hw_display_type_info[display_id].node_num = i;
+      hw_disp->hw_display_type_info[display_id].hw_block_type = (HWBlockType)display_id;
+      hw_disp_cache_.hw_display_type_info[display_id].hw_block_type = (HWBlockType)display_id;
+      if ((display_id == kPrimary) && (pluggable == true)) {
+        hw_disp->hw_display_type_info[display_id].is_hotplug = false;
+        hw_disp_cache_.hw_display_type_info[display_id].is_hotplug = false;
+        DLOGW("Primary display cannot be pluggable, overrided as hardwired display");
+      } else {
+        hw_disp->hw_display_type_info[display_id].is_hotplug = pluggable;
+        hw_disp_cache_.hw_display_type_info[display_id].is_hotplug = pluggable;
+      }
+    }
+  }
+  free(stringbuffer);
+
+  // if no display info, set the default value to allow primary display init
+  if (hw_disp->max_disp == 0) {
+    DLOGI("No valid panel info is found. Use default value that only init primary display");
+    hw_disp->max_disp = 1;
+    hw_disp_cache_.max_disp = 1;
+    hw_disp->hw_display_type_info[0].node_num = kPrimary;
+    hw_disp_cache_.hw_display_type_info[0].node_num = kPrimary;
+    hw_disp->hw_display_type_info[0].is_hotplug = false;
+    hw_disp_cache_.hw_display_type_info[0].is_hotplug = false;
+    hw_disp->hw_display_type_info[0].hw_block_type = (HWBlockType)kHWPrimary;
+    hw_disp_cache_.hw_display_type_info[0].hw_block_type = (HWBlockType)kHWPrimary;
+  }
+
+  return kErrorNone;
+}
+
 }  // namespace sdm
 

@@ -67,8 +67,9 @@ static void ApplyDeInterlaceAdjustment(Layer *layer) {
 }
 
 HWCDisplay::HWCDisplay(CoreInterface *core_intf, hwc_procs_t const **hwc_procs, DisplayType type,
-                       int id, bool needs_blit)
-  : core_intf_(core_intf), hwc_procs_(hwc_procs), type_(type), id_(id), needs_blit_(needs_blit) {
+                       bool needs_blit, bool pluggable)
+  : core_intf_(core_intf), hwc_procs_(hwc_procs), type_(type), needs_blit_(needs_blit),
+    pluggable_(pluggable) {
 }
 
 int HWCDisplay::Init() {
@@ -162,7 +163,7 @@ int HWCDisplay::EventControl(int event, int enable) {
 }
 
 int HWCDisplay::SetPowerMode(int mode) {
-  DLOGI("display = %d, mode = %d", id_, mode);
+  DLOGI("display = %d, mode = %d", type_, mode);
   DisplayState state = kStateOff;
   bool flush_on_error = flush_on_error_;
 
@@ -286,7 +287,7 @@ DisplayError HWCDisplay::VSync(const DisplayEventVSync &vsync) {
     return kErrorParameters;
   }
 
-  hwc_procs->vsync(hwc_procs, id_, vsync.timestamp);
+  hwc_procs->vsync(hwc_procs, type_, vsync.timestamp);
 
   return kErrorNone;
 }

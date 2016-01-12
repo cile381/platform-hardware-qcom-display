@@ -31,15 +31,17 @@ namespace sdm {
 
 class HWCDisplayExternal : public HWCDisplay {
  public:
-  static int Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs, uint32_t primary_width,
-                    uint32_t primary_height, HWCDisplay **hwc_display);
+  static int Create(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                    uint32_t primary_width, uint32_t primary_height,
+                    DisplayType display_type, HWCDisplay **hwc_display);
   static void Destroy(HWCDisplay *hwc_display);
   virtual int Prepare(hwc_display_contents_1_t *content_list);
   virtual int Commit(hwc_display_contents_1_t *content_list);
   virtual void SetSecureDisplay(bool secure_display_active);
 
  private:
-  HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs);
+  HWCDisplayExternal(CoreInterface *core_intf, hwc_procs_t const **hwc_procs,
+                     DisplayType display_type);
   void ApplyScanAdjustment(hwc_rect_t *display_frame);
   static void GetDownscaleResolution(uint32_t primary_width, uint32_t primary_height,
                                      uint32_t *virtual_width, uint32_t *virtual_height);

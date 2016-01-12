@@ -52,12 +52,12 @@ namespace sdm {
 using std::string;
 
 DisplayError HWPrimary::Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                               BufferSyncHandler *buffer_sync_handler,
+                               DisplayType display_type, BufferSyncHandler *buffer_sync_handler,
                                HWEventHandler *eventhandler) {
   DisplayError error = kErrorNone;
   HWPrimary *hw_primary = NULL;
 
-  hw_primary = new HWPrimary(buffer_sync_handler, hw_info_intf);
+  hw_primary = new HWPrimary(buffer_sync_handler, hw_info_intf, display_type);
   error = hw_primary->Init(eventhandler);
   if (error != kErrorNone) {
     delete hw_primary;
@@ -76,11 +76,13 @@ DisplayError HWPrimary::Destroy(HWInterface *intf) {
   return kErrorNone;
 }
 
-HWPrimary::HWPrimary(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf)
+HWPrimary::HWPrimary(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf,
+                     DisplayType display_type)
   : HWDevice(buffer_sync_handler) {
   HWDevice::device_type_ = kDevicePrimary;
   HWDevice::device_name_ = "Primary Display Device";
   HWDevice::hw_info_intf_ = hw_info_intf;
+  HWDevice::display_type_ = display_type;
 }
 
 DisplayError HWPrimary::Init(HWEventHandler *eventhandler) {

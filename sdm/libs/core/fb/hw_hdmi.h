@@ -33,11 +33,12 @@ namespace sdm {
 class HWHDMI : public HWDevice {
  public:
   static DisplayError Create(HWInterface **intf, HWInfoInterface *hw_info_intf,
-                             BufferSyncHandler *buffer_sync_handler);
+                             DisplayType display_type, BufferSyncHandler *buffer_sync_handler);
   static DisplayError Destroy(HWInterface *intf);
 
  protected:
-  HWHDMI(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf);
+  HWHDMI(BufferSyncHandler *buffer_sync_handler, HWInfoInterface *hw_info_intf,
+         DisplayType display_type);
   virtual DisplayError Init(HWEventHandler *eventhandler);
   virtual DisplayError Deinit();
   virtual DisplayError GetNumDisplayAttributes(uint32_t *count);
