@@ -1189,6 +1189,7 @@ void HWCDisplay::GetPanelResolution(uint32_t *x_pixels, uint32_t *y_pixels) {
 
 int HWCDisplay::SetDisplayStatus(uint32_t display_status) {
   int status = 0;
+  const hwc_procs_t *hwc_procs = *hwc_procs_;
 
   switch (display_status) {
   case kDisplayStatusResume:
@@ -1204,6 +1205,11 @@ int HWCDisplay::SetDisplayStatus(uint32_t display_status) {
   default:
     DLOGW("Invalid display status %d", display_status);
     return -EINVAL;
+  }
+
+  if (display_status == kDisplayStatusResume ||
+      display_status == kDisplayStatusPause) {
+    hwc_procs->invalidate(hwc_procs);
   }
 
   return status;
@@ -1354,7 +1360,9 @@ int HWCDisplay::GetPanelBrightness(int *level) {
 }
 
 int HWCDisplay::ToggleScreenUpdates(bool enable) {
+  const hwc_procs_t *hwc_procs = *hwc_procs_;
   display_paused_ = enable ? false : true;
+  hwc_procs->invalidate(hwc_procs);
   return 0;
 }
 
