@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without modification, are permitted
 * provided that the following conditions are met:
@@ -414,16 +414,30 @@ DisplayError HWInfo::GetHWDisplayInfo(HWDisplayInfo *hw_disp) {
   free(stringbuffer);
 
   // if no display info, set the default value to allow primary display init
-  if (hw_disp->max_disp == 0) {
-    DLOGI("No valid panel info is found. Use default value that only init primary display");
-    hw_disp->max_disp = 1;
-    hw_disp_cache_.max_disp = 1;
+  // if there is only one display, also set this one as primary.
+  if (hw_disp->max_disp <= 1) {
+    if (hw_disp->max_disp == 0) {
+      DLOGI("No valid panel info is found. Use default value that only init primary display");
+    } else {
+      DLOGI("Only found 1 display, assign it to primary");
+    }
     hw_disp->hw_display_type_info[0].node_num = kPrimary;
     hw_disp_cache_.hw_display_type_info[0].node_num = kPrimary;
     hw_disp->hw_display_type_info[0].is_hotplug = false;
     hw_disp_cache_.hw_display_type_info[0].is_hotplug = false;
     hw_disp->hw_display_type_info[0].hw_block_type = (HWBlockType)kHWPrimary;
     hw_disp_cache_.hw_display_type_info[0].hw_block_type = (HWBlockType)kHWPrimary;
+    hw_disp->max_disp = 1;
+    hw_disp_cache_.max_disp = 1;
+    /* Reset other nodes */
+    for (int i = 1; i < kDisplayMax; i++) {
+      hw_disp->hw_display_type_info[i].node_num = -1;
+      hw_disp_cache_.hw_display_type_info[i].node_num = -1;
+      hw_disp->hw_display_type_info[i].is_hotplug = false;
+      hw_disp_cache_.hw_display_type_info[i].is_hotplug = false;
+      hw_disp->hw_display_type_info[i].hw_block_type = (HWBlockType)kHWBlockMax;
+      hw_disp_cache_.hw_display_type_info[i].hw_block_type = (HWBlockType)kHWBlockMax;
+    }
   }
 
   return kErrorNone;
