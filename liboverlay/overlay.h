@@ -96,6 +96,7 @@ public:
     /* Returns the framebuffer node backing up the display */
     static int getFbForDpy(const int& dpy);
     static bool displayCommit(const int& fd, uint32_t wait_for_finish = 0);
+    bool waitForCommitFinish() { return mWaitForCommitFinish; }
 
 private:
     /* Ctor setup */
@@ -159,6 +160,7 @@ private:
     static Overlay *sInstance;
     static int sDpyFbMap[DPY_MAX];
     static bool mAutomotiveModeOn;
+    static bool mWaitForCommitFinish;
 };
 
 inline void Overlay::validate(int index) {

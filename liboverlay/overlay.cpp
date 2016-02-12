@@ -67,6 +67,7 @@ void Overlay::configBegin() {
 
 void Overlay::configDone() {
     const int TMP_STR_BUF_SIZE = 32;
+    mWaitForCommitFinish = false;
     if(PipeBook::pipeUsageUnchanged()) return;
 
     for(int i = 0; i < PipeBook::NUM_PIPES; i++) {
@@ -80,6 +81,11 @@ void Overlay::configDone() {
                 strlcat(mDumpStr, str, DUMP_STR_MAX);
             }
             mPipeBook[i].destroy();
+            // Need to wait for commit to finish when unset layers.
+            // Otherwise, kernel resources may not released yet for next set.
+            if (!mWaitForCommitFinish) {
+                mWaitForCommitFinish = true;
+            }
         }
     }
     dump();
@@ -347,7 +353,7 @@ int Overlay::initOverlay() {
             }
             minfo = req.info;
             // Bypass overlay unset as doing it during earlycamera will result
-            // in black frames (result in pipe null 
+            // in black frames (result in pipe null
             if(!earlyCameraOnStatus) {
                 for (int j = 0; j < req.cnt; j++) {
                     ALOGD("ndx=%d num=%d z_order=%d", minfo->pndx, minfo->pnum,
@@ -440,6 +446,7 @@ void Overlay::PipeBook::destroy() {
 Overlay* Overlay::sInstance = 0;
 int Overlay::sDpyFbMap[DPY_MAX] = {0, -1, -1, -1};
 bool Overlay::mAutomotiveModeOn = false;
+bool Overlay::mWaitForCommitFinish = false;
 int Overlay::PipeBook::NUM_PIPES = 0;
 int Overlay::PipeBook::sPipeUsageBitmap = 0;
 int Overlay::PipeBook::sLastUsageBitmap = 0;
