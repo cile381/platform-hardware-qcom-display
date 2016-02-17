@@ -141,6 +141,7 @@ int AdrenoMemInfo::getStride(int width, int format)
                 break;
             case HAL_PIXEL_FORMAT_NV12_ENCODEABLE:
             case HAL_PIXEL_FORMAT_YCbCr_420_SP:
+            case HAL_PIXEL_FORMAT_NV12:
             case HAL_PIXEL_FORMAT_YCrCb_420_SP:
             case HAL_PIXEL_FORMAT_YV12:
             case HAL_PIXEL_FORMAT_YCbCr_422_SP:
@@ -309,15 +310,15 @@ size_t getBufferSizeAndDimensions(int width, int height, int format,
             // but the pitch in bytes is unchanged
             // The GPU needs 4K alignment, but the video decoder needs 8K
             alignedw = ALIGN(alignedw, 128);
-            size  = ALIGN( alignedw * alignedh, 8192);
-            size += ALIGN( alignedw * ALIGN(height/2, 32), 8192);
+            size  = ALIGN(alignedw * alignedh, 8192);
+            size += ALIGN(alignedw * ALIGN(height/2, 32), 8192);
             size += EXTRADATA_SIZE;
             break;
         case HAL_PIXEL_FORMAT_NV12:
             alignedw = ALIGN(width, 16);
             alignedh = height;
-            size  = ALIGN( ALIGN(width, 128) * ALIGN(height, 32), 8192);
-            size += ALIGN( ALIGN(width, 128) * ALIGN(height/2, 32), 8192);
+            size  = ALIGN(ALIGN(width, 128) * ALIGN(height, 32), 8192);
+            size += ALIGN(ALIGN(width, 128) * ALIGN(height/2, 32), 8192);
             break;
         case HAL_PIXEL_FORMAT_NV12_ENCODEABLE:
         case HAL_PIXEL_FORMAT_YV12:
@@ -397,6 +398,7 @@ int getYUVPlaneInfo(private_handle_t* hnd, struct android_ycbcr* ycbcr)
     switch (format) {
         //Semiplanar
         case HAL_PIXEL_FORMAT_YCbCr_420_SP:
+        case HAL_PIXEL_FORMAT_NV12:
         case HAL_PIXEL_FORMAT_YCbCr_422_SP:
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS:
         case HAL_PIXEL_FORMAT_NV12_ENCODEABLE: //Same as YCbCr_420_SP_VENUS
